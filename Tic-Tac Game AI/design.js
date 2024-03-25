@@ -111,7 +111,7 @@ let board = [
       if (result == 'tie') {
         resultP.html('Draw!');
       } else {
-        resultP.html(`${result} AI wins!`);
+        resultP.html(`Gregory AI wins!`);
       }
     }
   }
