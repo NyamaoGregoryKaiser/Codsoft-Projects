@@ -1,0 +1,63 @@
+```python
+import os
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv() #Load environment variables from .env file
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+CORS(app) #Enable CORS for development, needs careful configuration for production
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+
+    def to_dict(self):
+        return {'id': self.id, 'title': self.title, 'content': self.content}
+
+@app.route('/posts', methods=['GET'])
+def get_posts():
+    posts = Post.query.all()
+    return jsonify([post.to_dict() for post in posts])
+
+@app.route('/posts', methods=['POST'])
+def create_post():
+    data = request.get_json()
+    new_post = Post(title=data['title'], content=data['content'])
+    db.session.add(new_post)
+    db.session.commit()
+    return jsonify(new_post.to_dict()), 201
+
+@app.route('/posts/<int:post_id>', methods=['GET'])
+def get_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    return jsonify(post.to_dict())
+
+@app.route('/posts/<int:post_id>', methods=['PUT'])
+def update_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    data = request.get_json()
+    post.title = data['title']
+    post.content = data['content']
+    db.session.commit()
+    return jsonify(post.to_dict())
+
+@app.route('/posts/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'message': 'Post deleted'}), 204
+
+
+if __name__ == '__main__':
+    db.create_all()
+    app.run(debug=True) #Set debug=False for production
+
+```
