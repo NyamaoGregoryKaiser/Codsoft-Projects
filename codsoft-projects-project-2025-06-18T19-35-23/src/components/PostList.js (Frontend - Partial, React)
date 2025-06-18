@@ -1,0 +1,26 @@
+```javascript
+import React, { useState, useEffect } from 'react';
+
+function PostList() {
+  const [posts, setPosts] = useState([]);
+
+  useEffect(() => {
+    fetch('/posts')
+      .then(res => res.json())
+      .then(data => setPosts(data));
+  }, []);
+
+  return (
+    <div>
+      {posts.map(post => (
+        <div key={post.id}>
+          <h3>{post.title}</h3>
+          <p>{post.content}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default PostList;
+```
