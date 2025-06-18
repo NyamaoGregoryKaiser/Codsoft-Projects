@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.10)
+project(SecureWebApp)
+
+add_executable(secure_webapp main.cpp)
+
+# Add your include directories here
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
+# Add your libraries here
+target_link_libraries(secure_webapp
+    # Add necessary libraries here (e.g., OpenSSL, database drivers)
+)
