@@ -1,0 +1,18 @@
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PerformanceMetric {
+  id        Int      @id @default(autoincrement())
+  timestamp DateTime @default(now())
+  endpoint  String
+  responseTime Int
+  status     Int
+}
+```
