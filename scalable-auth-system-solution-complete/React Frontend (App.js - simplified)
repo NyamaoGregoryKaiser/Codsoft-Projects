@@ -1,0 +1,39 @@
+import React, { useState } from 'react';
+import axios from 'axios';
+
+function App() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+
+  const handleRegister = async () => {
+    try {
+      const response = await axios.post('/register', { username, password });
+      setMessage(response.data.message);
+    } catch (error) {
+      setMessage('Registration failed');
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const response = await axios.post('/login', { username, password });
+      setMessage(response.data.message);
+    } catch (error) {
+      setMessage('Login failed');
+    }
+  };
+
+  return (
+    <div>
+      <h1>Authentication</h1>
+      <input type="text" placeholder="Username" onChange={e => setUsername(e.target.value)} />
+      <input type="password" placeholder="Password" onChange={e => setPassword(e.target.value)} />
+      <button onClick={handleRegister}>Register</button>
+      <button onClick={handleLogin}>Login</button>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+export default App;

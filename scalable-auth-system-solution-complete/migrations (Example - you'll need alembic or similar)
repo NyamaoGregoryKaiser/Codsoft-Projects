@@ -1,0 +1,2 @@
+# This section requires a migration tool like Alembic.  The specific files depend on the tool.
+#  Alembic would generate files like versions/your_version_number.py
