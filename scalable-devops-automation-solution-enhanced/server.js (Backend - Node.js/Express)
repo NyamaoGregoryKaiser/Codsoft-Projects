@@ -1,0 +1,26 @@
+```javascript
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const { sequelize } = require('./models'); // Sequelize database connection
+const routes = require('./routes'); // Import API routes
+const errorHandler = require('./middleware/errorHandler'); // Custom error handler
+require('dotenv').config();
+
+const app = express();
+const port = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(bodyParser.json());
+app.use('/api', routes);
+app.use(errorHandler);
+
+
+sequelize.sync().then(() => {
+  app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}).catch(err => {
+  console.error('Failed to connect to database:', err);
+});
+```
