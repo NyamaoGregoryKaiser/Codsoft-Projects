@@ -1,0 +1,53 @@
+```typescript
+import express, { Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import cors from 'cors';
+import axios from 'axios';
+import cheerio from 'cheerio';
+// ... other imports
+
+const app = express();
+const prisma = new PrismaClient();
+const port = process.env.PORT || 3001;
+
+app.use(cors());
+app.use(express.json());
+
+
+// Example route
+app.post('/scrape', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    const existingData = await prisma.scrapedData.findUnique({ where: { url } });
+
+    if (existingData) {
+      return res.json(existingData);
+    }
+
+
+    const response = await axios.get(url);
+    const html = response.data;
+    const $ = cheerio.load(html);
+
+    // Extract data -  replace with your actual scraping logic.
+    const title = $('title').text();
+    const description = $('meta[name="description"]').attr('content');
+
+    const scrapedData = await prisma.scrapedData.create({
+      data: {
+        url,
+        data: { title, description },
+      },
+    });
+
+    res.json(scrapedData);
+  } catch (error) {
+    console.error("Error scraping:", error);
+    res.status(500).json({ error: 'Failed to scrape URL' });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
+```
