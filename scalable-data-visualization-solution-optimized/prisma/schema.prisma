@@ -1,0 +1,16 @@
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // or your preferred database
+  url      = env("DATABASE_URL")
+}
+
+model DataPoint {
+  id        Int      @id @default(autoincrement())
+  value     Float
+  timestamp DateTime @default(now())
+}
+```
