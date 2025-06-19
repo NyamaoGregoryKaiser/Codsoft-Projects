@@ -1,0 +1,36 @@
+```json
+{
+  "name": "ecommerce-app",
+  "version": "1.0.0",
+  "description": "E-commerce application",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "build": "tsc",
+    "migrate": "npx prisma db push"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.0",
+    "bcrypt": "^5.1.0",
+    "prisma": "^4.11.0",
+    "@types/express": "^4.17.17",
+    "@types/jsonwebtoken": "^9.0.1",
+    "body-parser": "^1.20.2"
+
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.0",
+    "@types/node": "^20.2.5",
+    "nodemon": "^3.0.1",
+    "jest": "^29.4.3",
+    "@types/jest": "^29.2.4",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.2",
+    "prisma-cli": "^4.11.0"
+  }
+}
+```
