@@ -1,0 +1,26 @@
+```python
+import pytest
+from app import app, db, Payment  # Import your app and models
+
+@pytest.fixture
+def client():
+    app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:' # In-memory DB for testing
+    with app.test_client() as client:
+        with app.app_context():
+            db.create_all()
+        yield client
+        with app.app_context():
+            db.session.remove()
+            db.drop_all()
+
+
+def test_create_payment(client):
+    response = client.post('/payments', json={'amount': 100.0})
+    assert response.status_code == 201
+    data = response.get_json()
+    assert 'id' in data
+    assert data['status'] == 'pending'
+
+# ... more test cases ...
+```

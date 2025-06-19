@@ -1,0 +1,36 @@
+```python
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+import os
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://user:password@localhost:5432/payments')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+class Payment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False)
+    status = db.Column(db.String(50), default='pending')
+    # ... other fields like customer ID, payment method, etc.
+
+@app.route('/payments', methods=['POST'])
+def create_payment():
+    data = request.get_json()
+    payment = Payment(amount=data['amount']) # simplified example
+    db.session.add(payment)
+    db.session.commit()
+    return jsonify({'id': payment.id, 'status': payment.status}), 201
+
+@app.route('/payments/<int:payment_id>', methods=['GET'])
+def get_payment(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    return jsonify({'id': payment.id, 'amount': payment.amount, 'status': payment.status})
+
+# ... other API endpoints (PUT, DELETE)
+
+if __name__ == '__main__':
+    app.run(debug=True) # For development only!
+```

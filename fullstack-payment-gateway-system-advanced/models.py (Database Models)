@@ -1,0 +1,5 @@
+```python
+from app import db
+
+# ... Payment model (as defined in app.py) ...
+```
