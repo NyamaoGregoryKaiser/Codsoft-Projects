@@ -1,0 +1,48 @@
+```javascript
+const express = require('express');
+const pg = require('pg');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+const { authenticate } = require('./auth'); //Example auth module
+const routes = require('./routes');
+
+const app = express();
+const port = process.env.PORT || 3000;
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL, //From environment variable
+});
+
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+
+app.use('/api', authenticate, routes); //Apply authentication to API routes
+
+app.get('/', (req, res) => {
+  res.send('Hello from the backend!');
+});
+
+
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
+
+
+pool.on('error', (err, client) => {
+    console.error('Unexpected error on idle client', err)
+    process.exit(-1)
+})
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
+
+```

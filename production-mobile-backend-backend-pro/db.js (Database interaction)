@@ -1,0 +1,19 @@
+```javascript
+const pool = require('./index').pool; //Get the pool from the main file
+
+async function getUsers() {
+    const client = await pool.connect();
+    try {
+        const result = await client.query('SELECT * FROM users');
+        return result.rows;
+    } catch (error) {
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
+// Add other database functions here...
+
+module.exports = { getUsers };
+```

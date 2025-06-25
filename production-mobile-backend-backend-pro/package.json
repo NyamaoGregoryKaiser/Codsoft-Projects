@@ -1,0 +1,26 @@
+```json
+{
+  "name": "mobile-app-backend",
+  "version": "1.0.0",
+  "description": "Backend for mobile app",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest",
+    "migrate": "node ./migrations/migrate.js" //Example migration script runner
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.0", //PostgreSQL driver
+    "jsonwebtoken": "^9.0.0", //For authentication
+    "bcrypt": "^5.1.0", //For password hashing
+    "express-rate-limit": "^6.7.0", //Rate limiting
+    "helmet": "^7.0.0", //Security middleware
+    "cors": "^2.8.5" //For CORS
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "supertest": "^6.3.3" //For API testing
+  }
+}
+```
