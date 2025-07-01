@@ -1,0 +1,3 @@
+```typescript
+// ... (Implementation for CRUD operations on posts using Express and Prisma) ...
+```
