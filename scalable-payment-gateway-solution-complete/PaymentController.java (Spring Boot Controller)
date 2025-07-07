@@ -1,0 +1,34 @@
+```java
+package com.example.paymentprocessor.controller;
+
+import com.example.paymentprocessor.model.Payment;
+import com.example.paymentprocessor.service.PaymentService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/payments")
+public class PaymentController {
+
+    @Autowired
+    private PaymentService paymentService;
+
+    @PostMapping
+    public ResponseEntity<Payment> createPayment(@RequestBody Payment payment) {
+        Payment createdPayment = paymentService.createPayment(payment);
+        return new ResponseEntity<>(createdPayment, HttpStatus.CREATED);
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Payment>> getAllPayments() {
+        List<Payment> payments = paymentService.getAllPayments();
+        return new ResponseEntity<>(payments, HttpStatus.OK);
+    }
+
+    // ... other CRUD methods ...
+}
+```

@@ -1,0 +1,17 @@
+```java
+package com.example.paymentprocessor.model;
+
+import jakarta.persistence.*;
+
+@Entity
+public class Payment {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String amount;
+    private String cardNumber; //In a real system, you would NOT store this directly
+    // ... other payment details ...
+
+    //Getters and Setters
+}
+```
