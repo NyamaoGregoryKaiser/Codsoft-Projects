@@ -1,0 +1,18 @@
+```json
+{
+  "name": "authentication-system",
+  "version": "1.0.0",
+  "description": "Authentication System",
+  "dependencies": {
+    "express": "^4.18.2", // Example web framework
+    "bcrypt": "^5.1.0", // Example password hashing library
+    "pg": "^8.11.0" // Example PostgreSQL driver (if using PostgreSQL)
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "mocha": "^10.2.0",
+    "chai": "^4.3.7"
+  }
+}
+
+```
