@@ -1,0 +1,72 @@
+```javascript
+const express = require('express');
+const bodyParser = require('body-parser');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const {Pool} = require('pg');
+const asyncHandler = require('express-async-handler');
+require('dotenv').config();
+
+const app = express();
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL
+});
+
+//User Model (Simplified)
+const createUser = async (user) => {
+  const { username, password } = user;
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const result = await pool.query('INSERT INTO users (username, password) VALUES ($1, $2) RETURNING *', [username, hashedPassword]);
+  return result.rows[0];
+};
+
+
+const getUserByUsername = async (username) => {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    return result.rows[0];
+}
+
+//Authentication Middleware
+const authenticateJWT = asyncHandler(async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
+    const token = authHeader.split(' ')[1];
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await getUserByUsername(decoded.username); //fetch full user details
+      next();
+    } catch (err) {
+      return res.sendStatus(403);
+    }
+  } else {
+    res.sendStatus(401);
+  }
+});
+
+//Routes
+app.post('/register', asyncHandler(async (req, res) => {
+    const newUser = await createUser(req.body);
+    res.status(201).json(newUser);
+}));
+
+
+app.post('/login', asyncHandler(async (req, res) => {
+  const { username, password } = req.body;
+  const user = await getUserByUsername(username);
+  if (user && await bcrypt.compare(password, user.password)) {
+    const token = jwt.sign({ username: user.username }, process.env.JWT_SECRET);
+    res.json({ token, user });
+  } else {
+    res.status(401).json({ message: 'Invalid credentials' });
+  }
+}));
+
+app.get('/profile', authenticateJWT, (req, res) => {
+  res.json(req.user);
+});
+
+app.listen(3001, () => console.log('Server listening on port 3001'));
+```
