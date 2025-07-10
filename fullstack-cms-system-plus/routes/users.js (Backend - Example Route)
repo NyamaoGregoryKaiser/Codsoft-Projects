@@ -1,0 +1,17 @@
+```javascript
+const express = require('express');
+const router = express.Router();
+const User = require('../models/User'); // Import User model
+
+// Example user signup route (Simplified)
+router.post('/signup', async (req, res) => {
+  try {
+    // ... (Handle user signup logic, including hashing passwords etc.)
+  } catch (error) {
+    res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
+
+module.exports = router;
+```
