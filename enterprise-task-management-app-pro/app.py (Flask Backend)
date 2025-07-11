@@ -1,0 +1,21 @@
+import os
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+# ... (Models defined below) ...
+
+
+# ... (API routes for CRUD operations, authentication, etc.) ...
+
+if __name__ == '__main__':
+    app.run(debug=True)
