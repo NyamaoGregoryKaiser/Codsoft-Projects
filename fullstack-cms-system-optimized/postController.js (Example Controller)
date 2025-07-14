@@ -1,0 +1,15 @@
+```javascript
+const db = require('./db');
+
+const getPosts = async (req, res) => {
+  try {
+    const posts = await db.query('SELECT * FROM posts');
+    res.json(posts.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ... other controller functions (getPost, createPost, etc.)
+module.exports = { getPosts, getPost, createPost, updatePost, deletePost };
+```

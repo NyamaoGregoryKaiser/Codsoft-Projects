@@ -1,0 +1,30 @@
+```javascript
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const routes = require('./routes'); // Import API routes
+const { authenticate } = require('./middleware/auth'); // Authentication middleware
+const db = require('./db'); // Database connection
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(helmet());
+app.use(express.json());
+
+
+// Database connection (example using pg)
+db.connect()
+  .then(() => console.log('Connected to database'))
+  .catch(err => console.error('Error connecting to database:', err));
+
+
+
+app.use('/api', authenticate, routes); // Apply authentication middleware to API routes
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
+
+```

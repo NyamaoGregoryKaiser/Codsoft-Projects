@@ -1,0 +1,29 @@
+```javascript
+const { Pool } = require('pg');
+const connectionString = process.env.DATABASE_URL || 'postgres://user:password@localhost:5432/cms'; // Change to your database configuration
+
+
+const pool = new Pool({
+    connectionString: connectionString,
+});
+
+const query = async (text, params) => {
+    const client = await pool.connect();
+    try {
+        const res = await client.query(text, params);
+        return res;
+    } catch (err) {
+        console.error("error in query:", err);
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+const connect = async () => {
+    await pool.connect()
+};
+
+
+module.exports = { query, connect };
+```
