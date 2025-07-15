@@ -1,0 +1,20 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build backend
+        run: docker build -t my-awesome-backend .
+      - name: Run Tests (Backend - Placeholder)
+        run: echo "Running backend tests..."  # Replace with actual test execution
+      - name: Build Frontend (Placeholder)
+        run: npm install && npm run build # Assuming a build script exists in package.json
+      - name: Deploy to (Deployment Target - Placeholder)
+        run: echo "Deploying to..." # Replace with actual deployment commands

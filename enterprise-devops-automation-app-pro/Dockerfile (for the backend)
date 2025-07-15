@@ -1,0 +1,11 @@
+FROM g++:latest
+
+WORKDIR /app
+
+COPY . .
+
+RUN g++ -o server server.cpp  -std=c++17 -pthread -lmysqlcppconn
+
+EXPOSE 3000
+
+CMD ["./server"]
