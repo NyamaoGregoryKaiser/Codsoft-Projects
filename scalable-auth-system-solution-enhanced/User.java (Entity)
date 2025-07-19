@@ -1,0 +1,18 @@
+```java
+package com.example.authsystem.model;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String username;
+    private String password; //Store hashed password!
+    private String role; //e.g., "USER", "ADMIN"
+
+    //Getters and setters
+}
+```

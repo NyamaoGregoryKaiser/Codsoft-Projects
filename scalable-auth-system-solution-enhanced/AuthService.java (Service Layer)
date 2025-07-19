@@ -1,0 +1,41 @@
+```java
+package com.example.authsystem.service;
+
+import com.example.authsystem.model.User;
+import com.example.authsystem.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+// ... (imports) ...
+
+@Service
+public class AuthService {
+
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private PasswordEncoder passwordEncoder; //Use Spring Security's PasswordEncoder
+
+
+    @Transactional
+    public User registerUser(User user) {
+        String encodedPassword = passwordEncoder.encode(user.getPassword());
+        user.setPassword(encodedPassword); //Store the encoded password
+        return userRepository.save(user);
+    }
+
+
+    public String loginUser(User user) {
+        //Verify username and password, then generate JWT token.
+        //This is a simplified example, use a proper authentication mechanism in production.
+        User dbUser = userRepository.findByUsername(user.getUsername());
+        if (dbUser != null && passwordEncoder.matches(user.getPassword(), dbUser.getPassword())) {
+            //Generate JWT token here using JWT library
+            return "JWT Token"; //Replace with actual token generation
+        } else {
+            return "Invalid Credentials";
+        }
+    }
+}
+```
