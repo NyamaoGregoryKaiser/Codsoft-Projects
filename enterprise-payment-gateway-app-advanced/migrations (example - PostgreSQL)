@@ -1,0 +1,11 @@
+You'd need migration files (e.g., using `pg-migrate`) to manage database schema changes.  Example SQL:
+
+```sql
+-- migration-name: create_payments_table
+CREATE TABLE payments (
+  id SERIAL PRIMARY KEY,
+  amount DECIMAL(10, 2) NOT NULL,
+  card_details TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```

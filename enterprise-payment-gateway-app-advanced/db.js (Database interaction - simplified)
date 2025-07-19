@@ -1,0 +1,23 @@
+```javascript
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  //Your database connection string here
+  connectionString: process.env.DATABASE_URL,
+});
+
+async function createPayment(paymentData){
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'INSERT INTO payments (amount, card_details) VALUES ($1, $2) RETURNING *',
+        [paymentData.amount, paymentData.cardDetails]
+      );
+      return result.rows[0];
+    } finally {
+      client.release();
+    }
+}
+
+module.exports = {createPayment};
+```
