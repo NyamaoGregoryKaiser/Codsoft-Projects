@@ -1,0 +1,14 @@
+import unittest
+import requests
+
+class TestAPI(unittest.TestCase):
+    BASE_URL = "http://127.0.0.1:5000"  # Update with your app's URL
+
+    def test_create_payment(self):
+        response = requests.post(f"{self.BASE_URL}/payments", json={"amount": 10.00})
+        self.assertEqual(response.status_code, 201)
+        # Add assertions to verify the content of the response
+
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,0 +1,7 @@
+Flask==2.3.2
+Flask-SQLAlchemy==3.0.4
+psycopg2-binary==2.9.7 # PostgreSQL driver
+pytest==7.4.0
+coverage==6.5.0
+requests==2.31.0 # For testing
+python-dotenv==1.0.0
