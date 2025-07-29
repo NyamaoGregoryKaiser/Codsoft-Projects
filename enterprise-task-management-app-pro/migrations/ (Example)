@@ -1,0 +1,1 @@
+This directory would contain SQL files (e.g., `001_create_users_table.sql`, `002_create_tasks_table.sql`) for database schema management.  You'd need a separate migration script to execute these.  Example:

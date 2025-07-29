@@ -1,0 +1,69 @@
+```javascript
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const { check, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
+const { Pool } = require('pg'); //PostgreSQL
+const app = express();
+const port = process.env.PORT || 3000;
+
+
+// Database Configuration (Replace with your credentials)
+const pool = new Pool({
+  user: 'your_db_user',
+  host: 'your_db_host',
+  database: 'your_db_name',
+  password: 'your_db_password',
+  port: 5432, //Default PostgreSQL port
+});
+
+
+//Middleware
+app.use(cors());
+app.use(helmet());
+app.use(express.json());
+
+
+// Authentication (Simplified example)
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token == null) return res.sendStatus(401);
+
+  jwt.verify(token, 'your-secret-key', (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+}
+
+
+// API Routes (Example)
+app.post('/api/register', [
+    check('username').notEmpty().withMessage('Username is required'),
+    check('password').isLength({min: 6}).withMessage('Password must be at least 6 characters')
+], (req, res) => { //Add user registration logic
+});
+
+app.post('/api/login', (req, res) => { //Add user login logic
+});
+
+
+app.get('/api/tasks', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM tasks WHERE user_id = $1', [req.user.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({error: 'Failed to fetch tasks'});
+  }
+});
+
+// Add other CRUD routes for tasks...
+
+
+app.listen(port, () => {
+  console.log(`Server listening on port ${port}`);
+});
+```
