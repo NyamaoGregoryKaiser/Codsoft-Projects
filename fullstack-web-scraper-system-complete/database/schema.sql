@@ -1,0 +1,8 @@
+```sql
+CREATE TABLE IF NOT EXISTS websites (
+  id SERIAL PRIMARY KEY,
+  url TEXT UNIQUE NOT NULL,
+  last_scraped TIMESTAMP WITH TIME ZONE,
+  data JSONB
+);
+```
