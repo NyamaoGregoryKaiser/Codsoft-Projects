@@ -1,0 +1,11 @@
+{
+  "name": "my-api",
+  "version": "1.0.0",
+  "description": "My API project",
+  "dependencies": {
+    // Add your frontend dependencies here if using a framework like React
+  },
+  "devDependencies": {
+    // Add your testing and build tools
+  }
+}
