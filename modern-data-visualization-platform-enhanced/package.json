@@ -1,0 +1,33 @@
+```json
+{
+  "name": "data-viz-app",
+  "version": "1.0.0",
+  "description": "Data Visualization Application",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest",
+    "migrate": "node ./migrations/migrate.js",
+    "seed": "node ./migrations/seed.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "jsonwebtoken": "^9.0.0", // For authentication
+    "bcrypt": "^5.1.0", // For password hashing
+    "helmet": "^7.0.0", // Security middleware
+    "rate-limit": "^6.2.0", // Rate limiting
+    "express-async-handler": "^1.2.0" //Async error handling
+  },
+  "devDependencies": {
+    "jest": "^29.6.2",
+    "supertest": "^6.3.3",
+    "nodemon": "^3.0.1",
+    "@types/express": "^4.17.17",
+    "@types/jest": "^29.5.1",
+    "typescript": "^5.1.3"
+  }
+}
+```
