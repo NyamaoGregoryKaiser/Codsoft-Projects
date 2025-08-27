@@ -1,0 +1,5 @@
+Flask==2.3.2
+Flask-SocketIO==5.2.0
+SQLAlchemy==2.0.19
+psycopg2-binary #Replace with sqlite3 if using SQLite
+python-dotenv==1.0.0
