@@ -1,0 +1,20 @@
+```java
+package com.webscraper.service;
+
+import com.webscraper.model.ScrapedData;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.springframework.stereotype.Service;
+
+@Service
+public class WebScrapingService {
+
+    public ScrapedData scrape(String url) throws Exception {
+        Document doc = Jsoup.connect(url).get(); //Basic scraping, needs error handling and more robust logic
+        String title = doc.title();
+        String bodyText = doc.body().text();
+
+        return new ScrapedData(url, title, bodyText);
+    }
+}
+```

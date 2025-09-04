@@ -1,0 +1,17 @@
+```java
+package com.webscraper.model;
+
+import javax.persistence.*;
+
+@Entity
+public class ScrapedData {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String url;
+    private String title;
+    private String body;
+
+    // Constructor, getters, and setters
+}
+```
