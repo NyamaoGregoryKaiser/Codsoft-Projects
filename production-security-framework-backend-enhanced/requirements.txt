@@ -1,0 +1,8 @@
+Flask==2.3.2
+Flask-SQLAlchemy==3.0.4
+Flask-Migrate==3.1.0
+psycopg2-binary # PostgreSQL adapter
+python-dotenv # For environment variables
+requests # For API testing (optional)
+pytest # For testing
+coverage # For test coverage
