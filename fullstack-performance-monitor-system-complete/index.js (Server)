@@ -1,0 +1,35 @@
+```javascript
+const express = require('express');
+const knex = require('knex')(require('./knexfile')[process.env.NODE_ENV || 'development']);
+const app = express();
+const port = process.env.PORT || 3000;
+const redis = require('redis').createClient();
+const rateLimit = require('express-rate-limit');
+
+// ... (Middleware, routes, error handling, etc.  This is a highly simplified example)
+
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+});
+
+app.use(limiter);
+
+app.get('/metrics', async (req, res) => {
+    try {
+      const metrics = await knex('metrics').select('*');
+      res.json(metrics);
+    } catch (error) {
+      console.error(error);
+      res.status(500).send('Internal Server Error');
+    }
+});
+
+app.post('/metrics', async (req, res) => {
+    // ... Add metric to DB ...
+});
+
+app.listen(port, () => console.log(`Server listening on port ${port}`));
+
+
+```
