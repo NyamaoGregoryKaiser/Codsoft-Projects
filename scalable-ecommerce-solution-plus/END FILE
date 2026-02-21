@@ -1,0 +1,47 @@
+## 6. Additional Features
+
+*   **Authentication/Authorization:** Implemented using JWTs in `JwtManager` and `AuthMiddleware`. Roles (`user`, `admin`) are stored in the JWT payload and used for access control in middleware or services.
+*   **Logging and Monitoring:** `spdlog` for structured logging. `LoggingMiddleware` captures request details. For monitoring, integrate with Prometheus (metrics exposed via a custom endpoint) and Grafana for visualization.
+*   **Error Handling Middleware:** Global exception handler in `main.cc` using `drogon::app().setExceptionHandler` to catch `ApiException` and `std::exception`.
+*   **Caching Layer:**
+    *   **Integration:** Use `hiredis` (C client for Redis) or a C++ wrapper. Create a `RedisClient` utility class.
+    *   **Usage:** Cache frequently accessed data, e.g., product details in `ProductService` or `ProductDAL`.
+    *   **Example (conceptual):**
+        ```cpp
+        // In ProductService::getProductById(long id)
+        std::string cacheKey = "product:" + std::to_string(id);
+        std::optional<std::string> cachedData = _redisClient->get(cacheKey);
+        if (cachedData) {
+            // Deserialize JSON string to Product model
+            return Product::fromJson(cachedData.value());
+        }
+        // Fetch from DB
+        Models::Product product = _productDAL->findById(id).get();
+        // Cache for next time
+        _redisClient->set(cacheKey, product.toJson().toStyledString(), 3600); // 1 hour expiry
+        return product;
+        ```
+*   **Rate Limiting:**
+    *   **Implementation:** `RateLimitMiddleware` uses Redis to store counters for IP addresses or authenticated user IDs.
+    *   **Algorithm:** Token bucket or fixed window counter.
+    *   **Example (conceptual in `RateLimitMiddleware::doFilter`):**
+        ```cpp
+        // Using `hiredis`
+        std::string ip = req->getPeerAddr().toIpString();
+        std::string rateLimitKey = "ratelimit:ip:" + ip;
+        long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        long windowStart = currentTime - 60; // 60-second window
+
+        // Use Redis commands like ZADD, ZREMRANGEBYSCORE, ZCARD to implement rate limiting
+        // Or simpler: INCR and EXPIRE
+        // Example: Increment counter for the IP for a 60-second window.
+        // If count exceeds threshold, block.
+        // Example of a simplistic fixed window counter:
+        // redis->command("INCR %s", rateLimitKey.c_str());
+        // redis->command("EXPIRE %s %d", rateLimitKey.c_str(), 60);
+        // int count = std::stoi(redis->command("GET %s", rateLimitKey.c_str()));
+        // if (count > MAX_REQUESTS_PER_MINUTE) { /* block */ }
+        ```
+
+This comprehensive outline and the provided code snippets and documentation templates demonstrate a robust, production-ready E-commerce system design using C++ and modern web development practices. Remember that each section, especially the `...` placeholders, would expand into significant code and configuration in a real-world project.

@@ -1,0 +1,25 @@
+graph TD
+    UserClient[User's Browser / Mobile App] --> |HTTP/S Requests| CDN[CDN (e.g., Cloudflare)]
+    CDN --> |Static Assets| S3[S3 / Object Storage]
+    CDN --> |API Requests| LoadBalancer[Load Balancer]
+    LoadBalancer --> Nginx[Nginx Reverse Proxy]
+    Nginx --> |API Gateway Role| RateLimiter[Rate Limiter (e.g., Nginx Module / Standalone)]
+    RateLimiter --> AuthN[AuthN/AuthZ Middleware]
+    AuthN --> Caching[Caching Layer (Redis)]
+    Caching --> |Request/Response| BackendApp[C++ Backend (Drogon)]
+
+    subgraph C++ Backend (Drogon)
+        BackendApp --> Controllers[Controllers (API Endpoints)]
+        Controllers --> Services[Services (Business Logic)]
+        Services --> DAL[DAL (Data Access Layer)]
+        DAL --> Database[PostgreSQL Database]
+        Services --> |Pub/Sub| MessageQueue[Message Queue (e.g., RabbitMQ, Kafka)]
+        Services --> |External Calls| PaymentGateway[Payment Gateway API]
+        Services --> |External Calls| EmailService[Email Service API]
+    end
+
+    BackendApp --> Monitoring[Monitoring (Prometheus, Grafana)]
+    BackendApp --> Logging[Logging (ELK Stack / Loki)]
+
+    Database --> Backup[Database Backups]
+    Database --> Replication[Database Replication]

@@ -1,0 +1,91 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ecommerce_db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "GET", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce_backend
+    environment:
+      # Pass environment variables to the backend container
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      APP_PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL}
+    ports:
+      - "${APP_PORT}:${APP_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs # Mount host logs directory
+    restart: on-failure
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ecommerce_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro # For HTTPS
+      - ./frontend/build:/usr/share/nginx/html:ro # For serving static frontend files
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  redis_data:
+```
+**Note:** `DB_HOST` and `REDIS_HOST` in `docker-compose.yml` point to the service names (`db`, `redis`) because they are on the same Docker network.
+
+### CI/CD Pipeline Configuration (GitHub Actions)

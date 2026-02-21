@@ -1,0 +1,41 @@
+```json
+{
+  "http_port": 8080,
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "port": 8080
+    }
+  ],
+  "threads_num": 0,       // 0 means number of CPU cores
+  "app_name": "ECommerceSystem",
+  "document_root": "./webroot", // For serving static files (e.g., frontend build)
+  "log": {
+    "log_path": "logs",
+    "logfile_base_name": "ecommerce",
+    "log_size_limit": 52428800, // 50MB per file
+    "log_level": "debug"
+  },
+  "db_clients": [
+    {
+      "host": "${DB_HOST}",
+      "port": "${DB_PORT}",
+      "dbname": "${DB_NAME}",
+      "user": "${DB_USER}",
+      "passwd": "${DB_PASSWORD}",
+      "number": 1, // Number of connections in the pool
+      "is_async": true,
+      "type": "postgresql"
+    }
+  ],
+  "enable_json_validation": true, // Enable JSON schema validation if schemas are provided
+  "jwt_secret": "${JWT_SECRET}", // Custom config to be read by JwtManager
+  "jwt_expiry_hours": "${JWT_EXPIRY_HOURS}",
+  "redis_host": "${REDIS_HOST}",
+  "redis_port": "${REDIS_PORT}",
+  "redis_password": "${REDIS_PASSWORD}"
+}
+```
+**Note:** Drogon can dynamically load environment variables into its config. Make sure your Drogon version supports this or use a separate script to generate `app.json`.
+
+### Docker Setup

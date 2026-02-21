@@ -1,0 +1,16 @@
+```ini
+[requires]
+drogon/1.9.1
+spdlog/1.12.0
+jwt-cpp/0.6.0
+hiredis/1.2.0
+nlohmann_json/3.11.2 # Often useful for JSON manipulation outside Drogon's types
+fmt/10.1.1 # Dependency of spdlog and others
+openssl/3.0.12 # Dependency of Drogon for HTTPS/JWT
+libpq/15.5 # PostgreSQL client library, often a dependency of Drogon's DbClient
+catch2/3.4.0 # Or googletest/1.13.0 for testing
+
+[generators]
+CMakeDeps
+CMakeToolchain
+```
