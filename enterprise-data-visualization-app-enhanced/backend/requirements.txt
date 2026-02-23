@@ -1,0 +1,19 @@
+```
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-JWT-Extended==4.4.4
+Flask-Marshmallow==0.15.0
+marshmallow-sqlalchemy==0.29.0
+Flask-Cors==4.0.0
+Flask-Caching==2.0.2
+Flask-Limiter==3.5.1
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9 # PostgreSQL driver
+Werkzeug==2.3.7 # Ensure compatibility with Flask
+python-dotenv==1.0.0
+gunicorn==21.2.0 # For production WSGI server
+pandas==2.1.3 # For data processing
+openpyxl==3.1.2 # Optional, if you want Excel support in data processing
+PyMySQL==1.1.0 # Optional, for MySQL data sources
+```
