@@ -1,0 +1,51 @@
+### === DEPLOYMENT.md ===
+```markdown
+# AppMonitor: Deployment Guide (Conceptual)
+
+This document outlines conceptual steps and considerations for deploying the AppMonitor application to a production environment. The provided `docker-compose.yml` is suitable for local development; a production deployment typically involves more robust orchestration and cloud-specific services.
+
+## 1. Prerequisites for Production Deployment
+
+*   **Cloud Provider Account:** AWS, Google Cloud, Azure, Render, Heroku, DigitalOcean, etc.
+*   **Docker Hub / Container Registry Access:** For storing your built Docker images.
+*   **CI/CD Configuration:** GitHub Actions (already provided) or similar (GitLab CI, Jenkins).
+*   **Production Database:** A managed PostgreSQL instance (e.g., AWS RDS, Google Cloud SQL, Render Postgres).
+*   **Production Cache:** A managed Redis instance (e.g., AWS ElastiCache, Google Memorystore, Render Redis).
+*   **Domain Name:** For accessing your frontend and backend APIs.
+*   **SSL/TLS Certificates:** For HTTPS (essential for production).
+*   **Environment Variables:** All sensitive information configured as environment variables in your deployment environment.
+
+## 2. Docker Images
+
+The `docker-compose.yml` and individual `Dockerfile`s in `backend` and `frontend` directories are configured for building production-ready images.
+
+**Steps to build and push images (automated by GitHub Actions):**
+
+1.  **Build Backend Image:**
+    ```bash
+    docker build -t your-dockerhub-username/appmonitor-backend:latest ./backend
+    ```
+2.  **Build Frontend Image:**
+    ```bash
+    docker build -t your-dockerhub-username/appmonitor-frontend:latest ./frontend
+    ```
+3.  **Push Images to Registry:**
+    ```bash
+    docker push your-dockerhub-username/appmonitor-backend:latest
+    docker push your-dockerhub-username/appmonitor-frontend:latest
+    ```
+    *   **Note:** In production, use immutable tags (e.g., Git SHA `appmonitor-backend:f7e9b1c`) instead of `latest` for better traceability and rollback capabilities. Our GitHub Actions workflow demonstrates this.
+
+## 3. Environment Variables
+
+Ensure your production environment correctly sets the following variables (refer to `.env.example` for full list):
+
+*   **Backend:**
+    *   `NODE_ENV=production`
+    *   `PORT=5000` (or desired port for backend service)
+    *   `DATABASE_URL=postgres://user:password@host:port/database` (Connection string for your production PostgreSQL)
+    *   `REDIS_URL=redis://host:port` (Connection string for your production Redis)
+    *   `JWT_SECRET=your_strong_jwt_secret` (Critical: Generate a long, random string)
+    *   `FRONTEND_URL=https://your-frontend-domain.com` (Your production frontend URL)
+    *   `LOG_LEVEL=info` (or `warn`, `error` for less verbose logs in production)
+*   **Frontend (usually built into the image):
