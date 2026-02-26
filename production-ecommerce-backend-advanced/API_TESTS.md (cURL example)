@@ -1,0 +1,4 @@
+# Replace [YOUR_JWT_TOKEN] with the token obtained from login
+# Assuming productId=1 and quantity=2
+curl -X POST "http://localhost:8080/api/cart/add?productId=1&quantity=2" \
+-H "Authorization: Bearer [YOUR_JWT_TOKEN]"

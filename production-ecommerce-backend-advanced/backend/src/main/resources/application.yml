@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ecommerce-backend
+  datasource:
+    url: jdbc:postgresql://postgres:5432/ecommerce_db
+    username: admin
+    password: admin_password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update # In production, use 'validate' and manage migrations with Flyway/Liquibase
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # For development, we're generating JWTs ourselves. In a real scenario, this might point to a JWKS URI.
+          # We'll rely on our custom JwtTokenProvider to validate.
+          issuer-uri: http://localhost:8080
+  redis:
+    host: redis
+    port: 6379
+
+jwt:
+  secret: supersecretjwtkeythatisatleast256bitlongforproductionuse # CHANGE THIS IN PRODUCTION
+  expiration: 86400000 # 24 hours in milliseconds
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+
+# Logging configuration (example, more detailed in logback-spring.xml)
+logging:
+  level:
+    com.ecommerce: INFO
+    org.springframework.web: INFO
+    org.hibernate: WARN
+  file:
+    name: logs/ecommerce-backend.log # Log file location
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    display-request-duration: true
+
+# Rate Limiting configuration
+app:
+  rate-limit:
+    enabled: true
+    max-requests: 100 # Max requests per minute per IP
+    time-window-seconds: 60 # Time window for rate limiting

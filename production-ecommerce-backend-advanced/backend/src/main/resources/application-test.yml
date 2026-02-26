@@ -1,0 +1,33 @@
+# Configuration for integration tests using an in-memory H2 database
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop # Create schema and drop after tests
+    show-sql: false
+  sql:
+    init:
+      mode: always # Ensure data.sql runs for tests too
+  cache:
+    type: none # Disable cache for tests to ensure fresh data
+  redis:
+    # No Redis for tests
+    host: localhost
+    port: 6379
+jwt:
+  secret: testsecretfortests # Use a simple secret for tests
+  expiration: 3600000 # 1 hour for tests
+
+logging:
+  level:
+    com.ecommerce: WARN # Suppress application logs during tests
+    org.springframework: WARN
+    org.hibernate: WARN
+```
+
+**`backend/src/test/java/com/ecommerce/service/ProductServiceTest.java` (Unit Test Example)**
+```java
