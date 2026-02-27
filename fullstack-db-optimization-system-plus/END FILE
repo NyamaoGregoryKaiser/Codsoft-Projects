@@ -1,0 +1,4478 @@
+```
+
+```cpp
+// === backend/src/utils/ErrorHandler.h ===
+#ifndef ERROR_HANDLER_H
+#define ERROR_HANDLER_H
+
+#include "crow.h"
+#include "nlohmann/json.hpp"
+#include "Logger.h"
+
+namespace ErrorHandler {
+    crow::response handle_error(crow::response& res, const std::string& message, crow::status status = crow::status::INTERNAL_SERVER_ERROR) {
+        nlohmann::json error_json;
+        error_json["error"] = message;
+        res.code = static_cast<int>(status);
+        res.set_header("Content-Type", "application/json");
+        res.write(error_json.dump());
+        Logger::get_logger()->error("API Error: {} - {}", static_cast<int>(status), message);
+        return res;
+    }
+}
+
+#endif // ERROR_HANDLER_H
+```
+
+```cpp
+// === backend/src/api/AuthMiddleware.h ===
+#ifndef AUTH_MIDDLEWARE_H
+#define AUTH_MIDDLEWARE_H
+
+#include "crow.h"
+#include "config/AppConfig.h"
+#include "utils/ErrorHandler.h"
+#include "utils/Logger.h"
+
+struct AuthMiddleware
+{
+    std::string api_key;
+
+    AuthMiddleware(const AppConfig& config) : api_key(config.api_key) {}
+
+    struct context {};
+
+    void before_handle(crow::request& req, crow::response& res, context& /*ctx*/)
+    {
+        // Skip authentication for specific endpoints (e.g., login, health checks)
+        if (req.url == "/login" || req.url == "/health") {
+            return;
+        }
+
+        std::string auth_header = req.get_header("Authorization");
+        if (auth_header.empty() || auth_header.substr(0, 7) != "Bearer ") {
+            ErrorHandler::handle_error(res, "Authentication required", crow::status::UNAUTHORIZED);
+            res.end(); // End the response here
+            return;
+        }
+
+        std::string token = auth_header.substr(7);
+        if (token != api_key) {
+            ErrorHandler::handle_error(res, "Invalid API Key", crow::status::FORBIDDEN);
+            res.end(); // End the response here
+        }
+    }
+
+    void after_handle(crow::request& /*req*/, crow::response& /*res*/, context& /*ctx*/) {}
+};
+
+#endif // AUTH_MIDDLEWARE_H
+```
+
+```cpp
+// === backend/src/models/DbConfig.h ===
+#ifndef DB_CONFIG_H
+#define DB_CONFIG_H
+
+#include <string>
+#include "nlohmann/json.hpp"
+
+struct DbConfig {
+    int id = 0;
+    std::string name;
+    std::string host;
+    std::string port;
+    std::string user;
+    std::string password;
+    std::string dbname;
+
+    // To JSON
+    nlohmann::json to_json() const {
+        nlohmann::json j;
+        j["id"] = id;
+        j["name"] = name;
+        j["host"] = host;
+        j["port"] = port;
+        j["user"] = user;
+        j["dbname"] = dbname;
+        // Password is not exposed in API responses
+        return j;
+    }
+
+    // From JSON
+    static DbConfig from_json(const nlohmann::json& j) {
+        DbConfig config;
+        if (j.contains("id")) config.id = j.at("id").get<int>();
+        config.name = j.at("name").get<std::string>();
+        config.host = j.at("host").get<std::string>();
+        config.port = j.at("port").get<std::string>();
+        config.user = j.at("user").get<std::string>();
+        if (j.contains("password")) config.password = j.at("password").get<std::string>(); // Only when creating/updating
+        config.dbname = j.at("dbname").get<std::string>();
+        return config;
+    }
+};
+
+#endif // DB_CONFIG_H
+```
+
+```cpp
+// === backend/src/models/Metric.h ===
+#ifndef METRIC_H
+#define METRIC_H
+
+#include <string>
+#include <vector>
+#include <chrono>
+#include "nlohmann/json.hpp"
+
+struct SlowQuery {
+    std::string query_text;
+    long long calls;
+    double total_time;
+    double mean_time;
+    std::string fingerprint; // Hashed/normalized query
+    std::chrono::system_clock::time_point detected_at;
+
+    nlohmann::json to_json() const {
+        nlohmann::json j;
+        j["query_text"] = query_text;
+        j["calls"] = calls;
+        j["total_time_ms"] = total_time;
+        j["mean_time_ms"] = mean_time;
+        j["fingerprint"] = fingerprint;
+        j["detected_at"] = std::chrono::duration_cast<std::chrono::milliseconds>(detected_at.time_since_epoch()).count();
+        return j;
+    }
+};
+
+struct Metric {
+    int db_id = 0;
+    long long total_connections = 0;
+    long long active_connections = 0;
+    double cpu_usage_percent = 0.0;
+    long long tx_bytes = 0;
+    long long rx_bytes = 0;
+    std::chrono::system_clock::time_point timestamp;
+    std::vector<SlowQuery> slow_queries; // Top N slow queries
+
+    nlohmann::json to_json() const {
+        nlohmann::json j;
+        j["db_id"] = db_id;
+        j["total_connections"] = total_connections;
+        j["active_connections"] = active_connections;
+        j["cpu_usage_percent"] = cpu_usage_percent;
+        j["tx_bytes"] = tx_bytes;
+        j["rx_bytes"] = rx_bytes;
+        j["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()).count();
+
+        nlohmann::json slow_queries_json = nlohmann::json::array();
+        for (const auto& sq : slow_queries) {
+            slow_queries_json.push_back(sq.to_json());
+        }
+        j["slow_queries"] = slow_queries_json;
+        return j;
+    }
+};
+
+#endif // METRIC_H
+```
+
+```cpp
+// === backend/src/models/Recommendation.h ===
+#ifndef RECOMMENDATION_H
+#define RECOMMENDATION_H
+
+#include <string>
+#include <chrono>
+#include "nlohmann/json.hpp"
+
+enum class RecommendationType {
+    CreateIndex,
+    RewriteQuery,
+    AnalyzeTable,
+    Other
+};
+
+std::string recommendation_type_to_string(RecommendationType type) {
+    switch (type) {
+        case RecommendationType::CreateIndex: return "CreateIndex";
+        case RecommendationType::RewriteQuery: return "RewriteQuery";
+        case RecommendationType::AnalyzeTable: return "AnalyzeTable";
+        case RecommendationType::Other: return "Other";
+        default: return "Unknown";
+    }
+}
+
+RecommendationType string_to_recommendation_type(const std::string& str) {
+    if (str == "CreateIndex") return RecommendationType::CreateIndex;
+    if (str == "RewriteQuery") return RecommendationType::RewriteQuery;
+    if (str == "AnalyzeTable") return RecommendationType::AnalyzeTable;
+    return RecommendationType::Other;
+}
+
+struct Recommendation {
+    int id = 0;
+    int db_id = 0;
+    RecommendationType type = RecommendationType::Other;
+    std::string description;
+    std::string details; // e.g., actual SQL for index
+    std::string status = "pending"; // pending, applied, dismissed
+    std::chrono::system_clock::time_point created_at;
+    std::string related_query_fingerprint; // Optional, for query-specific recommendations
+
+    nlohmann::json to_json() const {
+        nlohmann::json j;
+        j["id"] = id;
+        j["db_id"] = db_id;
+        j["type"] = recommendation_type_to_string(type);
+        j["description"] = description;
+        j["details"] = details;
+        j["status"] = status;
+        j["created_at"] = std::chrono::duration_cast<std::chrono::milliseconds>(created_at.time_since_epoch()).count();
+        j["related_query_fingerprint"] = related_query_fingerprint;
+        return j;
+    }
+    
+    static Recommendation from_json(const nlohmann::json& j) {
+        Recommendation rec;
+        if (j.contains("id")) rec.id = j.at("id").get<int>();
+        rec.db_id = j.at("db_id").get<int>();
+        rec.type = string_to_recommendation_type(j.at("type").get<std::string>());
+        rec.description = j.at("description").get<std::string>();
+        rec.details = j.at("details").get<std::string>();
+        rec.status = j.at("status").get<std::string>();
+        if (j.contains("created_at")) {
+            rec.created_at = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(j.at("created_at").get<long long>()));
+        } else {
+             rec.created_at = std::chrono::system_clock::now();
+        }
+        if (j.contains("related_query_fingerprint")) rec.related_query_fingerprint = j.at("related_query_fingerprint").get<std::string>();
+        return rec;
+    }
+};
+
+#endif // RECOMMENDATION_H
+```
+
+```cpp
+// === backend/src/db_schema.sql ===
+-- Internal SQLite Database Schema
+CREATE TABLE IF NOT EXISTS databases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    host TEXT NOT NULL,
+    port TEXT NOT NULL,
+    user TEXT NOT NULL,
+    password TEXT NOT NULL,
+    dbname TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS metrics_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    db_id INTEGER NOT NULL,
+    total_connections INTEGER,
+    active_connections INTEGER,
+    cpu_usage_percent REAL,
+    tx_bytes INTEGER,
+    rx_bytes INTEGER,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (db_id) REFERENCES databases(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS slow_queries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    db_id INTEGER NOT NULL,
+    query_text TEXT NOT NULL,
+    calls INTEGER,
+    total_time REAL,
+    mean_time REAL,
+    fingerprint TEXT NOT NULL, -- Hashed or normalized query for grouping
+    detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (db_id) REFERENCES databases(id) ON DELETE CASCADE,
+    UNIQUE(db_id, fingerprint, detected_at) -- Prevent duplicate entries for the same query in a short period
+);
+
+CREATE TABLE IF NOT EXISTS recommendations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    db_id INTEGER NOT NULL,
+    type TEXT NOT NULL, -- e.g., 'CreateIndex', 'RewriteQuery'
+    description TEXT NOT NULL,
+    details TEXT,       -- e.g., the exact SQL for an index
+    status TEXT DEFAULT 'pending', -- 'pending', 'applied', 'dismissed'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    related_query_fingerprint TEXT, -- Optional
+    FOREIGN KEY (db_id) REFERENCES databases(id) ON DELETE CASCADE
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_metrics_history_db_id_timestamp ON metrics_history (db_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_slow_queries_db_id_fingerprint ON slow_queries (db_id, fingerprint);
+CREATE INDEX IF NOT EXISTS idx_recommendations_db_id_status ON recommendations (db_id, status);
+```
+
+```cpp
+// === backend/src/services/DataStorageService.h ===
+#ifndef DATA_STORAGE_SERVICE_H
+#define DATA_STORAGE_SERVICE_H
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <sqlite3.h>
+#include <chrono>
+#include "models/DbConfig.h"
+#include "models/Metric.h"
+#include "models/Recommendation.h"
+#include "utils/Logger.h"
+
+class DataStorageService {
+public:
+    DataStorageService(const std::string& db_path);
+    ~DataStorageService();
+
+    void init();
+
+    // DbConfig CRUD
+    int add_db_config(const DbConfig& config);
+    std::vector<DbConfig> get_all_db_configs();
+    DbConfig get_db_config(int id);
+    bool update_db_config(const DbConfig& config);
+    bool delete_db_config(int id);
+
+    // Metric Storage
+    void save_metric(const Metric& metric);
+    std::vector<Metric> get_metrics_history(int db_id, int limit = 100);
+    std::vector<SlowQuery> get_slow_queries(int db_id, int limit = 50);
+
+    // Recommendation Storage
+    int add_recommendation(const Recommendation& rec);
+    std::vector<Recommendation> get_recommendations(int db_id, const std::string& status = "");
+    bool update_recommendation_status(int id, const std::string& status);
+
+private:
+    std::string db_path_;
+    sqlite3* db_;
+
+    void execute_sql(const std::string& sql);
+    void check_db_open();
+    static int callback_db_config(void* data, int argc, char** argv, char** col_names);
+    static int callback_metric_history(void* data, int argc, char** argv, char** col_names);
+    static int callback_slow_query(void* data, int argc, char** argv, char** col_names);
+    static int callback_recommendation(void* data, int argc, char** argv, char** col_names);
+};
+
+#endif // DATA_STORAGE_SERVICE_H
+```
+
+```cpp
+// === backend/src/services/DataStorageService.cpp ===
+#include "DataStorageService.h"
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
+
+// Helper to convert time_point to SQLite string
+std::string to_sqlite_datetime(std::chrono::system_clock::time_point tp) {
+    std::time_t tt = std::chrono::system_clock::to_time_t(tp);
+    std::tm tm = *std::gmtime(&tt); // Use gmtime for UTC
+    std::stringstream ss;
+    ss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return ss.str();
+}
+
+// Helper to convert SQLite string to time_point
+std::chrono::system_clock::time_point from_sqlite_datetime(const std::string& dt_str) {
+    std::tm tm{};
+    std::stringstream ss(dt_str);
+    ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+    return std::chrono::system_clock::from_time_t(std::mktime(&tm)); // mktime handles timezone conversion
+}
+
+
+DataStorageService::DataStorageService(const std::string& db_path) : db_path_(db_path), db_(nullptr) {
+    check_db_open();
+}
+
+DataStorageService::~DataStorageService() {
+    if (db_) {
+        sqlite3_close(db_);
+        db_ = nullptr;
+    }
+}
+
+void DataStorageService::check_db_open() {
+    if (!db_) {
+        if (sqlite3_open(db_path_.c_str(), &db_) != SQLITE_OK) {
+            std::string error_msg = "Can't open SQLite database: " + std::string(sqlite3_errmsg(db_));
+            Logger::get_logger()->critical(error_msg);
+            throw std::runtime_error(error_msg);
+        }
+        Logger::get_logger()->info("Opened SQLite database: {}", db_path_);
+    }
+}
+
+void DataStorageService::execute_sql(const std::string& sql) {
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg) + " SQL: " + sql;
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+}
+
+void DataStorageService::init() {
+    check_db_open();
+    std::ifstream schema_file("backend/src/db_schema.sql");
+    if (!schema_file.is_open()) {
+        Logger::get_logger()->critical("Could not open db_schema.sql. Make sure it's in backend/src/");
+        throw std::runtime_error("Could not open db_schema.sql");
+    }
+    std::stringstream buffer;
+    buffer << schema_file.rdbuf();
+    execute_sql(buffer.str());
+    Logger::get_logger()->info("SQLite database schema initialized.");
+}
+
+int DataStorageService::add_db_config(const DbConfig& config) {
+    check_db_open();
+    std::string sql = "INSERT INTO databases (name, host, port, user, password, dbname) VALUES ('" +
+                      config.name + "', '" + config.host + "', '" + config.port + "', '" +
+                      config.user + "', '" + config.password + "', '" + config.dbname + "');";
+    execute_sql(sql);
+    return sqlite3_last_insert_rowid(db_);
+}
+
+int DataStorageService::callback_db_config(void* data, int argc, char** argv, char** col_names) {
+    auto* configs = static_cast<std::vector<DbConfig>*>(data);
+    DbConfig config;
+    for (int i = 0; i < argc; i++) {
+        if (!argv[i]) continue;
+        std::string col_name = col_names[i];
+        if (col_name == "id") config.id = std::stoi(argv[i]);
+        else if (col_name == "name") config.name = argv[i];
+        else if (col_name == "host") config.host = argv[i];
+        else if (col_name == "port") config.port = argv[i];
+        else if (col_name == "user") config.user = argv[i];
+        else if (col_name == "password") config.password = argv[i];
+        else if (col_name == "dbname") config.dbname = argv[i];
+    }
+    configs->push_back(config);
+    return 0;
+}
+
+std::vector<DbConfig> DataStorageService::get_all_db_configs() {
+    check_db_open();
+    std::vector<DbConfig> configs;
+    std::string sql = "SELECT id, name, host, port, user, password, dbname FROM databases;";
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), callback_db_config, &configs, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg);
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+    return configs;
+}
+
+DbConfig DataStorageService::get_db_config(int id) {
+    check_db_open();
+    std::vector<DbConfig> configs;
+    std::string sql = "SELECT id, name, host, port, user, password, dbname FROM databases WHERE id = " + std::to_string(id) + ";";
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), callback_db_config, &configs, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg);
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+    if (configs.empty()) {
+        throw std::runtime_error("Database config not found for ID: " + std::to_string(id));
+    }
+    return configs[0];
+}
+
+bool DataStorageService::update_db_config(const DbConfig& config) {
+    check_db_open();
+    std::string sql = "UPDATE databases SET name = '" + config.name +
+                      "', host = '" + config.host +
+                      "', port = '" + config.port +
+                      "', user = '" + config.user +
+                      "', password = '" + config.password +
+                      "', dbname = '" + config.dbname +
+                      "' WHERE id = " + std::to_string(config.id) + ";";
+    execute_sql(sql);
+    return true; // Assume success if no exception thrown
+}
+
+bool DataStorageService::delete_db_config(int id) {
+    check_db_open();
+    std::string sql = "DELETE FROM databases WHERE id = " + std::to_string(id) + ";";
+    execute_sql(sql);
+    return true;
+}
+
+void DataStorageService::save_metric(const Metric& metric) {
+    check_db_open();
+    std::string sql_metric = "INSERT INTO metrics_history (db_id, total_connections, active_connections, cpu_usage_percent, tx_bytes, rx_bytes, timestamp) VALUES (" +
+                             std::to_string(metric.db_id) + ", " +
+                             std::to_string(metric.total_connections) + ", " +
+                             std::to_string(metric.active_connections) + ", " +
+                             std::to_string(metric.cpu_usage_percent) + ", " +
+                             std::to_string(metric.tx_bytes) + ", " +
+                             std::to_string(metric.rx_bytes) + ", '" +
+                             to_sqlite_datetime(metric.timestamp) + "');";
+    execute_sql(sql_metric);
+
+    // Save slow queries
+    for (const auto& sq : metric.slow_queries) {
+        std::string sql_slow_query = "INSERT OR IGNORE INTO slow_queries (db_id, query_text, calls, total_time, mean_time, fingerprint, detected_at) VALUES (" +
+                                     std::to_string(metric.db_id) + ", '" +
+                                     sq.query_text + "', " +
+                                     std::to_string(sq.calls) + ", " +
+                                     std::to_string(sq.total_time) + ", " +
+                                     std::to_string(sq.mean_time) + ", '" +
+                                     sq.fingerprint + "', '" +
+                                     to_sqlite_datetime(sq.detected_at) + "');";
+        execute_sql(sql_slow_query);
+    }
+}
+
+int DataStorageService::callback_metric_history(void* data, int argc, char** argv, char** col_names) {
+    auto* metrics = static_cast<std::vector<Metric>*>(data);
+    Metric m;
+    for (int i = 0; i < argc; i++) {
+        if (!argv[i]) continue;
+        std::string col_name = col_names[i];
+        if (col_name == "db_id") m.db_id = std::stoi(argv[i]);
+        else if (col_name == "total_connections") m.total_connections = std::stoll(argv[i]);
+        else if (col_name == "active_connections") m.active_connections = std::stoll(argv[i]);
+        else if (col_name == "cpu_usage_percent") m.cpu_usage_percent = std::stod(argv[i]);
+        else if (col_name == "tx_bytes") m.tx_bytes = std::stoll(argv[i]);
+        else if (col_name == "rx_bytes") m.rx_bytes = std::stoll(argv[i]);
+        else if (col_name == "timestamp") m.timestamp = from_sqlite_datetime(argv[i]);
+    }
+    metrics->push_back(m);
+    return 0;
+}
+
+std::vector<Metric> DataStorageService::get_metrics_history(int db_id, int limit) {
+    check_db_open();
+    std::vector<Metric> metrics;
+    std::string sql = "SELECT db_id, total_connections, active_connections, cpu_usage_percent, tx_bytes, rx_bytes, timestamp "
+                      "FROM metrics_history WHERE db_id = " + std::to_string(db_id) +
+                      " ORDER BY timestamp DESC LIMIT " + std::to_string(limit) + ";";
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), callback_metric_history, &metrics, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg);
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+    return metrics;
+}
+
+int DataStorageService::callback_slow_query(void* data, int argc, char** argv, char** col_names) {
+    auto* queries = static_cast<std::vector<SlowQuery>*>(data);
+    SlowQuery sq;
+    for (int i = 0; i < argc; i++) {
+        if (!argv[i]) continue;
+        std::string col_name = col_names[i];
+        if (col_name == "query_text") sq.query_text = argv[i];
+        else if (col_name == "calls") sq.calls = std::stoll(argv[i]);
+        else if (col_name == "total_time") sq.total_time = std::stod(argv[i]);
+        else if (col_name == "mean_time") sq.mean_time = std::stod(argv[i]);
+        else if (col_name == "fingerprint") sq.fingerprint = argv[i];
+        else if (col_name == "detected_at") sq.detected_at = from_sqlite_datetime(argv[i]);
+    }
+    queries->push_back(sq);
+    return 0;
+}
+
+std::vector<SlowQuery> DataStorageService::get_slow_queries(int db_id, int limit) {
+    check_db_open();
+    std::vector<SlowQuery> queries;
+    std::string sql = "SELECT query_text, calls, total_time, mean_time, fingerprint, detected_at "
+                      "FROM slow_queries WHERE db_id = " + std::to_string(db_id) +
+                      " ORDER BY detected_at DESC LIMIT " + std::to_string(limit) + ";";
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), callback_slow_query, &queries, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg);
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+    return queries;
+}
+
+int DataStorageService::add_recommendation(const Recommendation& rec) {
+    check_db_open();
+    std::string sql = "INSERT INTO recommendations (db_id, type, description, details, status, created_at, related_query_fingerprint) VALUES (" +
+                      std::to_string(rec.db_id) + ", '" +
+                      recommendation_type_to_string(rec.type) + "', '" +
+                      rec.description + "', '" +
+                      rec.details + "', '" +
+                      rec.status + "', '" +
+                      to_sqlite_datetime(rec.created_at) + "', '" +
+                      rec.related_query_fingerprint + "');";
+    execute_sql(sql);
+    return sqlite3_last_insert_rowid(db_);
+}
+
+int DataStorageService::callback_recommendation(void* data, int argc, char** argv, char** col_names) {
+    auto* recs = static_cast<std::vector<Recommendation>*>(data);
+    Recommendation rec;
+    for (int i = 0; i < argc; i++) {
+        if (!argv[i]) continue;
+        std::string col_name = col_names[i];
+        if (col_name == "id") rec.id = std::stoi(argv[i]);
+        else if (col_name == "db_id") rec.db_id = std::stoi(argv[i]);
+        else if (col_name == "type") rec.type = string_to_recommendation_type(argv[i]);
+        else if (col_name == "description") rec.description = argv[i];
+        else if (col_name == "details") rec.details = argv[i];
+        else if (col_name == "status") rec.status = argv[i];
+        else if (col_name == "created_at") rec.created_at = from_sqlite_datetime(argv[i]);
+        else if (col_name == "related_query_fingerprint") rec.related_query_fingerprint = argv[i];
+    }
+    recs->push_back(rec);
+    return 0;
+}
+
+std::vector<Recommendation> DataStorageService::get_recommendations(int db_id, const std::string& status_filter) {
+    check_db_open();
+    std::vector<Recommendation> recs;
+    std::string sql = "SELECT id, db_id, type, description, details, status, created_at, related_query_fingerprint "
+                      "FROM recommendations WHERE db_id = " + std::to_string(db_id);
+    if (!status_filter.empty()) {
+        sql += " AND status = '" + status_filter + "'";
+    }
+    sql += " ORDER BY created_at DESC;";
+
+    char* err_msg = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), callback_recommendation, &recs, &err_msg) != SQLITE_OK) {
+        std::string error_msg = "SQL error: " + std::string(err_msg);
+        Logger::get_logger()->error(error_msg);
+        sqlite3_free(err_msg);
+        throw std::runtime_error(error_msg);
+    }
+    return recs;
+}
+
+bool DataStorageService::update_recommendation_status(int id, const std::string& status) {
+    check_db_open();
+    std::string sql = "UPDATE recommendations SET status = '" + status + "' WHERE id = " + std::to_string(id) + ";";
+    execute_sql(sql);
+    return true;
+}
+```
+
+```cpp
+// === backend/src/services/DbMonitorService.h ===
+#ifndef DB_MONITOR_SERVICE_H
+#define DB_MONITOR_SERVICE_H
+
+#include <string>
+#include <vector>
+#include <memory>
+#include <libpq-fe.h> // PostgreSQL C API
+#include <libpqxx/nontransaction.hxx> // libpqxx non-transactional access
+#include "models/DbConfig.h"
+#include "models/Metric.h"
+#include "utils/Logger.h"
+
+// A simple connection pool or manager would be ideal for production.
+// For this example, we'll establish a connection per operation.
+// In a real system, you'd manage persistent connections or a pool.
+
+class DbMonitorService {
+public:
+    DbMonitorService();
+    ~DbMonitorService();
+
+    // Connects to a PostgreSQL database and performs a simple check
+    bool test_connection(const DbConfig& config);
+
+    // Collects metrics from a given PostgreSQL database
+    Metric collect_metrics(const DbConfig& config);
+
+    // Retrieves query plan for a specific query (requires an active connection)
+    std::string get_query_plan(const DbConfig& config, const std::string& query);
+
+private:
+    std::string build_conn_string(const DbConfig& config);
+};
+
+#endif // DB_MONITOR_SERVICE_H
+```
+
+```cpp
+// === backend/src/services/DbMonitorService.cpp ===
+#include "DbMonitorService.h"
+#include <sstream>
+#include <stdexcept>
+#include <algorithm> // For std::transform
+
+DbMonitorService::DbMonitorService() {
+    // libpqxx doesn't need explicit initialization here beyond linking.
+}
+
+DbMonitorService::~DbMonitorService() {
+    // No specific cleanup for libpqxx connection objects outside their scope.
+}
+
+std::string DbMonitorService::build_conn_string(const DbConfig& config) {
+    std::stringstream ss;
+    ss << "host=" << config.host
+       << " port=" << config.port
+       << " user=" << config.user
+       << " password=" << config.password
+       << " dbname=" << config.dbname;
+    return ss.str();
+}
+
+bool DbMonitorService::test_connection(const DbConfig& config) {
+    try {
+        libpqxx::connection conn(build_conn_string(config));
+        conn.close();
+        return true;
+    } catch (const libpqxx::pqxx_exception& e) {
+        Logger::get_logger()->error("Failed to connect to DB '{}': {}", config.name, e.what());
+        return false;
+    } catch (const std::exception& e) {
+        Logger::get_logger()->error("An unexpected error occurred during DB connection test for '{}': {}", config.name, e.what());
+        return false;
+    }
+}
+
+Metric DbMonitorService::collect_metrics(const DbConfig& config) {
+    Metric metric;
+    metric.db_id = config.id;
+    metric.timestamp = std::chrono::system_clock::now();
+
+    try {
+        libpqxx::connection conn(build_conn_string(config));
+        libpqxx::nontransaction N(conn);
+
+        // 1. Get total/active connections
+        libpqxx::result r_conn = N.exec("SELECT count(*) AS total_connections, "
+                                        "count(*) FILTER (WHERE state = 'active') AS active_connections "
+                                        "FROM pg_stat_activity;");
+        if (!r_conn.empty()) {
+            metric.total_connections = r_conn[0]["total_connections"].as<long long>();
+            metric.active_connections = r_conn[0]["active_connections"].as<long long>();
+        }
+
+        // 2. Get CPU usage (requires external monitoring or OS specific commands, simplified here)
+        // In a real system, you'd use tools like `ps` on Linux or specific APIs, or integrate with Prometheus/Grafana.
+        // For simplicity, we'll use a placeholder or assume this comes from an external source.
+        metric.cpu_usage_percent = -1.0; // Placeholder
+
+        // 3. Get I/O (tx/rx bytes, requires pg_stat_io or external tools)
+        // Similar to CPU, this is often OS-level or requires specific extensions.
+        // Placeholder for now.
+        metric.tx_bytes = -1;
+        metric.rx_bytes = -1;
+
+        // 4. Get top N slow queries (requires pg_stat_statements extension)
+        // Ensure pg_stat_statements is enabled: `CREATE EXTENSION pg_stat_statements;`
+        libpqxx::result r_queries = N.exec("SELECT query, calls, total_time, mean_time "
+                                           "FROM pg_stat_statements "
+                                           "ORDER BY total_time DESC LIMIT 10;");
+        for (const auto& row : r_queries) {
+            SlowQuery sq;
+            sq.query_text = row["query"].as<std::string>();
+            sq.calls = row["calls"].as<long long>();
+            sq.total_time = row["total_time"].as<double>();
+            sq.mean_time = row["mean_time"].as<double>();
+            sq.detected_at = metric.timestamp;
+            
+            // Simple fingerprint (hash of normalized query). Real fingerprinting is more complex.
+            std::string normalized_query = sq.query_text;
+            std::transform(normalized_query.begin(), normalized_query.end(), normalized_query.begin(),
+                           [](unsigned char c){ return std::tolower(c); });
+            sq.fingerprint = std::to_string(std::hash<std::string>{}(normalized_query));
+
+            metric.slow_queries.push_back(sq);
+        }
+        
+        N.commit();
+        conn.close();
+    } catch (const libpqxx::pqxx_exception& e) {
+        Logger::get_logger()->error("Failed to collect metrics from DB '{}': {}", config.name, e.what());
+        // Return partially filled metric or throw, depending on desired error handling
+        throw; // Re-throw to be caught by API controller
+    } catch (const std::exception& e) {
+        Logger::get_logger()->error("An unexpected error occurred during metric collection for '{}': {}", config.name, e.what());
+        throw;
+    }
+    return metric;
+}
+
+std::string DbMonitorService::get_query_plan(const DbConfig& config, const std::string& query) {
+    std::string query_plan_text = "ERROR: Could not get query plan.";
+    try {
+        libpqxx::connection conn(build_conn_string(config));
+        libpqxx::nontransaction N(conn);
+
+        // Prepend EXPLAIN (FORMAT JSON, ANALYZE) to the query
+        std::string explain_query = "EXPLAIN (FORMAT JSON, ANALYZE) " + query;
+        libpqxx::result r = N.exec(explain_query);
+
+        if (!r.empty()) {
+            query_plan_text = r[0][0].as<std::string>(); // Get the JSON plan
+        }
+        
+        N.commit();
+        conn.close();
+    } catch (const libpqxx::pqxx_exception& e) {
+        Logger::get_logger()->error("Failed to get query plan for DB '{}' query '{}': {}", config.name, query.substr(0, 50), e.what());
+        query_plan_text = "ERROR: Failed to retrieve query plan: " + std::string(e.what());
+    } catch (const std::exception& e) {
+        Logger::get_logger()->error("An unexpected error occurred getting query plan for DB '{}' query '{}': {}", config.name, query.substr(0, 50), e.what());
+        query_plan_text = "ERROR: Unexpected error: " + std::string(e.what());
+    }
+    return query_plan_text;
+}
+```
+
+```cpp
+// === backend/src/services/AnalysisService.h ===
+#ifndef ANALYSIS_SERVICE_H
+#define ANALYSIS_SERVICE_H
+
+#include <vector>
+#include <string>
+#include <unordered_set>
+#include "models/DbConfig.h"
+#include "models/Metric.h"
+#include "models/Recommendation.h"
+#include "utils/Logger.h"
+
+class AnalysisService {
+public:
+    AnalysisService();
+
+    // Analyze collected metrics and generate recommendations
+    std::vector<Recommendation> analyze_metrics(const DbConfig& config, const Metric& latest_metric, const std::vector<SlowQuery>& historical_slow_queries);
+
+private:
+    std::unordered_set<std::string> generated_recommendation_fingerprints_; // To avoid duplicate recommendations
+    
+    // Helper functions for specific analysis types
+    std::vector<Recommendation> analyze_slow_queries(int db_id, const std::vector<SlowQuery>& slow_queries);
+    // Placeholder for other analysis types:
+    // std::vector<Recommendation> analyze_connection_spikes(int db_id, const std::vector<Metric>& history);
+    // std::vector<Recommendation> analyze_missing_indexes(int db_id, /* potentially connect to DB to get schema */);
+};
+
+#endif // ANALYSIS_SERVICE_H
+```
+
+```cpp
+// === backend/src/services/AnalysisService.cpp ===
+#include "AnalysisService.h"
+#include <algorithm> // For std::find_if
+#include <limits> // For numeric_limits
+#include <set> // For unique recommendations
+
+AnalysisService::AnalysisService() {
+    // In a real system, `generated_recommendation_fingerprints_` would be persisted
+    // and loaded on startup to avoid re-recommending the same thing after restart.
+}
+
+std::vector<Recommendation> AnalysisService::analyze_metrics(const DbConfig& config, const Metric& latest_metric, const std::vector<SlowQuery>& historical_slow_queries) {
+    std::vector<Recommendation> recommendations;
+
+    // 1. Analyze slow queries from the latest metric
+    std::vector<Recommendation> slow_query_recs = analyze_slow_queries(config.id, latest_metric.slow_queries);
+    recommendations.insert(recommendations.end(), slow_query_recs.begin(), slow_query_recs.end());
+
+    // 2. Add recommendations based on historical slow queries that are consistently bad
+    std::vector<Recommendation> historical_recs = analyze_slow_queries(config.id, historical_slow_queries);
+    recommendations.insert(recommendations.end(), historical_recs.begin(), historical_recs.end());
+    
+    // Filter out duplicates based on fingerprint
+    std::vector<Recommendation> unique_recommendations;
+    std::set<std::string> unique_rec_keys; // Using type + description + related_query_fingerprint as key
+
+    for (const auto& rec : recommendations) {
+        std::string rec_key = recommendation_type_to_string(rec.type) + "_" + rec.description + "_" + rec.related_query_fingerprint;
+        if (unique_rec_keys.find(rec_key) == unique_rec_keys.end()) {
+            unique_recommendations.push_back(rec);
+            unique_rec_keys.insert(rec_key);
+        }
+    }
+
+
+    // TODO: Implement more sophisticated analysis here:
+    // - Connection pool analysis (high active_connections, low total_connections could mean pooling issues)
+    // - CPU/IO spikes linked to specific queries
+    // - Missing index detection (requires schema introspection - a more advanced feature)
+    // - Table bloat detection (requires pg_stat_user_tables)
+    // - Unused index detection
+
+    Logger::get_logger()->info("Analysis completed for DB {}: Generated {} new recommendations.", config.id, unique_recommendations.size());
+    return unique_recommendations;
+}
+
+std::vector<Recommendation> AnalysisService::analyze_slow_queries(int db_id, const std::vector<SlowQuery>& slow_queries) {
+    std::vector<Recommendation> new_recommendations;
+    const double SLOW_QUERY_THRESHOLD_MS = 50.0; // Example: queries slower than 50ms mean time
+
+    for (const auto& sq : slow_queries) {
+        if (sq.mean_time > SLOW_QUERY_THRESHOLD_MS && sq.calls > 10) { // Only consider frequently called slow queries
+            std::string rec_fingerprint = "SQ_OPTIMIZE_" + sq.fingerprint;
+
+            // Simple check to avoid re-recommending the exact same thing in this run
+            if (generated_recommendation_fingerprints_.find(rec_fingerprint) == generated_recommendation_fingerprints_.end()) {
+                Recommendation rec;
+                rec.db_id = db_id;
+                rec.type = RecommendationType::RewriteQuery; // Default to rewrite, index is more specific
+                rec.description = "Consider optimizing or adding an index for this slow query.";
+                rec.details = "Query: " + sq.query_text.substr(0, std::min((int)sq.query_text.length(), 200)) + " (mean time: " + std::to_string(sq.mean_time) + "ms, calls: " + std::to_string(sq.calls) + ")";
+                rec.created_at = std::chrono::system_clock::now();
+                rec.related_query_fingerprint = sq.fingerprint;
+                
+                // Example: If a SELECT query seems like it could benefit from an index
+                if (sq.query_text.find("SELECT") == 0 && sq.query_text.find("WHERE") != std::string::npos) {
+                    rec.type = RecommendationType::CreateIndex;
+                    rec.description = "Suggest creating an index for this slow SELECT query.";
+                    // A real implementation would parse the WHERE clause to suggest specific columns for the index
+                    rec.details += "\nPotential index: Consider columns in WHERE/ORDER BY clauses. Example: CREATE INDEX idx_on_table_col ON table (column_name);";
+                }
+                
+                new_recommendations.push_back(rec);
+                generated_recommendation_fingerprints_.insert(rec_fingerprint);
+            }
+        }
+    }
+    return new_recommendations;
+}
+```
+
+```cpp
+// === backend/src/api/DbController.h ===
+#ifndef DB_CONTROLLER_H
+#define DB_CONTROLLER_H
+
+#include "crow.h"
+#include "services/DataStorageService.h"
+#include "services/DbMonitorService.h"
+#include "services/AnalysisService.h"
+#include "models/DbConfig.h"
+#include "models/Metric.h"
+#include "models/Recommendation.h"
+#include "utils/Logger.h"
+#include "utils/ErrorHandler.h"
+#include <memory>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <unordered_map>
+
+class DbController {
+public:
+    DbController(std::shared_ptr<DataStorageService> data_service,
+                 std::shared_ptr<DbMonitorService> monitor_service,
+                 std::shared_ptr<AnalysisService> analysis_service,
+                 const AppConfig& config);
+
+    void setup_routes(crow::App<AuthMiddleware>& app);
+    void start_monitoring_loop();
+    void stop_monitoring_loop();
+
+private:
+    std::shared_ptr<DataStorageService> data_service_;
+    std::shared_ptr<DbMonitorService> monitor_service_;
+    std::shared_ptr<AnalysisService> analysis_service_;
+    AppConfig config_;
+
+    std::thread monitor_thread_;
+    std::atomic<bool> running_;
+    std::mutex monitor_mutex_; // Protects access to monitor_thread_ and running_
+
+    void monitoring_loop();
+    void process_metrics_for_db(const DbConfig& db_config);
+
+    // Cache for latest metrics
+    std::unordered_map<int, Metric> latest_metrics_cache_;
+    std::mutex cache_mutex_;
+};
+
+#endif // DB_CONTROLLER_H
+```
+
+```cpp
+// === backend/src/api/DbController.cpp ===
+#include "DbController.h"
+#include "nlohmann/json.hpp"
+
+DbController::DbController(std::shared_ptr<DataStorageService> data_service,
+                           std::shared_ptr<DbMonitorService> monitor_service,
+                           std::shared_ptr<AnalysisService> analysis_service,
+                           const AppConfig& config)
+    : data_service_(data_service),
+      monitor_service_(monitor_service),
+      analysis_service_(analysis_service),
+      config_(config),
+      running_(false)
+{
+    // Ensure the log directory exists
+    system("mkdir -p logs");
+    Logger::get_logger()->info("DbController initialized.");
+}
+
+void DbController::setup_routes(crow::App<AuthMiddleware>& app) {
+    CROW_ROUTE(app, "/login")
+    .methods("POST"_method)
+    ([this](const crow::request& req) {
+        auto json_body = nlohmann::json::parse(req.body);
+        if (json_body.contains("api_key") && json_body["api_key"].get<std::string>() == config_.api_key) {
+            nlohmann::json res_json;
+            res_json["message"] = "Login successful";
+            res_json["token"] = config_.api_key; // In a real app, generate JWT
+            return crow::response(crow::status::OK, res_json.dump());
+        }
+        return ErrorHandler::handle_error(crow::response(), "Invalid API Key", crow::status::UNAUTHORIZED);
+    });
+
+    CROW_ROUTE(app, "/health")
+    .methods("GET"_method)
+    ([](){
+        return crow::response(crow::status::OK, "{\"status\": \"healthy\"}");
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res){
+        try {
+            auto db_configs = data_service_->get_all_db_configs();
+            nlohmann::json json_array = nlohmann::json::array();
+            for (const auto& config : db_configs) {
+                json_array.push_back(config.to_json());
+            }
+            res.set_header("Content-Type", "application/json");
+            res.write(json_array.dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases")
+    .methods("POST"_method)
+    ([this](const crow::request& req, crow::response& res){
+        try {
+            auto json_body = nlohmann::json::parse(req.body);
+            DbConfig new_config = DbConfig::from_json(json_body);
+
+            if (!monitor_service_->test_connection(new_config)) {
+                return ErrorHandler::handle_error(res, "Failed to connect to the provided database. Check credentials/host.", crow::status::BAD_REQUEST);
+            }
+
+            int id = data_service_->add_db_config(new_config);
+            new_config.id = id;
+            res.set_header("Content-Type", "application/json");
+            res.write(new_config.to_json().dump());
+            res.code = static_cast<int>(crow::status::CREATED);
+        } catch (const nlohmann::json::exception& e) {
+            ErrorHandler::handle_error(res, "Invalid JSON in request body: " + std::string(e.what()), crow::status::BAD_REQUEST);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            DbConfig config = data_service_->get_db_config(db_id);
+            res.set_header("Content-Type", "application/json");
+            res.write(config.to_json().dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const std::runtime_error& e) {
+            ErrorHandler::handle_error(res, e.what(), crow::status::NOT_FOUND);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>")
+    .methods("PUT"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            auto json_body = nlohmann::json::parse(req.body);
+            DbConfig updated_config = DbConfig::from_json(json_body);
+            updated_config.id = db_id; // Ensure ID matches URL
+
+            if (!monitor_service_->test_connection(updated_config)) {
+                return ErrorHandler::handle_error(res, "Failed to connect to the provided database. Check credentials/host.", crow::status::BAD_REQUEST);
+            }
+
+            data_service_->update_db_config(updated_config);
+            res.set_header("Content-Type", "application/json");
+            res.write(updated_config.to_json().dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const nlohmann::json::exception& e) {
+            ErrorHandler::handle_error(res, "Invalid JSON in request body: " + std::string(e.what()), crow::status::BAD_REQUEST);
+        } catch (const std::runtime_error& e) {
+            ErrorHandler::handle_error(res, e.what(), crow::status::NOT_FOUND);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>")
+    .methods("DELETE"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            data_service_->delete_db_config(db_id);
+            res.code = static_cast<int>(crow::status::NO_CONTENT);
+        } catch (const std::runtime_error& e) {
+            ErrorHandler::handle_error(res, e.what(), crow::status::NOT_FOUND);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>/metrics")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            // Check cache first for latest metrics
+            std::lock_guard<std::mutex> lock(cache_mutex_);
+            if (latest_metrics_cache_.count(db_id)) {
+                nlohmann::json json_metric = latest_metrics_cache_[db_id].to_json();
+                res.set_header("Content-Type", "application/json");
+                res.write(json_metric.dump());
+                res.code = static_cast<int>(crow::status::OK);
+                res.end();
+                return;
+            }
+
+            // If not in cache, try to fetch from history
+            auto metrics_history = data_service_->get_metrics_history(db_id, 1);
+            if (!metrics_history.empty()) {
+                 nlohmann::json json_metric = metrics_history[0].to_json();
+                res.set_header("Content-Type", "application/json");
+                res.write(json_metric.dump());
+                res.code = static_cast<int>(crow::status::OK);
+            } else {
+                ErrorHandler::handle_error(res, "No metrics found for database ID: " + std::to_string(db_id), crow::status::NOT_FOUND);
+            }
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+    
+    CROW_ROUTE(app, "/api/v1/databases/<int>/metrics/history")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            auto metrics_history = data_service_->get_metrics_history(db_id);
+            nlohmann::json json_array = nlohmann::json::array();
+            for (const auto& metric : metrics_history) {
+                json_array.push_back(metric.to_json());
+            }
+            res.set_header("Content-Type", "application/json");
+            res.write(json_array.dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>/slow-queries")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            auto slow_queries = data_service_->get_slow_queries(db_id);
+            nlohmann::json json_array = nlohmann::json::array();
+            for (const auto& sq : slow_queries) {
+                json_array.push_back(sq.to_json());
+            }
+            res.set_header("Content-Type", "application/json");
+            res.write(json_array.dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+    
+    CROW_ROUTE(app, "/api/v1/databases/<int>/query-plan")
+    .methods("POST"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            auto json_body = nlohmann::json::parse(req.body);
+            std::string query_to_explain = json_body.at("query").get<std::string>();
+            DbConfig db_config = data_service_->get_db_config(db_id);
+            
+            std::string query_plan = monitor_service_->get_query_plan(db_config, query_to_explain);
+            nlohmann::json response_json;
+            response_json["query_plan"] = query_plan;
+            
+            res.set_header("Content-Type", "application/json");
+            res.write(response_json.dump());
+            res.code = static_cast<int>(crow::status::OK);
+
+        } catch (const nlohmann::json::exception& e) {
+            ErrorHandler::handle_error(res, "Invalid JSON in request body or missing 'query' field: " + std::string(e.what()), crow::status::BAD_REQUEST);
+        } catch (const std::runtime_error& e) {
+            ErrorHandler::handle_error(res, e.what(), crow::status::NOT_FOUND);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+
+    CROW_ROUTE(app, "/api/v1/databases/<int>/recommendations")
+    .methods("GET"_method)
+    ([this](const crow::request& req, crow::response& res, int db_id){
+        try {
+            std::string status_filter = req.get_url_parameter("status").empty() ? "" : req.get_url_parameter("status");
+            auto recommendations = data_service_->get_recommendations(db_id, status_filter);
+            nlohmann::json json_array = nlohmann::json::array();
+            for (const auto& rec : recommendations) {
+                json_array.push_back(rec.to_json());
+            }
+            res.set_header("Content-Type", "application/json");
+            res.write(json_array.dump());
+            res.code = static_cast<int>(crow::status::OK);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+    
+    CROW_ROUTE(app, "/api/v1/recommendations/<int>/status")
+    .methods("PUT"_method)
+    ([this](const crow::request& req, crow::response& res, int rec_id){
+        try {
+            auto json_body = nlohmann::json::parse(req.body);
+            std::string new_status = json_body.at("status").get<std::string>(); // e.g., "applied", "dismissed"
+
+            if (new_status != "applied" && new_status != "dismissed" && new_status != "pending") {
+                 return ErrorHandler::handle_error(res, "Invalid status. Must be 'pending', 'applied', or 'dismissed'.", crow::status::BAD_REQUEST);
+            }
+
+            if (data_service_->update_recommendation_status(rec_id, new_status)) {
+                res.code = static_cast<int>(crow::status::OK);
+                res.write("{\"message\": \"Recommendation status updated.\"}");
+            } else {
+                ErrorHandler::handle_error(res, "Recommendation not found or update failed.", crow::status::NOT_FOUND);
+            }
+        } catch (const nlohmann::json::exception& e) {
+            ErrorHandler::handle_error(res, "Invalid JSON in request body or missing 'status' field: " + std::string(e.what()), crow::status::BAD_REQUEST);
+        } catch (const std::exception& e) {
+            ErrorHandler::handle_error(res, e.what());
+        }
+        res.end();
+    });
+}
+
+void DbController::start_monitoring_loop() {
+    std::lock_guard<std::mutex> lock(monitor_mutex_);
+    if (!running_) {
+        running_ = true;
+        monitor_thread_ = std::thread(&DbController::monitoring_loop, this);
+        Logger::get_logger()->info("Monitoring loop started.");
+    }
+}
+
+void DbController::stop_monitoring_loop() {
+    std::lock_guard<std::mutex> lock(monitor_mutex_);
+    if (running_) {
+        running_ = false;
+        if (monitor_thread_.joinable()) {
+            monitor_thread_.join();
+        }
+        Logger::get_logger()->info("Monitoring loop stopped.");
+    }
+}
+
+void DbController::monitoring_loop() {
+    while (running_) {
+        Logger::get_logger()->info("Running monitoring cycle...");
+        try {
+            std::vector<DbConfig> db_configs = data_service_->get_all_db_configs();
+            for (const auto& db_config : db_configs) {
+                process_metrics_for_db(db_config);
+            }
+        } catch (const std::exception& e) {
+            Logger::get_logger()->error("Error in monitoring loop: {}", e.what());
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(config_.monitor_interval_seconds));
+    }
+}
+
+void DbController::process_metrics_for_db(const DbConfig& db_config) {
+    try {
+        Logger::get_logger()->info("Collecting metrics for DB: {}", db_config.name);
+        Metric latest_metric = monitor_service_->collect_metrics(db_config);
+        
+        // Cache the latest metric
+        {
+            std::lock_guard<std::mutex> lock(cache_mutex_);
+            latest_metrics_cache_[db_config.id] = latest_metric;
+        }
+
+        data_service_->save_metric(latest_metric);
+        Logger::get_logger()->info("Metrics saved for DB: {}", db_config.name);
+
+        // Get historical slow queries for more comprehensive analysis
+        std::vector<SlowQuery> historical_slow_queries = data_service_->get_slow_queries(db_config.id, 50); // Get top 50 historically slow queries
+
+        std::vector<Recommendation> new_recommendations = analysis_service_->analyze_metrics(db_config, latest_metric, historical_slow_queries);
+        for (const auto& rec : new_recommendations) {
+            // Check if a similar recommendation already exists with 'pending' or 'applied' status
+            // This is a simple check; a robust system would need smarter duplicate detection and status management.
+            auto existing_recs = data_service_->get_recommendations(rec.db_id, ""); // Get all recommendations
+            bool already_exists = false;
+            for (const auto& existing_rec : existing_recs) {
+                if (existing_rec.related_query_fingerprint == rec.related_query_fingerprint &&
+                    existing_rec.type == rec.type &&
+                    (existing_rec.status == "pending" || existing_rec.status == "applied")) {
+                    already_exists = true;
+                    break;
+                }
+            }
+
+            if (!already_exists) {
+                data_service_->add_recommendation(rec);
+                Logger::get_logger()->info("Added recommendation for DB {}: {}", db_config.name, rec.description);
+            }
+        }
+
+    } catch (const std::exception& e) {
+        Logger::get_logger()->error("Failed to process metrics for DB '{}': {}", db_config.name, e.what());
+    }
+}
+```
+
+```cpp
+// === backend/src/main.cpp ===
+#include "crow.h"
+#include "api/DbController.h"
+#include "api/AuthMiddleware.h"
+#include "services/DataStorageService.h"
+#include "services/DbMonitorService.h"
+#include "services/AnalysisService.h"
+#include "utils/Logger.h"
+#include "config/AppConfig.h"
+#include <memory>
+#include <csignal>
+
+std::shared_ptr<DbController> controller_ptr;
+
+void signal_handler(int signal) {
+    if (signal == SIGINT || signal == SIGTERM) {
+        Logger::get_logger()->info("Shutdown signal received. Stopping monitoring loop...");
+        if (controller_ptr) {
+            controller_ptr->stop_monitoring_loop();
+        }
+        exit(0);
+    }
+}
+
+int main() {
+    // Configure logging
+    Logger::get_logger();
+
+    // Load application configuration
+    AppConfig app_config;
+    Logger::get_logger()->info("AppConfig loaded: API_PORT={}, SQLITE_DB_PATH={}", app_config.api_port, app_config.sqlite_db_path);
+
+    // Initialize services
+    auto data_service = std::make_shared<DataStorageService>(app_config.sqlite_db_path);
+    data_service->init(); // Initialize SQLite schema
+
+    auto monitor_service = std::make_shared<DbMonitorService>();
+    auto analysis_service = std::make_shared<AnalysisService>();
+
+    // Initialize controller and setup routes
+    controller_ptr = std::make_shared<DbController>(data_service, monitor_service, analysis_service, app_config);
+
+    crow::App<AuthMiddleware> app;
+    app.set_middleware<AuthMiddleware>(app_config); // Apply auth middleware
+
+    controller_ptr->setup_routes(app);
+
+    // Register signal handler for graceful shutdown
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
+
+    // Start monitoring loop in a separate thread
+    controller_ptr->start_monitoring_loop();
+
+    // Start Crow web server
+    Logger::get_logger()->info("Crow server starting on port {}...", app_config.api_port);
+    app.port(app_config.api_port).multithreaded().run();
+
+    // This part is reached if Crow server stops, but graceful shutdown should handle it earlier
+    controller_ptr->stop_monitoring_loop();
+    Logger::get_logger()->info("Application terminated.");
+
+    return 0;
+}
+```
+
+---
+
+### 2. Database Layer
+
+**For the Monitoring System's Internal Database (SQLite):**
+*   Schema definitions are in `backend/src/db_schema.sql`.
+*   Migration (initialization) is handled by `DataStorageService::init()`.
+*   Seed data: No initial seed data for the internal DB, it's populated via API.
+
+**For Monitored PostgreSQL Databases:**
+*   Our system *monitors* existing PostgreSQL databases. We don't define their schema.
+*   **Pre-requisite:** For effective monitoring, the monitored PostgreSQL instance should have `pg_stat_statements` enabled.
+    *   Add `shared_preload_libraries = 'pg_stat_statements'` to `postgresql.conf`.
+    *   Restart PostgreSQL.
+    *   Run `CREATE EXTENSION pg_stat_statements;` in each database you want to monitor.
+*   **Query Optimization:** Our system suggests optimizations (e.g., `CREATE INDEX ...`). It does *not* automatically apply them. Users would review and execute these manually or via an "apply" feature (which would need more robust handling and confirmation in a production system).
+
+---
+
+### 3. Configuration & Setup
+
+```bash
+# === backend/.env.example ===
+API_KEY=your_super_secret_api_key_for_backend_auth
+SQLITE_DB_PATH=optimizer.db
+API_PORT=18080
+MONITOR_INTERVAL_SECONDS=300 # 5 minutes
+```
+
+```cmake
+# === backend/CMakeLists.txt ===
+cmake_minimum_required(VERSION 3.10)
+project(DatabaseOptimizerSystem CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find and link Crow
+find_package(CROW CONFIG REQUIRED)
+target_link_libraries(DatabaseOptimizerSystem PRIVATE Crow::Crow)
+
+# Find and link libpqxx
+# You might need to specify the path if not found in standard locations:
+# set(PostgreSQL_ROOT /usr/local/opt/libpqxx) # Example for macOS Homebrew
+find_package(PostgreSQL REQUIRED)
+include_directories(${PostgreSQL_INCLUDE_DIRS})
+link_directories(${PostgreSQL_LIBRARY_DIRS})
+target_link_libraries(DatabaseOptimizerSystem PRIVATE ${PostgreSQL_LIBRARIES} pqxx) # Link libpq and libpqxx
+
+# Find and link SQLite3
+# You might need to specify the path:
+# set(SQLITE3_INCLUDE_DIR /usr/local/opt/sqlite/include)
+# set(SQLITE3_LIBRARY /usr/local/opt/sqlite/lib/libsqlite3.dylib)
+find_package(SQLite3 REQUIRED)
+target_link_libraries(DatabaseOptimizerSystem PRIVATE SQLite3::SQLite3)
+
+# Find and link spdlog
+find_package(spdlog CONFIG REQUIRED)
+target_link_libraries(DatabaseOptimizerSystem PRIVATE spdlog::spdlog)
+
+# Add nlohmann/json (usually a header-only library, can be added via FetchContent or copied)
+# For simplicity, we assume it's available or manually placed in a standard include path
+# Or fetched using FetchContent:
+include(FetchContent)
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.11.2
+)
+FetchContent_MakeAvailable(nlohmann_json)
+target_link_libraries(DatabaseOptimizerSystem PRIVATE nlohmann_json::nlohmann_json)
+
+
+# Add executable
+add_executable(DatabaseOptimizerSystem src/main.cpp
+                                   src/api/DbController.cpp
+                                   src/services/DataStorageService.cpp
+                                   src/services/DbMonitorService.cpp
+                                   src/services/AnalysisService.cpp)
+
+# Header files are not explicitly listed in add_executable but are included
+# by the .cpp files. We can add include directories explicitly.
+target_include_directories(DatabaseOptimizerSystem PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/api
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/services
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/models
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config
+)
+
+# Set runtime search path for libraries (for Linux/macOS)
+if(UNIX)
+    target_link_options(DatabaseOptimizerSystem PRIVATE
+        "-Wl,-rpath,$ORIGIN/../lib" # For Linux, if libs are copied
+        "-Wl,-rpath,${PostgreSQL_LIBRARY_DIRS}"
+        "-Wl,-rpath,${SQLite3_LIBRARY_DIRS}"
+    )
+endif()
+
+# Build tests
+enable_testing()
+find_package(GTest CONFIG REQUIRED)
+add_executable(DbOptimizerTests
+    tests/unit/AnalysisServiceTests.cpp
+    tests/integration/DbControllerTests.cpp
+)
+target_link_libraries(DbOptimizerTests PRIVATE
+    GTest::gtest_main GTest::gtest
+    DatabaseOptimizerSystem # Link against the main app to test its components
+)
+target_include_directories(DbOptimizerTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/api
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/services
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/models
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config
+)
+add_test(NAME RunDbOptimizerTests COMMAND DbOptimizerTests)
+```
+
+```dockerfile
+# === backend/Dockerfile ===
+# Use a C++ base image
+FROM gcc:11.2.0
+
+WORKDIR /app
+
+# Install dependencies for Crow, libpqxx, sqlite3, spdlog, nlohmann/json, CMake, GTest
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    libpq-dev \
+    libsqlite3-dev \
+    git \
+    wget \
+    curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Crow
+RUN git clone https://github.com/ipkn/crow.git /usr/local/src/crow && \
+    cd /usr/local/src/crow && \
+    mkdir build && cd build && \
+    cmake .. && make install
+
+# Install libpqxx
+# Often installed via apt-get install libpqxx-dev, but building from source ensures latest
+# For simplicity and to match build environment, let's use apt-get here.
+RUN apt-get update && apt-get install -y libpqxx-dev
+
+# Install GTest (for tests, not for runtime)
+RUN git clone https://github.com/google/googletest.git /usr/local/src/googletest && \
+    cd /usr/local/src/googletest && \
+    mkdir build && cd build && \
+    cmake -DBUILD_GMOCK=OFF .. && make && make install
+
+# Copy source code
+COPY backend/src src/
+COPY backend/tests tests/
+COPY backend/CMakeLists.txt .
+
+# Ensure logs directory exists at runtime
+RUN mkdir -p logs
+
+# Build the application
+RUN cmake . && make
+
+# Set environment variables (for production, use secrets management)
+ENV API_KEY=your_super_secret_api_key_for_backend_auth
+ENV SQLITE_DB_PATH=/app/optimizer.db
+ENV API_PORT=18080
+ENV MONITOR_INTERVAL_SECONDS=300
+
+EXPOSE 18080
+
+CMD ["./DatabaseOptimizerSystem"]
+```
+
+```bash
+# === backend/run_tests.sh ===
+#!/bin/bash
+set -e
+
+echo "Running C++ backend tests..."
+
+# Create a build directory and run tests
+mkdir -p build_test
+cd build_test
+cmake .. -DBUILD_TESTS=ON # Assuming your CMakeLists.txt supports a test build flag
+make DbOptimizerTests
+./DbOptimizerTests
+cd ..
+rm -rf build_test
+
+echo "C++ backend tests completed."
+```
+
+```json
+// === frontend/package.json ===
+{
+  "name": "database-optimizer-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.6.8",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
+```
+
+```dockerfile
+# === frontend/Dockerfile ===
+# Stage 1: Build React app
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm install
+
+COPY frontend .
+RUN npm run build
+
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/build /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+```nginx
+# === frontend/nginx.conf ===
+server {
+  listen 80;
+  server_name localhost;
+
+  location / {
+    root   /usr/share/nginx/html;
+    index  index.html index.htm;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location /api/ {
+    proxy_pass http://backend:18080; # Assumes 'backend' is the service name in docker-compose
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  error_page   500 502 503 504  /50x.html;
+  location = /50x.html {
+    root   /usr/share/nginx/html;
+  }
+}
+```
+
+```yaml
+# === docker-compose.yml ===
+version: '3.8'
+
+services:
+  # Monitored PostgreSQL Database (example)
+  monitored_db:
+    image: postgres:15
+    container_name: monitored_db
+    environment:
+      POSTGRES_DB: myapp_db
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - monitored_db_data:/var/lib/postgresql/data
+      # Ensure pg_stat_statements is enabled:
+      - ./monitored_db_init:/docker-entrypoint-initdb.d # For running init scripts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d myapp_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - optimizer_network
+
+  # Backend C++ Application
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: optimizer_backend
+    ports:
+      - "18080:18080"
+    environment:
+      API_KEY: ${API_KEY}
+      SQLITE_DB_PATH: /app/optimizer.db
+      API_PORT: 18080
+      MONITOR_INTERVAL_SECONDS: ${MONITOR_INTERVAL_SECONDS:-300}
+    volumes:
+      - backend_data:/app # Persistent storage for SQLite DB and logs
+      - ./backend/src:/app/src # Mount source for easier development (optional for production)
+    depends_on:
+      monitored_db:
+        condition: service_healthy
+    networks:
+      - optimizer_network
+
+  # Frontend React Application
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: optimizer_frontend
+    ports:
+      - "80:80"
+    environment:
+      REACT_APP_API_BASE_URL: /api # Nginx will proxy this to backend
+    depends_on:
+      - backend
+    networks:
+      - optimizer_network
+
+volumes:
+  monitored_db_data:
+  backend_data:
+
+networks:
+  optimizer_network:
+    driver: bridge
+```
+
+```sql
+-- === monitored_db_init/init_pg_stat_statements.sql ===
+-- This script will be run when the monitored_db container starts for the first time
+-- to enable pg_stat_statements.
+ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+-- You will need to restart the PostgreSQL container for this change to take effect.
+-- For a real production system, this setup would typically be done manually by a DBA
+-- or through configuration management tools, not via init scripts alone.
+-- After restart, connect to the database 'myapp_db' and run:
+-- CREATE EXTENSION pg_stat_statements;
+-- SELECT pg_reload_conf(); -- Reload config without full restart (might need superuser)
+```
+
+```yaml
+# === .github/workflows/ci-cd.yml ===
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Build and Test Backend Docker Image
+      run: |
+        docker build -t optimizer-backend:latest -f backend/Dockerfile backend/
+        # Run tests inside the container (assuming test runner is built in Dockerfile)
+        docker run optimizer-backend:latest /bin/bash -c "cmake . && make DbOptimizerTests && ./DbOptimizerTests"
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Frontend Dependencies
+      working-directory: frontend
+      run: npm install
+
+    - name: Run Frontend Tests
+      working-directory: frontend
+      run: npm test -- --coverage --watchAll=false # Run tests with coverage, exit after
+
+    - name: Build Frontend
+      working-directory: frontend
+      run: npm run build
+
+    - name: Build Frontend Docker Image
+      run: docker build -t optimizer-frontend:latest -f frontend/Dockerfile frontend/
+
+  deploy-to-dev:
+    # This is a placeholder for deployment. In a real scenario,
+    # you'd use cloud provider specific tools (e.g., AWS ECR, Kubernetes, Ansible).
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build-and-test-backend, build-and-test-frontend]
+    runs-on: ubuntu-latest
+    environment: production # Use a GitHub Environment for secrets
+    steps:
+    - name: Dummy Deploy
+      run: |
+        echo "Simulating deployment to production..."
+        echo "Pushing optimizer-backend:latest to ECR/Docker Hub..."
+        echo "Pushing optimizer-frontend:latest to ECR/Docker Hub..."
+        echo "Updating Kubernetes manifests or ECS service..."
+        echo "Deployment successful!"
+```
+
+---
+
+### 4. Testing & Quality
+
+```cpp
+// === backend/tests/unit/AnalysisServiceTests.cpp ===
+#include "gtest/gtest.h"
+#include "services/AnalysisService.h"
+#include "models/DbConfig.h"
+#include "models/Metric.h"
+#include <chrono>
+
+TEST(AnalysisServiceTests, NoSlowQueriesNoRecommendations) {
+    AnalysisService analysis_service;
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+    metric.slow_queries = {}; // No slow queries
+
+    std::vector<Recommendation> recommendations = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_TRUE(recommendations.empty());
+}
+
+TEST(AnalysisServiceTests, SingleSlowQueryGeneratesRecommendation) {
+    AnalysisService analysis_service;
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+
+    SlowQuery sq;
+    sq.query_text = "SELECT * FROM users WHERE id = 1;";
+    sq.calls = 100;
+    sq.total_time = 5000; // 5 seconds
+    sq.mean_time = 50.01; // Just above threshold
+    sq.fingerprint = "select_users_by_id";
+    sq.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq);
+
+    std::vector<Recommendation> recommendations = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_EQ(recommendations.size(), 1);
+    ASSERT_EQ(recommendations[0].db_id, 1);
+    ASSERT_EQ(recommendations[0].type, RecommendationType::CreateIndex); // Because it's a SELECT with WHERE
+    ASSERT_NE(recommendations[0].description.find("index"), std::string::npos);
+    ASSERT_EQ(recommendations[0].related_query_fingerprint, "select_users_by_id");
+}
+
+TEST(AnalysisServiceTests, MultipleSlowQueriesGenerateMultipleRecommendations) {
+    AnalysisService analysis_service;
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+
+    SlowQuery sq1;
+    sq1.query_text = "SELECT * FROM products WHERE category = 'electronics';";
+    sq1.calls = 50;
+    sq1.total_time = 3000;
+    sq1.mean_time = 60.0;
+    sq1.fingerprint = "select_products_by_category";
+    sq1.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq1);
+
+    SlowQuery sq2;
+    sq2.query_text = "UPDATE orders SET status = 'shipped' WHERE id = 123;";
+    sq2.calls = 20;
+    sq2.total_time = 2000;
+    sq2.mean_time = 100.0; // Above threshold
+    sq2.fingerprint = "update_order_status";
+    sq2.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq2);
+
+    std::vector<Recommendation> recommendations = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_EQ(recommendations.size(), 2);
+    
+    // Check for sq1 recommendation
+    bool found_sq1_rec = false;
+    for(const auto& rec : recommendations) {
+        if (rec.related_query_fingerprint == "select_products_by_category") {
+            ASSERT_EQ(rec.type, RecommendationType::CreateIndex);
+            found_sq1_rec = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(found_sq1_rec);
+
+    // Check for sq2 recommendation
+    bool found_sq2_rec = false;
+    for(const auto& rec : recommendations) {
+        if (rec.related_query_fingerprint == "update_order_status") {
+            ASSERT_EQ(rec.type, RecommendationType::RewriteQuery); // UPDATE typically suggests rewrite or different optimization
+            found_sq2_rec = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(found_sq2_rec);
+}
+
+TEST(AnalysisServiceTests, DuplicateSlowQueriesDoNotGenerateDuplicateRecommendations) {
+    AnalysisService analysis_service; // New instance, fresh set of generated_recommendation_fingerprints_
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+
+    SlowQuery sq;
+    sq.query_text = "SELECT * FROM users WHERE email = 'test@example.com';";
+    sq.calls = 100;
+    sq.total_time = 5000;
+    sq.mean_time = 50.1;
+    sq.fingerprint = "select_users_by_email";
+    sq.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq);
+
+    // Call analyze once
+    std::vector<Recommendation> recommendations1 = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_EQ(recommendations1.size(), 1);
+
+    // Call analyze again with the same slow query (simulating next monitoring cycle)
+    std::vector<Recommendation> recommendations2 = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_TRUE(recommendations2.empty()); // Should not add duplicates if already identified
+}
+
+TEST(AnalysisServiceTests, LowCallCountSlowQueryNoRecommendation) {
+    AnalysisService analysis_service;
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+
+    SlowQuery sq;
+    sq.query_text = "SELECT complicated_report();";
+    sq.calls = 5; // Low call count
+    sq.total_time = 10000;
+    sq.mean_time = 2000.0;
+    sq.fingerprint = "complicated_report";
+    sq.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq);
+
+    std::vector<Recommendation> recommendations = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_TRUE(recommendations.empty());
+}
+
+TEST(AnalysisServiceTests, FastQueryNoRecommendation) {
+    AnalysisService analysis_service;
+    DbConfig config = {1, "TestDB", "localhost", "5432", "user", "pass", "db"};
+    Metric metric;
+    metric.db_id = 1;
+
+    SlowQuery sq;
+    sq.query_text = "SELECT 1;";
+    sq.calls = 1000;
+    sq.total_time = 10;
+    sq.mean_time = 0.01; // Below threshold
+    sq.fingerprint = "select_1";
+    sq.detected_at = std::chrono::system_clock::now();
+    metric.slow_queries.push_back(sq);
+
+    std::vector<Recommendation> recommendations = analysis_service.analyze_metrics(config, metric, {});
+    ASSERT_TRUE(recommendations.empty());
+}
+```
+
+```cpp
+// === backend/tests/integration/DbControllerTests.cpp ===
+#include "gtest/gtest.h"
+#include "crow.h"
+#include "api/DbController.h"
+#include "api/AuthMiddleware.h"
+#include "services/DataStorageService.h"
+#include "services/DbMonitorService.h"
+#include "services/AnalysisService.h"
+#include "config/AppConfig.h"
+#include <memory>
+#include <thread>
+#include <chrono>
+
+// Mock DbMonitorService for integration tests
+class MockDbMonitorService : public DbMonitorService {
+public:
+    MOCK_METHOD(bool, test_connection, (const DbConfig& config), (override));
+    MOCK_METHOD(Metric, collect_metrics, (const DbConfig& config), (override));
+    MOCK_METHOD(std::string, get_query_plan, (const DbConfig& config, const std::string& query), (override));
+
+    // Custom action to simulate successful connection
+    bool ActualTestConnection(const DbConfig& config) {
+        // In a real mock, you'd check config values or return based on expectations.
+        // For this example, we always return true.
+        return true;
+    }
+
+    // Custom action to simulate metric collection
+    Metric ActualCollectMetrics(const DbConfig& config) {
+        Metric m;
+        m.db_id = config.id;
+        m.timestamp = std::chrono::system_clock::now();
+        m.total_connections = 10;
+        m.active_connections = 5;
+        m.cpu_usage_percent = 25.5;
+
+        // Add a mock slow query if config.name indicates it
+        if (config.name == "SlowQueryDB") {
+            SlowQuery sq;
+            sq.query_text = "SELECT * FROM large_table WHERE val = 1;";
+            sq.calls = 100;
+            sq.total_time = 5000;
+            sq.mean_time = 50.1;
+            sq.fingerprint = "select_large_table";
+            sq.detected_at = m.timestamp;
+            m.slow_queries.push_back(sq);
+        }
+        return m;
+    }
+
+    // Custom action for query plan
+    std::string ActualGetQueryPlan(const DbConfig& config, const std::string& query) {
+        return "Mock EXPLAIN plan for: " + query;
+    }
+};
+
+// Integration tests for DbController (API endpoints)
+class DbControllerIntegrationTest : public ::testing::Test {
+protected:
+    crow::App<AuthMiddleware> app;
+    AppConfig app_config;
+    std::shared_ptr<DataStorageService> data_service;
+    std::shared_ptr<MockDbMonitorService> mock_monitor_service;
+    std::shared_ptr<AnalysisService> analysis_service;
+    std::shared_ptr<DbController> controller;
+
+    void SetUp() override {
+        // Use an in-memory SQLite database for testing
+        app_config.sqlite_db_path = ":memory:";
+        app_config.api_key = "test_api_key";
+        app_config.api_port = 8081; // Use a different port for tests
+
+        data_service = std::make_shared<DataStorageService>(app_config.sqlite_db_path);
+        data_service->init(); // Initialize schema for in-memory DB
+
+        mock_monitor_service = std::make_shared<MockDbMonitorService>();
+        // Set up default behaviors for mocks
+        ON_CALL(*mock_monitor_service, test_connection)
+            .WillByDefault(testing::Invoke(mock_monitor_service.get(), &MockDbMonitorService::ActualTestConnection));
+        ON_CALL(*mock_monitor_service, collect_metrics)
+            .WillByDefault(testing::Invoke(mock_monitor_service.get(), &MockDbMonitorService::ActualCollectMetrics));
+        ON_CALL(*mock_monitor_service, get_query_plan)
+            .WillByDefault(testing::Invoke(mock_monitor_service.get(), &MockDbMonitorService::ActualGetQueryPlan));
+
+        analysis_service = std::make_shared<AnalysisService>();
+
+        controller = std::make_shared<DbController>(data_service, mock_monitor_service, analysis_service, app_config);
+        app.set_middleware<AuthMiddleware>(app_config);
+        controller->setup_routes(app);
+
+        // Start Crow app in a separate thread for testing
+        // This is a common pattern for integration tests with web frameworks.
+        // For simplicity, we directly call handlers and don't start the full server in this example,
+        // as `crow::response` can be constructed directly. For full API testing, `crow::mock::request`
+        // and a running app instance would be needed.
+    }
+
+    void TearDown() override {
+        // Ensure no leftover monitoring threads if they were started
+        controller->stop_monitoring_loop();
+        data_service.reset(); // Close in-memory database
+    }
+
+    // Helper to simulate an authenticated request
+    crow::response call_api(const std::string& method, const std::string& url, const std::string& body = "{}") {
+        crow::request req;
+        req.url = url;
+        req.method = method;
+        req.body = body;
+        req.set_header("Authorization", "Bearer " + app_config.api_key);
+
+        crow::response res;
+        app.handle_request(req, res); // Directly call Crow's request handler
+        return res;
+    }
+};
+
+TEST_F(DbControllerIntegrationTest, AuthenticatedRoutesRequireAuth) {
+    crow::request req;
+    req.url = "/api/v1/databases";
+    req.method = "GET";
+    req.body = ""; // Empty body for GET
+    
+    crow::response res;
+    app.handle_request(req, res); // Directly call Crow's request handler
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::UNAUTHORIZED));
+}
+
+TEST_F(DbControllerIntegrationTest, PostDbConfig_Success) {
+    std::string db_config_json = R"({"name": "TestDB1", "host": "localhost", "port": "5432", "user": "user1", "password": "pass1", "dbname": "db1"})";
+    
+    EXPECT_CALL(*mock_monitor_service, test_connection(testing::_))
+        .WillOnce(testing::Return(true));
+
+    crow::response res = call_api("POST", "/api/v1/databases", db_config_json);
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::CREATED));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_EQ(response_body["name"], "TestDB1");
+    ASSERT_TRUE(response_body.contains("id"));
+}
+
+TEST_F(DbControllerIntegrationTest, PostDbConfig_ConnectionFailure) {
+    std::string db_config_json = R"({"name": "FailingDB", "host": "badhost", "port": "5432", "user": "user", "password": "pass", "dbname": "db"})";
+
+    EXPECT_CALL(*mock_monitor_service, test_connection(testing::_))
+        .WillOnce(testing::Return(false)); // Simulate connection failure
+
+    crow::response res = call_api("POST", "/api/v1/databases", db_config_json);
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::BAD_REQUEST));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_NE(response_body["error"].get<std::string>().find("Failed to connect"), std::string::npos);
+}
+
+TEST_F(DbControllerIntegrationTest, GetDbConfigs_Success) {
+    // Add a config first
+    std::string db_config_json = R"({"name": "TestDB2", "host": "localhost", "port": "5432", "user": "user2", "password": "pass2", "dbname": "db2"})";
+    call_api("POST", "/api/v1/databases", db_config_json); // Assuming this passes test_connection
+
+    crow::response res = call_api("GET", "/api/v1/databases");
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::OK));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_TRUE(response_body.is_array());
+    ASSERT_GE(response_body.size(), 1); // At least the one we just added
+    ASSERT_EQ(response_body[0]["name"], "TestDB2");
+    ASSERT_FALSE(response_body[0].contains("password")); // Password should not be exposed
+}
+
+TEST_F(DbControllerIntegrationTest, GetDbMetrics_SuccessAndCache) {
+    // Add a config
+    std::string db_config_json = R"({"name": "MetricsDB", "host": "localhost", "port": "5432", "user": "user", "password": "pass", "dbname": "db"})";
+    crow::response add_res = call_api("POST", "/api/v1/databases", db_config_json);
+    nlohmann::json add_body = nlohmann::json::parse(add_res.body);
+    int db_id = add_body["id"].get<int>();
+
+    // Manually trigger a monitoring cycle to populate metrics
+    controller->process_metrics_for_db(data_service->get_db_config(db_id));
+
+    // Get metrics
+    crow::response res = call_api("GET", "/api/v1/databases/" + std::to_string(db_id) + "/metrics");
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::OK));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_EQ(response_body["db_id"], db_id);
+    ASSERT_TRUE(response_body.contains("total_connections"));
+    ASSERT_EQ(response_body["total_connections"], 10);
+}
+
+TEST_F(DbControllerIntegrationTest, GetRecommendations_Success) {
+    // Add a config that triggers a slow query metric
+    std::string db_config_json = R"({"name": "SlowQueryDB", "host": "localhost", "port": "5432", "user": "user", "password": "pass", "dbname": "db"})";
+    crow::response add_res = call_api("POST", "/api/v1/databases", db_config_json);
+    nlohmann::json add_body = nlohmann::json::parse(add_res.body);
+    int db_id = add_body["id"].get<int>();
+
+    // Trigger monitoring to collect metrics and generate recommendations
+    controller->process_metrics_for_db(data_service->get_db_config(db_id));
+
+    // Get recommendations
+    crow::response res = call_api("GET", "/api/v1/databases/" + std::to_string(db_id) + "/recommendations");
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::OK));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_TRUE(response_body.is_array());
+    ASSERT_GE(response_body.size(), 1);
+    ASSERT_NE(response_body[0]["description"].get<std::string>().find("index"), std::string::npos);
+}
+
+TEST_F(DbControllerIntegrationTest, GetQueryPlan_Success) {
+    // Add a config
+    std::string db_config_json = R"({"name": "QueryPlanDB", "host": "localhost", "port": "5432", "user": "user", "password": "pass", "dbname": "db"})";
+    crow::response add_res = call_api("POST", "/api/v1/databases", db_config_json);
+    nlohmann::json add_body = nlohmann::json::parse(add_res.body);
+    int db_id = add_body["id"].get<int>();
+
+    std::string query_to_explain = "SELECT * FROM users WHERE id = 5;";
+    std::string req_body = nlohmann::json{{"query", query_to_explain}}.dump();
+
+    crow::response res = call_api("POST", "/api/v1/databases/" + std::to_string(db_id) + "/query-plan", req_body);
+
+    ASSERT_EQ(res.code, static_cast<int>(crow::status::OK));
+    nlohmann::json response_body = nlohmann::json::parse(res.body);
+    ASSERT_TRUE(response_body.contains("query_plan"));
+    ASSERT_NE(response_body["query_plan"].get<std::string>().find("Mock EXPLAIN plan for:"), std::string::npos);
+}
+```
+
+```js
+// === frontend/src/services/api.js ===
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:18080/api';
+
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('api_key'); // Or get from AuthContext
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Handle unauthorized errors, e.g., redirect to login
+      console.error('Unauthorized, redirecting to login...');
+      localStorage.removeItem('api_key');
+      window.location.href = '/login'; // Or use React Router navigate
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const auth = {
+  login: async (apiKey) => {
+    const response = await axiosInstance.post('/login', { api_key: apiKey });
+    localStorage.setItem('api_key', response.data.token);
+    return response.data;
+  },
+  logout: () => {
+    localStorage.removeItem('api_key');
+  },
+};
+
+export const databases = {
+  getAll: async () => {
+    const response = await axiosInstance.get('/v1/databases');
+    return response.data;
+  },
+  getById: async (id) => {
+    const response = await axiosInstance.get(`/v1/databases/${id}`);
+    return response.data;
+  },
+  create: async (dbConfig) => {
+    const response = await axiosInstance.post('/v1/databases', dbConfig);
+    return response.data;
+  },
+  update: async (id, dbConfig) => {
+    const response = await axiosInstance.put(`/v1/databases/${id}`, dbConfig);
+    return response.data;
+  },
+  remove: async (id) => {
+    const response = await axiosInstance.delete(`/v1/databases/${id}`);
+    return response.data;
+  },
+  getMetrics: async (id) => {
+    const response = await axiosInstance.get(`/v1/databases/${id}/metrics`);
+    return response.data;
+  },
+  getMetricsHistory: async (id) => {
+    const response = await axiosInstance.get(`/v1/databases/${id}/metrics/history`);
+    return response.data;
+  },
+  getSlowQueries: async (id) => {
+    const response = await axiosInstance.get(`/v1/databases/${id}/slow-queries`);
+    return response.data;
+  },
+  getRecommendations: async (id, status = '') => {
+    const response = await axiosInstance.get(`/v1/databases/${id}/recommendations`, {
+      params: { status },
+    });
+    return response.data;
+  },
+  updateRecommendationStatus: async (id, status) => {
+    const response = await axiosInstance.put(`/v1/recommendations/${id}/status`, { status });
+    return response.data;
+  },
+  getQueryPlan: async (id, query) => {
+    const response = await axiosInstance.post(`/v1/databases/${id}/query-plan`, { query });
+    return response.data;
+  },
+};
+```
+
+```js
+// === frontend/src/App.test.js ===
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { BrowserRouter, MemoryRouter, Routes, Route } from 'react-router-dom';
+import App from './App';
+import LoginPage from './pages/LoginPage';
+import HomePage from './pages/HomePage';
+import { AuthProvider } from './contexts/AuthContext';
+
+// Mock localStorage for testing authentication
+const localStorageMock = (function() {
+  let store = {};
+  return {
+    getItem(key) {
+      return store[key];
+    },
+    setItem(key, value) {
+      store[key] = value;
+    },
+    removeItem(key) {
+      delete store[key];
+    },
+    clear() {
+      store = {};
+    }
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+});
+
+// Mock API calls for Axios
+jest.mock('axios', () => ({
+  create: jest.fn(() => ({
+    get: jest.fn((url) => {
+      if (url.includes('/login')) return Promise.resolve({ data: { message: 'Login successful', token: 'mock_token' } });
+      if (url.includes('/v1/databases')) return Promise.resolve({ data: [{ id: 1, name: 'TestDB', host: 'localhost', port: '5432', user: 'test', dbname: 'testdb' }] });
+      return Promise.reject(new Error('not found'));
+    }),
+    post: jest.fn((url) => {
+      if (url.includes('/login')) return Promise.resolve({ data: { message: 'Login successful', token: 'mock_token' } });
+      if (url.includes('/v1/databases')) return Promise.resolve({ data: { id: 2, name: 'NewDB', host: 'localhost', port: '5432', user: 'new', dbname: 'newdb' } });
+      return Promise.reject(new Error('not found'));
+    }),
+    put: jest.fn(),
+    delete: jest.fn(),
+    interceptors: {
+      request: { use: jest.fn(() => {}) },
+      response: { use: jest.fn(() => {}) },
+    },
+  }))
+}));
+
+const axios = require('axios'); // Get the mocked axios
+
+describe('App Routing and Authentication', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+  });
+
+  test('redirects to login page if not authenticated', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/login/i)).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login'); // Verify URL change (mocked)
+  });
+
+  test('renders HomePage if authenticated', async () => {
+    localStorage.setItem('api_key', 'mock_token');
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+        expect(screen.getByText(/database optimization dashboard/i)).toBeInTheDocument();
+    });
+    expect(window.location.pathname).toBe('/');
+  });
+});
+
+describe('LoginPage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    jest.clearAllMocks();
+  });
+
+  test('allows user to login with valid API key', async () => {
+    const mockNavigate = jest.fn();
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <LoginPage navigate={mockNavigate} />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    const apiKeyInput = screen.getByPlaceholderText(/enter api key/i);
+    const loginButton = screen.getByRole('button', { name: /login/i });
+
+    userEvent.type(apiKeyInput, 'valid_api_key');
+    userEvent.click(loginButton);
+
+    await waitFor(() => {
+      expect(localStorage.getItem('api_key')).toBe('mock_token');
+      // expect(mockNavigate).toHaveBeenCalledWith('/'); // Mocking navigate properly is more complex
+    });
+    // For this test setup, we just check local storage and API call
+    expect(axios.create().post).toHaveBeenCalledWith('/login', { api_key: 'valid_api_key' });
+  });
+
+  test('shows error with invalid API key', async () => {
+    axios.create().post.mockRejectedValueOnce({ response: { data: { error: 'Invalid API Key' } } });
+    
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <LoginPage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    const apiKeyInput = screen.getByPlaceholderText(/enter api key/i);
+    const loginButton = screen.getByRole('button', { name: /login/i });
+
+    userEvent.type(apiKeyInput, 'invalid_api_key');
+    userEvent.click(loginButton);
+
+    await waitFor(() => {
+      expect(screen.getByText(/invalid api key/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe('HomePage - Database Listing', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem('api_key', 'mock_token');
+    jest.clearAllMocks();
+  });
+
+  test('displays list of databases', async () => {
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <HomePage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/testdb/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/localhost:5432/i)).toBeInTheDocument();
+    expect(axios.create().get).toHaveBeenCalledWith('/v1/databases');
+  });
+
+  test('allows adding a new database', async () => {
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <HomePage />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    userEvent.click(screen.getByRole('button', { name: /add new database/i }));
+
+    await waitFor(() => {
+        expect(screen.getByPlaceholderText(/database name/i)).toBeInTheDocument();
+    });
+
+    userEvent.type(screen.getByPlaceholderText(/database name/i), 'NewDB');
+    userEvent.type(screen.getByPlaceholderText(/host/i), 'newhost');
+    userEvent.type(screen.getByPlaceholderText(/port/i), '5433');
+    userEvent.type(screen.getByPlaceholderText(/username/i), 'newuser');
+    userEvent.type(screen.getByPlaceholderText(/password/i), 'newpass');
+    userEvent.type(screen.getByPlaceholderText(/database name for connection/i), 'newdb');
+
+    userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(axios.create().post).toHaveBeenCalledWith('/v1/databases', expect.objectContaining({ name: 'NewDB' }));
+    });
+    expect(screen.getByText(/newdb/i)).toBeInTheDocument(); // Expect new DB to appear after successful add
+  });
+});
+```
+
+**Testing Strategy:**
+*   **Unit Tests (C++):** Focus on individual services and business logic (e.g., `AnalysisServiceTests.cpp`). Use Google Test. Aim for ~80% coverage on core logic.
+*   **Integration Tests (C++):** Test interaction between services and API endpoints (`DbControllerTests.cpp`). Use Google Test with mocks for external dependencies (like `DbMonitorService` interacting with real PostgreSQL).
+*   **API Tests (Manual/Curl/Postman):** Not explicitly written as code here, but described. Use `curl` to verify each endpoint after running the `docker-compose` setup.
+*   **Frontend Unit Tests (React):** Test individual components and pages (`App.test.js` shows examples for routing, authentication, and basic data fetching). Use `react-testing-library` and Jest. Mock API calls.
+*   **Performance Tests:**
+    *   **Backend API:** Use `Apache JMeter` or `ab` (ApacheBench) to stress-test the C++ API endpoints (e.g., `/api/v1/databases/{id}/metrics`, `/api/v1/databases`).
+    *   **Monitoring Efficiency:** Monitor CPU/memory usage of the C++ backend and PostgreSQL instances while the monitoring loop is active with multiple configured databases. Ensure the overhead is acceptable.
+    *   **Database Performance:** Use `pgbench` or custom load generators against the *monitored* PostgreSQL instances to simulate load, then observe if the optimization system correctly identifies slow queries and generates recommendations.
+
+---
+
+### 5. Documentation
+
+```markdown
+# === docs/README.md ===
+# Database Performance Optimization System
+
+This project is a comprehensive, production-ready system designed to monitor, analyze, and provide optimization recommendations for PostgreSQL databases. It features a high-performance C++ backend for metric collection and analysis, and a user-friendly React frontend for configuration and visualization.
+
+## Features
+
+**Backend (C++)**
+*   **Database Monitoring:** Connects to PostgreSQL databases to collect various performance metrics (connections, slow queries via `pg_stat_statements`).
+*   **Performance Analysis:** Identifies potential bottlenecks like consistently slow queries and suggests optimization strategies (e.g., index creation, query rewrites).
+*   **Internal Data Storage:** Uses SQLite to store monitored database configurations, historical metrics, and generated recommendations.
+*   **RESTful API:** Exposes endpoints for managing databases, fetching metrics, and retrieving recommendations.
+*   **Scheduled Monitoring:** Periodically runs monitoring and analysis tasks for all configured databases.
+*   **Authentication & Authorization:** Simple API Key-based authentication middleware.
+*   **Logging & Error Handling:** Structured logging with `spdlog` and centralized error handling.
+
+**Frontend (React)**
+*   **Intuitive Dashboard:** Visualizes key performance metrics and slow queries.
+*   **Database Management:** CRUD operations for adding, updating, and deleting monitored databases.
+*   **Recommendations Viewer:** Displays optimization recommendations and allows updating their status (e.g., pending, applied, dismissed).
+*   **Query Plan Viewer:** Allows users to input a query and retrieve its `EXPLAIN (ANALYZE, FORMAT JSON)` plan from the monitored database.
+*   **User Interface:** Built with React, offering a responsive and interactive experience.
+
+## Technologies Used
+
+**Backend:**
+*   **C++17:** Core application logic.
+*   **Crow:** Lightweight C++ web framework for REST APIs.
+*   **libpqxx:** C++ client library for PostgreSQL interaction.
+*   **sqlite3:** Embedded database for internal system data.
+*   **nlohmann/json:** JSON parsing and serialization.
+*   **spdlog:** Fast, header-only C++ logging library.
+*   **Google Test:** Unit and integration testing.
+
+**Frontend:**
+*   **React:** JavaScript library for building user interfaces.
+*   **React Router DOM:** For client-side routing.
+*   **Axios:** HTTP client for API requests.
+*   **Jest & React Testing Library:** Unit testing.
+
+**Infrastructure:**
+*   **Docker:** Containerization for backend, frontend, and PostgreSQL.
+*   **Docker Compose:** Orchestration of multi-container applications.
+*   **Nginx:** Serves the React frontend and acts as a reverse proxy for the C++ backend API.
+*   **PostgreSQL:** Example monitored database.
+
+## Setup and Running
+
+### Prerequisites
+
+*   Docker and Docker Compose installed.
+*   Basic understanding of C++, React, and PostgreSQL.
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-username/database-optimizer-system.git
+cd database-optimizer-system
+```
+
+### 2. Configure Environment Variables
+
+Create `.env` files in `backend/` and `frontend/` directories based on the `.env.example` templates.
+
+**`backend/.env`**:
+```env
+API_KEY=your_super_secret_api_key_for_backend_auth # CHANGE THIS TO A STRONG, UNIQUE KEY
+SQLITE_DB_PATH=/app/optimizer.db
+API_PORT=18080
+MONITOR_INTERVAL_SECONDS=300 # Interval in seconds (e.g., 300 for 5 minutes)
+```
+
+**`frontend/.env`**:
+```env
+REACT_APP_API_BASE_URL=/api # Nginx will proxy to the backend
+```
+*Note*: `REACT_APP_API_BASE_URL` is set to `/api` because Nginx in `docker-compose.yml` is configured to proxy requests from `/api/` to the backend service.
+
+### 3. PostgreSQL Monitored Database Setup
+
+The `docker-compose.yml` includes an example `monitored_db` service. To enable full monitoring (especially slow queries), you need to enable the `pg_stat_statements` extension.
+
+1.  **Restart `monitored_db` after first run:** The `monitored_db_init/init_pg_stat_statements.sql` sets `shared_preload_libraries`. This requires a container restart to take effect.
+    ```bash
+    docker-compose up -d monitored_db # First run
+    docker-compose restart monitored_db # Apply config change
+    ```
+2.  **Enable `pg_stat_statements` in the database:** Connect to `myapp_db` (or your target database) and run:
+    ```sql
+    CREATE EXTENSION pg_stat_statements;
+    ```
+    You can connect using `docker exec -it monitored_db psql -U myuser -d myapp_db`.
+
+### 4. Build and Run with Docker Compose
+
+From the root of the project directory:
+
+```bash
+docker-compose build
+docker-compose up -d
+```
+
+This will:
+*   Build the C++ backend Docker image.
+*   Build the React frontend Docker image.
+*   Start a PostgreSQL container (our example monitored DB).
+*   Start the C++ backend container.
+*   Start the Nginx container, serving the React app and proxying API calls.
+
+### 5. Access the Application
+
+Open your web browser and navigate to: `http://localhost`
+
+You will be presented with a login page. Use the `API_KEY` you configured in `backend/.env` to log in.
+
+### 6. Add a Monitored Database
+
+After logging in, click "Add New Database" and provide details for the `monitored_db` service:
+
+*   **Name:** `My Monitored PostgreSQL` (or any name)
+*   **Host:** `monitored_db` (This is the Docker service name, resolvable within the Docker network)
+*   **Port:** `5432`
+*   **Username:** `myuser`
+*   **Password:** `mypassword`
+*   **Database Name:** `myapp_db`
+
+Click "Save". The backend will attempt to connect and, if successful, add it to its internal storage. The monitoring loop will then start collecting metrics for it.
+
+## Testing
+
+### Backend Tests (C++)
+
+Navigate to the `backend/` directory and run:
+
+```bash
+./run_tests.sh
+```
+This script builds and executes the unit and integration tests using Google Test.
+
+### Frontend Tests (React)
+
+Navigate to the `frontend/` directory and run:
+
+```bash
+npm test
+```
+This runs the Jest tests for the React application.
+
+## CI/CD Pipeline
+
+A basic GitHub Actions workflow (`.github/workflows/ci-cd.yml`) is provided. It configures jobs for:
+*   Building and testing the C++ backend.
+*   Building and testing the React frontend.
+*   A placeholder `deploy-to-dev` job that would typically integrate with cloud services (e.g., AWS ECR, Kubernetes, Azure DevOps, GitLab CI/CD).
+
+## Additional Notes
+
+*   **Rate Limiting:** Crow has built-in middleware for rate limiting (e.g., `app.set_middleware<crow::RateLimitMiddleware>(...);`). It's not explicitly configured in `main.cpp` but can be easily added.
+*   **Caching:** The `DbController` includes a simple in-memory cache for the latest database metrics (`latest_metrics_cache_`) to speed up API responses without hitting the internal SQLite DB every time.
+*   **Scalability:** For a truly enterprise-scale application, consider:
+    *   **Backend:** More robust connection pooling for PostgreSQL, distributed monitoring agents, message queues (e.g., Kafka, RabbitMQ) for asynchronous metric processing.
+    *   **Internal DB:** Migrate from SQLite to a full-fledged relational database (PostgreSQL) or a time-series database (e.g., TimescaleDB, InfluxDB) for metric history.
+    *   **Frontend:** Server-side rendering, more advanced state management (Redux, Zustand), and better error reporting.
+*   **Security:** This example uses a simple API key. A production system would require a more robust authentication mechanism (e.g., JWT, OAuth2) and proper secret management.
+
+---
+```markdown
+# === docs/API.md ===
+# API Documentation
+
+This document outlines the RESTful API endpoints exposed by the C++ backend application. All API endpoints are prefixed with `/api/v1`.
+
+## Authentication
+
+All `GET`, `POST`, `PUT`, `DELETE` requests to `/api/v1/*` endpoints require authentication using a Bearer token in the `Authorization` header. The token is the `API_KEY` configured in the backend's environment variables.
+
+**Header:** `Authorization: Bearer <YOUR_API_KEY>`
+
+---
+
+## 1. Authentication & Health Check
+
+### `POST /login`
+
+Authenticates a user with an API key.
+
+*   **Request Body:**
+    ```json
+    {
+        "api_key": "your_super_secret_api_key_for_backend_auth"
+    }
+    ```
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "message": "Login successful",
+        "token": "your_super_secret_api_key_for_backend_auth"
+    }
+    ```
+*   **Response (Failure - 401 Unauthorized):**
+    ```json
+    {
+        "error": "Invalid API Key"
+    }
+    ```
+
+### `GET /health`
+
+Checks the health status of the backend service. Does not require authentication.
+
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "status": "healthy"
+    }
+    ```
+
+---
+
+## 2. Monitored Databases (`/api/v1/databases`)
+
+### `GET /api/v1/databases`
+
+Retrieves a list of all configured PostgreSQL databases being monitored.
+
+*   **Response (Success - 200 OK):**
+    ```json
+    [
+        {
+            "id": 1,
+            "name": "Production DB",
+            "host": "prod-db.example.com",
+            "port": "5432",
+            "user": "db_user",
+            "dbname": "prod_app"
+        },
+        {
+            "id": 2,
+            "name": "Dev DB",
+            "host": "dev-db.example.com",
+            "port": "5432",
+            "user": "dev_user",
+            "dbname": "dev_app"
+        }
+    ]
+    ```
+
+### `POST /api/v1/databases`
+
+Adds a new PostgreSQL database to be monitored. A connection test is performed before saving.
+
+*   **Request Body:**
+    ```json
+    {
+        "name": "New Database",
+        "host": "db.host.com",
+        "port": "5432",
+        "user": "db_username",
+        "password": "db_password",
+        "dbname": "database_name"
+    }
+    ```
+*   **Response (Success - 201 CREATED):**
+    ```json
+    {
+        "id": 3,
+        "name": "New Database",
+        "host": "db.host.com",
+        "port": "5432",
+        "user": "db_username",
+        "dbname": "database_name"
+    }
+    ```
+*   **Response (Failure - 400 BAD REQUEST):**
+    ```json
+    {
+        "error": "Failed to connect to the provided database. Check credentials/host."
+    }
+    ```
+
+### `GET /api/v1/databases/{id}`
+
+Retrieves details for a specific monitored database by ID.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "id": 1,
+        "name": "Production DB",
+        "host": "prod-db.example.com",
+        "port": "5432",
+        "user": "db_user",
+        "dbname": "prod_app"
+    }
+    ```
+*   **Response (Failure - 404 NOT FOUND):**
+    ```json
+    {
+        "error": "Database config not found for ID: 1"
+    }
+    ```
+
+### `PUT /api/v1/databases/{id}`
+
+Updates the configuration for an existing monitored database. A connection test is performed.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Request Body:** (Same as POST, `id` in body is ignored, URL ID is used)
+    ```json
+    {
+        "name": "Updated Production DB Name",
+        "host": "new-prod-db.example.com",
+        "port": "5433",
+        "user": "new_db_user",
+        "password": "new_db_password",
+        "dbname": "prod_app"
+    }
+    ```
+*   **Response (Success - 200 OK):** (Updated config without password)
+    ```json
+    {
+        "id": 1,
+        "name": "Updated Production DB Name",
+        "host": "new-prod-db.example.com",
+        "port": "5433",
+        "user": "new_db_user",
+        "dbname": "prod_app"
+    }
+    ```
+*   **Response (Failure - 404 NOT FOUND or 400 BAD REQUEST):**
+    ```json
+    {
+        "error": "Database config not found for ID: 1"
+    }
+    ```
+
+### `DELETE /api/v1/databases/{id}`
+
+Deletes a monitored database configuration and all associated metrics/recommendations.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Response (Success - 204 NO CONTENT):** (Empty body)
+*   **Response (Failure - 404 NOT FOUND):**
+    ```json
+    {
+        "error": "Database config not found for ID: 1"
+    }
+    ```
+
+---
+
+## 3. Metrics & Slow Queries (`/api/v1/databases/{id}/...`)
+
+### `GET /api/v1/databases/{id}/metrics`
+
+Retrieves the **latest** collected metrics for a specific database.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "db_id": 1,
+        "total_connections": 100,
+        "active_connections": 15,
+        "cpu_usage_percent": 35.7,
+        "tx_bytes": 123456789,
+        "rx_bytes": 987654321,
+        "timestamp": 1678886400000,
+        "slow_queries": [
+            {
+                "query_text": "SELECT * FROM users WHERE status = 'active' ORDER BY last_login DESC LIMIT 100;",
+                "calls": 500,
+                "total_time_ms": 25000,
+                "mean_time_ms": 50.0,
+                "fingerprint": "123abc456def",
+                "detected_at": 1678886400000
+            }
+        ]
+    }
+    ```
+*   **Response (Failure - 404 NOT FOUND):**
+    ```json
+    {
+        "error": "No metrics found for database ID: 1"
+    }
+    ```
+
+### `GET /api/v1/databases/{id}/metrics/history`
+
+Retrieves a history of collected metrics for a specific database (e.g., last 100 records).
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Response (Success - 200 OK):** (Array of Metric objects, similar to above)
+    ```json
+    [
+        { /* latest metric */ },
+        { /* older metric */ }
+    ]
+    ```
+
+### `GET /api/v1/databases/{id}/slow-queries`
+
+Retrieves historically identified slow queries for a specific database.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Response (Success - 200 OK):** (Array of SlowQuery objects)
+    ```json
+    [
+        {
+            "query_text": "SELECT * FROM products WHERE category = 'electronics' ORDER BY price DESC;",
+            "calls": 1200,
+            "total_time_ms": 60000,
+            "mean_time_ms": 50.0,
+            "fingerprint": "abc123def456",
+            "detected_at": 1678886000000
+        },
+        { /* another slow query */ }
+    ]
+    ```
+
+### `POST /api/v1/databases/{id}/query-plan`
+
+Requests an `EXPLAIN (FORMAT JSON, ANALYZE)` plan for a given query against the specified database.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Request Body:**
+    ```json
+    {
+        "query": "SELECT * FROM users WHERE id = 10;"
+    }
+    ```
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "query_plan": "[{\"Plan\":{\"Node Type\":\"Index Scan\",\"Parent Relationship\":\"Single Node\", ...}}]"
+    }
+    ```
+    *Note: The `query_plan` will be a JSON string, which may need further parsing on the client side.*
+*   **Response (Failure - 400 BAD REQUEST or 404 NOT FOUND):**
+    ```json
+    {
+        "error": "Failed to retrieve query plan: syntax error at or near \"WRONG_QUERY\""
+    }
+    ```
+
+---
+
+## 4. Recommendations (`/api/v1/databases/{id}/recommendations`)
+
+### `GET /api/v1/databases/{id}/recommendations`
+
+Retrieves optimization recommendations for a specific database.
+
+*   **Path Parameter:** `id` (integer) - The ID of the database.
+*   **Query Parameter (Optional):** `status` (string) - Filters recommendations by status (`pending`, `applied`, `dismissed`).
+*   **Response (Success - 200 OK):**
+    ```json
+    [
+        {
+            "id": 101,
+            "db_id": 1,
+            "type": "CreateIndex",
+            "description": "Suggest creating an index for this slow SELECT query.",
+            "details": "Query: SELECT * FROM users WHERE status = 'active' ...\nPotential index: CREATE INDEX idx_on_table_col ON users (status);",
+            "status": "pending",
+            "created_at": 1678886500000,
+            "related_query_fingerprint": "123abc456def"
+        },
+        { /* another recommendation */ }
+    ]
+    ```
+
+### `PUT /api/v1/recommendations/{id}/status`
+
+Updates the status of a specific recommendation.
+
+*   **Path Parameter:** `id` (integer) - The ID of the recommendation.
+*   **Request Body:**
+    ```json
+    {
+        "status": "applied"
+    }
+    ```
+    (Possible values: `pending`, `applied`, `dismissed`)
+*   **Response (Success - 200 OK):**
+    ```json
+    {
+        "message": "Recommendation status updated."
+    }
+    ```
+*   **Response (Failure - 400 BAD REQUEST or 404 NOT FOUND):**
+    ```json
+    {
+        "error": "Invalid status. Must be 'pending', 'applied', or 'dismissed'."
+    }
+    ```
+```markdown
+# === docs/ARCHITECTURE.md ===
+# Architecture Documentation
+
+This document describes the high-level architecture, components, and data flow of the Database Performance Optimization System.
+
+## 1. High-Level Architecture
+
+The system follows a typical microservices-oriented, layered architecture, consisting of:
+*   **Frontend Application:** A React-based Single Page Application (SPA) providing the user interface.
+*   **Backend Application:** A C++ application responsible for business logic, database monitoring, analysis, and API exposure.
+*   **Internal Data Store:** An SQLite database embedded within the C++ backend for persistence of monitoring system's data.
+*   **Monitored Databases:** External PostgreSQL databases that the system connects to for performance data.
+*   **Infrastructure:** Docker, Docker Compose, and Nginx for deployment and service orchestration.
+
+```
++-------------------+       +-------------------+       +--------------------+
+|                   |       |                   |       |                    |
+|   User (Browser)  |<----->|     Frontend      |<----->|      Nginx         |
+|                   |       |     (React)       |       | (Reverse Proxy)    |
++-------------------+       +-------------------+       +---------^----------+
+                                                                  | API Calls
+                                                                  |
+                                                           +------v-----+
+                                                           |            |
+                                                           |   Backend  |
+                                                           |   (C++)    |
+                                                           |            |
+                                                           +------^-----+
+                                                                  |
+                                            +---------------------+---------------------+
+                                            |                                           |
+                                    +-------v--------+                            +-----v------+
+                                    |                |                            |            |
+                                    | Internal DB    |<--------------------------| Monitored  |
+                                    | (SQLite)       | (Stores config, history) | DBs        |
+                                    |                |                            | (PostgreSQL)|
+                                    +----------------+                            +------------+
+```
+
+## 2. Component Breakdown
+
+### 2.1. Frontend (React)
+
+*   **Purpose:** Provides the graphical user interface for interacting with the optimization system.
+*   **Key Responsibilities:**
+    *   **Authentication:** Handles user login using an API key.
+    *   **Dashboard:** Displays an overview of monitored databases, their current metrics, and active recommendations.
+    *   **Database Management:** Allows users to add, edit, and delete monitored PostgreSQL database configurations.
+    *   **Metrics Visualization:** Presents historical metric data (e.g., connections, CPU usage) and lists slow queries.
+    *   **Recommendation Management:** Shows optimization recommendations (e.g., index suggestions), allows viewing details, and updating their status.
+    *   **Query Plan Tool:** Provides an interface to run `EXPLAIN` queries against monitored databases.
+*   **Communication:** Interacts with the C++ Backend API via HTTP requests (Axios).
+*   **Deployment:** Served as static files by Nginx.
+
+### 2.2. Nginx
+
+*   **Purpose:** Acts as a web server for the frontend and a reverse proxy for the backend API.
+*   **Key Responsibilities:**
+    *   Serves the static React build (`index.html`, JS, CSS assets).
+    *   Forwards API requests (`/api/*`) to the C++ Backend service within the Docker network.
+    *   Handles load balancing (not explicitly configured here but possible), SSL termination (not in example), and request logging.
+
+### 2.3. Backend (C++)
+
+This is the core intelligence of the system, implemented in C++ for performance.
+
+*   **`main.cpp`:**
+    *   Entry point of the application.
+    *   Initializes `AppConfig`, `Logger`, and all service instances.
+    *   Sets up Crow web server with `AuthMiddleware`.
+    *   Registers API routes via `DbController`.
+    *   Starts a background monitoring thread (`monitoring_loop`).
+    *   Registers signal handlers for graceful shutdown.
+*   **`config/AppConfig.h`:**
+    *   Loads application-wide configuration (API key, database paths, monitoring intervals) from environment variables.
+*   **`utils/Logger.h` / `utils/ErrorHandler.h`:**
+    *   **Logger:** Centralized logging mechanism using `spdlog` for structured, categorized logs to console and file.
+    *   **ErrorHandler:** Provides a consistent way to handle exceptions and return standardized JSON error responses from API endpoints.
+*   **`api/AuthMiddleware.h` / `api/DbController.h/cpp`:**
+    *   **AuthMiddleware:** Intercepts incoming requests to enforce API key-based authentication.
+    *   **DbController:** Manages all API endpoints related to database configurations, metrics, slow queries, recommendations, and query plans. It orchestrates calls to various services (`DataStorageService`, `DbMonitorService`, `AnalysisService`).
+*   **`services/DataStorageService.h/cpp`:**
+    *   **Purpose:** Manages the internal SQLite database.
+    *   **Key Responsibilities:**
+        *   Initializes the SQLite schema (`db_schema.sql`).
+        *   Performs CRUD operations on `DbConfig` (monitored database connection details).
+        *   Stores and retrieves historical `Metric` data.
+        *   Stores and retrieves identified `SlowQuery` entries.
+        *   Stores and manages `Recommendation` objects (add, retrieve, update status).
+*   **`services/DbMonitorService.h/cpp`:**
+    *   **Purpose:** Interacts with external PostgreSQL databases to collect real-time performance data.
+    *   **Key Responsibilities:**
+        *   Establishes and tests connections to configured PostgreSQL databases (using `libpqxx`).
+        *   Collects various metrics: connection counts (`pg_stat_activity`), CPU/IO (placeholder - in real system, from OS or external), and especially slow queries (`pg_stat_statements`).
+        *   Executes `EXPLAIN` commands to retrieve query plans.
+*   **`services/AnalysisService.h/cpp`:**
+    *   **Purpose:** Analyzes collected metrics to identify bottlenecks and generate optimization recommendations.
+    *   **Key Responsibilities:**
+        *   Processes `Metric` and `SlowQuery` data.
+        *   Applies predefined rules (e.g., "query mean time > X ms and calls > Y") to identify potential issues.
+        *   Generates `Recommendation` objects (e.g., suggesting index creation for slow `SELECT` queries, or query rewrites).
+        *   Manages internal state to avoid generating duplicate recommendations within a monitoring cycle.
+*   **`models/DbConfig.h`, `models/Metric.h`, `models/Recommendation.h`:**
+    *   Define data structures for database configurations, collected metrics, and optimization recommendations, along with serialization/deserialization to JSON.
+
+### 2.4. Internal Data Store (SQLite)
+
+*   **Purpose:** Persistence layer for the C++ Backend's operational data.
+*   **Schema:** Defined in `backend/src/db_schema.sql`.
+    *   `databases`: Stores connection details for each monitored PostgreSQL instance.
+    *   `metrics_history`: Stores aggregated historical performance metrics.
+    *   `slow_queries`: Stores detailed information about identified slow queries.
+    *   `recommendations`: Stores generated optimization recommendations and their status.
+*   **Access:** Accessed exclusively by the `DataStorageService`.
+*   **Why SQLite:** Chosen for simplicity and embedded nature, suitable for a single-node application where the backend manages its own data without requiring another external DB. For high-volume, distributed scenarios, a more robust external database would be chosen.
+
+### 2.5. Monitored Databases (PostgreSQL)
+
+*   **Purpose:** The target databases whose performance the system monitors and optimizes.
+*   **Interaction:** The `DbMonitorService` connects to these databases (requires appropriate user permissions and `pg_stat_statements` extension enabled).
+*   **Data Source:** Provides raw performance data and allows `EXPLAIN` queries.
+
+## 3. Data Flow
+
+1.  **User Interaction (Frontend):**
+    *   User logs in, configures a new database via the React UI.
+    *   Frontend sends `POST /api/v1/databases` request to Nginx.
+    *   Nginx proxies the request to the C++ Backend.
+2.  **Backend Processing (Configuration):**
+    *   `AuthMiddleware` verifies the API key.
+    *   `DbController` receives the request.
+    *   `DbMonitorService` performs a `test_connection` to the target PostgreSQL.
+    *   If successful, `DataStorageService` saves the `DbConfig` to the internal SQLite.
+    *   `DbController` returns success to Frontend via Nginx.
+3.  **Scheduled Monitoring (Backend):**
+    *   The `monitoring_loop` (a background thread in `main.cpp`) wakes up periodically.
+    *   It fetches all `DbConfig`s from `DataStorageService`.
+    *   For each `DbConfig`:
+        *   `DbMonitorService` connects to the external PostgreSQL and `collect_metrics`.
+        *   The collected `Metric` (including slow queries) is passed to `DataStorageService` for saving to SQLite.
+        *   `AnalysisService` analyzes the `Metric` and historical `SlowQuery` data.
+        *   New `Recommendation`s generated by `AnalysisService` are saved to SQLite via `DataStorageService`.
+4.  **User Views Metrics/Recommendations (Frontend):**
+    *   User navigates to a database dashboard.
+    *   Frontend sends `GET /api/v1/databases/{id}/metrics` or `/recommendations` requests.
+    *   Nginx proxies to C++ Backend.
+    *   `DbController` retrieves data from `DataStorageService` (or in-memory cache for latest metrics) and returns it.
+    *   Frontend displays the data.
+5.  **Query Plan Execution (Frontend):**
+    *   User inputs a query in the UI.
+    *   Frontend sends `POST /api/v1/databases/{id}/query-plan` with the query in the body.
+    *   C++ Backend receives, `DbController` gets the `DbConfig`.
+    *   `DbMonitorService` connects to the target PostgreSQL and executes `EXPLAIN` for the provided query.
+    *   The plan is returned to the Frontend for display.
+
+## 4. Scalability Considerations
+
+*   **Backend:** For monitoring hundreds of databases or very high-frequency collection, the single-threaded `monitoring_loop` would become a bottleneck. This could be scaled by:
+    *   Using a thread pool for monitoring tasks.
+    *   Distributing monitoring agents closer to the databases.
+    *   Offloading metric processing and analysis to asynchronous queues/workers.
+*   **Internal Database:** SQLite is suitable for small to medium scale. For truly massive historical metric data or multi-backend instances, migrating to a dedicated PostgreSQL, ClickHouse, or a time-series database (e.g., TimescaleDB, InfluxDB) would be necessary.
+*   **API Gateway:** For more complex deployments, an API Gateway could sit in front of Nginx, providing centralized security, rate limiting, and routing across multiple backend services (e.g., if monitoring, analysis, and config were separate microservices).
+```markdown
+# === docs/DEPLOYMENT.md ===
+# Deployment Guide
+
+This guide details how to deploy the Database Performance Optimization System using Docker and Docker Compose. This setup is suitable for development, testing, and small-scale production environments. For large-scale production, consider Kubernetes or other container orchestration platforms.
+
+## 1. Environment Setup
+
+### 1.1. Host Machine Prerequisites
+
+Ensure the following are installed on your deployment server:
+*   **Docker:** [Installation Guide](https://docs.docker.com/get-docker/)
+*   **Docker Compose:** [Installation Guide](https://docs.docker.com/compose/install/)
+*   **Git:** For cloning the repository.
+
+### 1.2. Firewall Configuration
+
+Ensure that port `80` (for the frontend/Nginx) is open on your host machine's firewall if you intend to access the application from external networks. If you want to access the backend directly, also open `18080`, though the Nginx proxy handles this by default.
+
+## 2. Prepare the Project
+
+### 2.1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/database-optimizer-system.git
+cd database-optimizer-system
+```
+
+### 2.2. Configure Environment Variables
+
+Create `.env` files in the `backend/` and `frontend/` directories based on the provided `.env.example` templates. **Crucially, replace placeholder values with strong, unique secrets.**
+
+**`backend/.env`**:
+```env
+API_KEY=YOUR_SECURE_AND_UNIQUE_API_KEY # <-- IMPORTANT: Change this!
+SQLITE_DB_PATH=/app/optimizer.db
+API_PORT=18080
+MONITOR_INTERVAL_SECONDS=300 # Monitoring interval in seconds (5 minutes)
+```
+*   `API_KEY`: This is the secret key used for authentication to the backend API.
+*   `SQLITE_DB_PATH`: Path within the container for the internal SQLite database. This path is mounted to a Docker volume (`backend_data`) for persistence.
+*   `MONITOR_INTERVAL_SECONDS`: How often the backend will poll configured databases for metrics.
+
+**`frontend/.env`**:
+```env
+REACT_APP_API_BASE_URL=/api # Nginx will proxy this to the backend service
+```
+*   This setting tells the React app to send API requests to `/api`, which Nginx then routes to the backend service.
+
+### 2.3. PostgreSQL `pg_stat_statements` Setup
+
+The `monitored_db` service (our example PostgreSQL) requires `pg_stat_statements` to be enabled for the optimization system to collect slow query data effectively.
+
+1.  **First-time startup with `docker-compose`:**
+    ```bash
+    docker-compose up -d monitored_db
+    ```
+    The `monitored_db_init/init_pg_stat_statements.sql` script configures `shared_preload_libraries`. This change requires a restart of the PostgreSQL service to take effect.
+
+2.  **Restart `monitored_db`:**
+    ```bash
+    docker-compose restart monitored_db
+    ```
+
+3.  **Enable the extension in your target database:**
+    Connect to the PostgreSQL container and enable the extension:
+    ```bash
+    docker exec -it monitored_db psql -U myuser -d myapp_db
+    ```
+    Once in the `psql` prompt:
+    ```sql
+    CREATE EXTENSION pg_stat_statements;
+    \q
+    ```
+    You should do this for every database within the `monitored_db` instance that you wish to monitor with slow query analysis.
+
+## 3. Build and Deploy with Docker Compose
+
+From the root of the `database-optimizer-system` directory:
+
+### 3.1. Build Docker Images
+
+```bash
+docker-compose build
+```
+This command builds the `backend` (C++ application) and `frontend` (React + Nginx) Docker images according to their respective `Dockerfile`s.
+
+### 3.2. Start the Services
+
+```bash
+docker-compose up -d
+```
+This command starts all services defined in `docker-compose.yml` in detached mode:
+*   `monitored_db`: The example PostgreSQL database.
+*   `backend`: The C++ optimization system backend.
+*   `frontend`: The Nginx server serving the React app and proxying API calls.
+
+### 3.3. Verify Service Status
+
+Check if all containers are running:
+```bash
+docker-compose ps
+```
+You should see `Up` status for all services.
+
+View logs for any service if you encounter issues:
+```bash
+docker-compose logs backend
+docker-compose logs frontend
+```
+
+## 4. Access the Application
+
+Once all services are up and running, open your web browser and navigate to:
+
+```
+http://localhost
+```
+
+(Replace `localhost` with your server's IP address or domain name if deploying remotely).
+
+You will be greeted by the login page. Enter the `API_KEY` you configured in `backend/.env` to proceed.
+
+## 5. Post-Deployment Configuration
+
+After logging in to the frontend:
+
+1.  **Add Monitored Databases:** Navigate to the "Databases" section and click "Add New Database".
+    *   For the example `monitored_db` service, use these details:
+        *   **Name:** `Example Monitored DB`
+        *   **Host:** `monitored_db` (this is the Docker Compose service name, enabling inter-container communication)
+        *   **Port:** `5432`
+        *   **Username:** `myuser`
+        *   **Password:** `mypassword`
+        *   **Database Name:** `myapp_db`
+    *   For external PostgreSQL databases, use their respective hostnames, ports, credentials, and database names. Ensure the backend container can reach these databases (network configuration).
+
+2.  The backend's monitoring loop will automatically start collecting metrics and generating recommendations for newly added databases at the interval specified by `MONITOR_INTERVAL_SECONDS`.
+
+## 6. Maintenance and Operations
+
+### 6.1. Stopping and Restarting
+
+To stop all services:
+```bash
+docker-compose down
+```
+To stop and restart all services (useful after config changes):
+```bash
+docker-compose down && docker-compose up -d
+```
+
+### 6.2. Data Persistence
+
+*   **`monitored_db_data` volume:** Persists the data for the `monitored_db` PostgreSQL instance.
+*   **`backend_data` volume:** Persists the internal SQLite database (`optimizer.db`) and log files (`logs/`).
+If you remove these volumes, you will lose your data. To remove volumes along with containers:
+```bash
+docker-compose down -v
+```
+
+### 6.3. Updating the Application
+
+1.  Pull the latest code changes: `git pull origin main`
+2.  Stop current services: `docker-compose down`
+3.  Rebuild images (to incorporate code changes): `docker-compose build`
+4.  Start new services: `docker-compose up -d`
+
+## 7. Troubleshooting
+
+*   **"Error: Invalid API Key" on Login:** Double-check that the `API_KEY` in `frontend/.env` (which is just a placeholder for the login input) matches the `API_KEY` in `backend/.env`.
+*   **"Failed to connect to the provided database" when adding a DB:**
+    *   Verify the hostname, port, username, password, and database name.
+    *   If using a Docker Compose service name (like `monitored_db`), ensure it's spelled correctly.
+    *   Check network connectivity between the `backend` container and the target database.
+    *   Ensure the PostgreSQL user has necessary permissions.
+*   **No metrics or recommendations appearing:**
+    *   Verify `MONITOR_INTERVAL_SECONDS` is set correctly and the backend's monitoring loop is active (check `docker-compose logs backend`).
+    *   Ensure `pg_stat_statements` is enabled on your target PostgreSQL database (refer to Section 2.3).
+    *   Check for errors in `docker-compose logs backend`.
+*   **Frontend build failures:** Check `frontend/package.json` dependencies and `frontend/Dockerfile` for syntax errors or missing packages.
+*   **Backend build failures:** Check `backend/CMakeLists.txt` for library paths and `backend/Dockerfile` for C++ dependency installations.
+
+For more detailed debugging, you can access the container shell:
+```bash
+docker exec -it optimizer_backend /bin/bash
+docker exec -it optimizer_frontend /bin/bash
+```
+
+## 8. Enterprise-Grade Considerations
+
+For a production deployment that requires high availability, scalability, and robust security:
+
+*   **Container Orchestration:** Deploy on Kubernetes, AWS ECS, Azure Kubernetes Service (AKS), or Google Kubernetes Engine (GKE) for automated scaling, self-healing, and declarative management.
+*   **Database:** Migrate the internal SQLite database to a dedicated PostgreSQL instance (or a time-series DB like TimescaleDB) running as a managed service or on a separate container/VM. This provides better performance, backups, and replication.
+*   **Secrets Management:** Use a dedicated secrets manager (e.g., AWS Secrets Manager, HashiCorp Vault, Kubernetes Secrets) instead of environment variables in `.env` files for sensitive credentials like `API_KEY` and database passwords.
+*   **Load Balancing & High Availability:** Utilize cloud provider load balancers. Run multiple instances of the backend and frontend for redundancy.
+*   **Monitoring & Alerting:** Integrate with comprehensive monitoring systems (e.g., Prometheus/Grafana, Datadog) to track the health and performance of the optimization system itself. Set up alerts for critical events.
+*   **Logging:** Centralize logs using tools like ELK Stack (Elasticsearch, Logstash, Kibana) or Splunk.
+*   **Security Scanning:** Regularly scan Docker images for vulnerabilities. Implement network segmentation and least privilege access.
+*   **CI/CD Automation:** Fully automate the build, test, and deployment process using tools like Jenkins, GitLab CI, GitHub Actions, or Azure DevOps Pipelines.
+```
+```python
+# === .gitignore ===
+# General
+.DS_Store
+.env
+
+# Backend specific
+backend/build/
+backend/DatabaseOptimizerSystem
+backend/DbOptimizerTests
+backend/logs/
+backend/*.db # SQLite database files
+backend/.vscode/
+backend/build_test/
+
+# Frontend specific
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+```
+
+```text
+# === LICENSE ===
+MIT License
+
+Copyright (c) [Year] [Your Name/Organization]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+### Frontend (React Application)
+
+```js
+// === frontend/src/index.js ===
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './styles/App.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
+
+reportWebVitals();
+```
+
+```css
+/* === frontend/src/styles/App.css === */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  background-color: #f4f7f6;
+  color: #333;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  flex-grow: 1;
+}
+
+.header {
+  background-color: #282c34;
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.5em;
+}
+
+.header nav a {
+  color: white;
+  text-decoration: none;
+  margin-left: 20px;
+}
+
+.header button {
+  background-color: #61dafb;
+  color: #282c34;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.header button:hover {
+  background-color: #a4e5fc;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.button-primary {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.button-primary:hover {
+  background-color: #0056b3;
+}
+
+.button-secondary {
+  background-color: #6c757d;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-left: 10px;
+}
+
+.button-secondary:hover {
+  background-color: #5a6268;
+}
+
+.error-message {
+  color: #dc3545;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.success-message {
+  color: #28a745;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h3 {
+  margin-top: 0;
+  color: #007bff;
+}
+
+.db-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.db-item {
+  background-color: white;
+  border-left: 5px solid #007bff;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.db-item h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.db-item p {
+  margin: 5px 0;
+  color: #666;
+  font-size: 0.9em;
+}
+
+.db-item button {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85em;
+  border: none;
+}
+
+.db-item .view-button {
+  background-color: #007bff;
+  color: white;
+}
+
+.db-item .view-button:hover {
+  background-color: #0056b3;
+}
+
+.db-item .edit-button {
+  background-color: #ffc107;
+  color: #333;
+  margin-left: 5px;
+}
+
+.db-item .edit-button:hover {
+  background-color: #e0a800;
+}
+
+.db-item .delete-button {
+  background-color: #dc3545;
+  color: white;
+  margin-left: 5px;
+}
+
+.db-item .delete-button:hover {
+  background-color: #bd2130;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.metric-card {
+  background-color: #e9ecef;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.metric-card h4 {
+  margin: 0 0 10px 0;
+  color: #495057;
+  font-size: 1em;
+}
+
+.metric-card p {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #007bff;
+  margin: 0;
+}
+
+.recommendation-list .card {
+  border-left: 5px solid #28a745; /* green for pending/suggested */
+}
+
+.recommendation-list .card.applied {
+  border-left: 5px solid #17a2b8; /* blue for applied */
+}
+
+.recommendation-list .card.dismissed {
+  border-left: 5px solid #6c757d; /* gray for dismissed */
+}
+
+.recommendation-list .card h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recommendation-list .card .status-badge {
+  background-color: #6c757d;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 15px;
+  font-size: 0.8em;
+}
+
+.recommendation-list .card .status-badge.pending { background-color: #ffc107; }
+.recommendation-list .card .status-badge.applied { background-color: #28a745; }
+.recommendation-list .card .status-badge.dismissed { background-color: #dc3545; }
+
+.slow-query-item {
+  background-color: #f8f9fa;
+  border-left: 3px solid #ffc107;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap; /* Preserve whitespace and break lines */
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+  max-height: 150px; /* Limit height */
+  overflow-y: auto; /* Scroll if content overflows */
+}
+
+.slow-query-item pre {
+  margin: 0;
+}
+.slow-query-item strong {
+  color: #007bff;
+}
+
+.query-plan-output {
+  background-color: #282c34;
+  color: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+}
+```
+
+```js
+// === frontend/src/contexts/AuthContext.js ===
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { auth as apiAuth } from '../services/api';
+
+const AuthContext = createContext(null);
+
+export const AuthProvider = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('api_key');
+    if (token) {
+      // In a real app, you'd validate the token with a backend endpoint
+      // For this example, presence of token means authenticated
+      setIsAuthenticated(true);
+    }
+    setLoading(false);
+  }, []);
+
+  const login = async (apiKey) => {
+    try {
+      await apiAuth.login(apiKey);
+      setIsAuthenticated(true);
+      return true;
+    } catch (error) {
+      setIsAuthenticated(false);
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    apiAuth.logout();
+    setIsAuthenticated(false);
+  };
+
+  const value = {
+    isAuthenticated,
+    loading,
+    login,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => {
+  return useContext(AuthContext);
+};
+```
+
+```js
+// === frontend/src/components/Header.js ===
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
+const Header = () => {
+  const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  return (
+    <header className="header">
+      <h1>Database Optimization Dashboard</h1>
+      <nav>
+        {isAuthenticated ? (
+          <>
+            <Link to="/">Databases</Link>
+            {/* Add more links here if needed */}
+            <button onClick={handleLogout}>Logout</button>
+          </>
+        ) : (
+          <Link to="/login">Login</Link>
+        )}
+      </nav>
+    </header>
+  );
+};
+
+export default Header;
+```
+
+```js
+// === frontend/src/pages/LoginPage.js ===
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
+const LoginPage = () => {
+  const [apiKey, setApiKey] = useState('');
+  const [error, setError] = useState('');
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await login(apiKey);
+      navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed. Please check your API key.');
+    }
+  };
+
+  return (
+    <div className="container">
+      <div className="card" style={{ maxWidth: '400px', margin: '50px auto' }}>
+        <h2>Login</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="apiKey">API Key</label>
+            <input
+              type="password"
+              id="apiKey"
+              placeholder="Enter API Key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              required
+            />
+          </div>
+          {error && <p className="error-message">{error}</p>}
+          <button type="submit" className="button-primary" style={{ width: '100%' }}>
+            Login
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default LoginPage;
+```
+
+```js
+// === frontend/src/App.js ===
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
+import Header from './components/Header';
+import LoginPage from './pages/LoginPage';
+import HomePage from './pages/HomePage';
+import Dashboard from './components/Dashboard';
+
+const PrivateRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return <div>Loading authentication...</div>; // Or a spinner
+  }
+
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
+
+function App() {
+  return (
+    <>
+      <Header />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <HomePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/databases/:id"
+          element={
+            <PrivateRoute>
+              <Dashboard />
+            </PrivateRoute>
+          }
+        />
+        {/* Add more private routes here */}
+      </Routes>
+    </>
+  );
+}
+
+export default App;
+```
+
+```js
+// === frontend/src/pages/HomePage.js ===
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { databases } from '../services/api';
+import DbConfigForm from '../components/DbConfigForm';
+
+const HomePage = () => {
+  const [dbConfigs, setDbConfigs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editConfig, setEditConfig] = useState(null); // For editing existing config
+  const navigate = useNavigate();
+
+  const fetchDbConfigs = async () => {
+    try {
+      setLoading(true);
+      const data = await databases.getAll();
+      setDbConfigs(data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to fetch database configurations.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDbConfigs();
+  }, []);
+
+  const handleSave = async (config) => {
+    setError('');
+    try {
+      if (editConfig) {
+        await databases.update(editConfig.id, config);
+        alert('Database configuration updated successfully!');
+      } else {
+        await databases.create(config);
+        alert('Database configuration added successfully!');
+      }
+      setShowAddForm(false);
+      setEditConfig(null);
+      fetchDbConfigs(); // Refresh list
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save database configuration.');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this database configuration? This will also delete all associated metrics and recommendations.')) {
+      setError('');
+      try {
+        await databases.remove(id);
+        alert('Database configuration deleted successfully!');
+        fetchDbConfigs(); // Refresh list
+      } catch (err) {
+        setError(err.response?.data?.error || 'Failed to delete database configuration.');
+      }
+    }
+  };
+
+  if (loading) return <div className="container">Loading database configurations...</div>;
+  if (error) return <div className="container error-message">{error}</div>;
+
+  return (
+    <div className="container">
+      <h2>Monitored Databases</h2>
+      <button className="button-primary" onClick={() => { setShowAddForm(true); setEditConfig(null); }}>
+        Add New Database
+      </button>
+
+      {(showAddForm || editConfig) && (
+        <div className="card" style={{ marginTop: '20px' }}>
+          <h3>{editConfig ? 'Edit Database Configuration' : 'Add New Database Configuration'}</h3>
+          <DbConfigForm initialData={editConfig} onSave={handleSave} onCancel={() => { setShowAddForm(false); setEditConfig(null); }} />
+        </div>
+      )}
+
+      {dbConfigs.length === 0 ? (
+        <p style={{ marginTop: '20px' }}>No databases configured yet. Click "Add New Database" to get started.</p>
+      ) : (
+        <div className="db-list">
+          {dbConfigs.map((db) => (
+            <div key={db.id} className="db-item">
+              <div>
+                <h4>{db.name}</h4>
+                <p>Host: {db.host}:{db.port}</p>
+                <p>DB Name: {db.dbname}</p>
+                <p>User: {db.user}</p>
+              </div>
+              <div>
+                <button className="view-button" onClick={() => navigate(`/databases/${db.id}`)}>
+                  View Dashboard
+                </button>
+                <button className="edit-button" onClick={() => { setEditConfig(db); setShowAddForm(true); }}>
+                  Edit
+                </button>
+                <button className="delete-button" onClick={() => handleDelete(db.id)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default HomePage;
+```
+
+```js
+// === frontend/src/components/DbConfigForm.js ===
+import React, { useState, useEffect } from 'react';
+
+const DbConfigForm = ({ initialData, onSave, onCancel }) => {
+  const [config, setConfig] = useState({
+    name: '',
+    host: '',
+    port: '5432', // Default PostgreSQL port
+    user: '',
+    password: '',
+    dbname: '',
+  });
+
+  useEffect(() => {
+    if (initialData) {
+      // Exclude password from initialData as it's not returned by API GET
+      const { password, ...rest } = initialData;
+      setConfig({ ...rest, password: '' });
+    } else {
+      setConfig({
+        name: '',
+        host: '',
+        port: '5432',
+        user: '',
+        password: '',
+        dbname: '',
+      });
+    }
+  }, [initialData]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setConfig((prevConfig) => ({
+      ...prevConfig,
+      [name]: value,
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(config);
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="form-group">
+        <label htmlFor="name">Database Name</label>
+        <input
+          type="text"
+          id="name"
+          name="name"
+          placeholder="Database Name"
+          value={config.name}
+          onChange={handleChange}
+          required
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="host">Host</label>
+        <input
+          type="text"
+          id="host"
+          name="host"
+          placeholder="Host"
+          value={config.host}
+          onChange={handleChange}
+          required
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="port">Port</label>
+        <input
+          type="text"
+          id="port"
+          name="port"
+          placeholder="Port"
+          value={config.port}
+          onChange={handleChange}
+          required
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="user">Username</label>
+        <input
+          type="text"
+          id="user"
+          name="user"
+          placeholder="Username"
+          value={config.user}
+          onChange={handleChange}
+          required
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="password">Password (only required for new or changed credentials)</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Password"
+          value={config.password}
+          onChange={handleChange}
+          required={!initialData} // Required for new configs, optional for updates if not changing
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="dbname">Database Name for Connection</label>
+        <input
+          type="text"
+          id="dbname"
+          name="dbname"
+          placeholder="Database name for connection"
+          value={config.dbname}
+          onChange={handleChange}
+          required
+        />
+      </div>
+      <button type="submit" className="button-primary">Save</button>
+      <button type="button" className="button-secondary" onClick={onCancel}>Cancel</button>
+    </form>
+  );
+};
+
+export default DbConfigForm;
+```
+
+```js
+// === frontend/src/components/RecommendationCard.js ===
+import React from 'react';
+import { databases } from '../services/api';
+
+const RecommendationCard = ({ recommendation, onUpdateStatus }) => {
+  const { id, type, description, details, status, created_at, related_query_fingerprint } = recommendation;
+  const createdAt = new Date(created_at).toLocaleString();
+
+  const handleStatusChange = async (newStatus) => {
+    if (window.confirm(`Are you sure you want to mark this recommendation as '${newStatus}'?`)) {
+      try {
+        await databases.updateRecommendationStatus(id, newStatus);
+        onUpdateStatus(); // Trigger refresh
+      } catch (error) {
+        alert('Failed to update recommendation status: ' + (error.response?.data?.error || error.message));
+      }
+    }
+  };
+
+  const getStatusBadgeClass = (currentStatus) => {
+    switch (currentStatus) {
+      case 'pending': return 'status-badge pending';
+      case 'applied': return 'status-badge applied';
+      case 'dismissed': return 'status-badge dismissed';
+      default: return 'status-badge';
+    }
+  };
+
+  return (
+    <div className={`card recommendation-list ${status}`}>
+      <h3>
+        {type.replace(/([A-Z])/g, ' $1').trim()}
+        <span className={getStatusBadgeClass(status)}>{status}</span>
+      </h3>
+      <p><strong>Description:</strong> {description}</p>
+      <p><strong>Details:</strong> <pre style={{backgroundColor: '#f8f9fa', padding: '10px', borderRadius: '4px'}}>{details}</pre></p>
+      {related_query_fingerprint && <p><strong>Related Query Fingerprint:</strong> {related_query_fingerprint}</p>}
+      <p><strong>Created At:</strong> {createdAt}</p>
+
+      {status === 'pending' && (
+        <div>
+          <button className="button-primary" onClick={() => handleStatusChange('applied')}>Mark as Applied</button>
+          <button className="button-secondary" onClick={() => handleStatusChange('dismissed')}>Dismiss</button>
+        </div>
+      )}
+      {(status === 'applied' || status === 'dismissed') && (
+        <div>
+          <button className="button-secondary" onClick={() => handleStatusChange('pending')}>Mark as Pending</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RecommendationCard;
+```
+
+```js
+// === frontend/src/components/SlowQueryList.js ===
+import React, { useState } from 'react';
+
+const SlowQueryList = ({ slowQueries }) => {
+  const [showAll, setShowAll] = useState(false);
+  const displayedQueries = showAll ? slowQueries : slowQueries.slice(0, 5);
+
+  return (
+    <div className="card">
+      <h3>Slow Queries</h3>
+      {slowQueries.length === 0 ? (
+        <p>No slow queries detected recently.</p>
+      ) : (
+        <>
+          {displayedQueries.map((query, index) => (
+            <div key={index} className="slow-query-item">
+              <p><strong>Query:</strong> <pre>{query.query_text}</pre></p>
+              <p><strong>Calls:</strong> {query.calls}</p>
+              <p><strong>Total Time:</strong> {query.total_time_ms.toFixed(2)} ms</p>
+              <p><strong>Mean Time:</strong> {query.mean_time_ms.toFixed(2)} ms</p>
+              <p><strong>Detected At:</strong> {new Date(query.detected_at).toLocaleString()}</p>
+            </div>
+          ))}
+          {slowQueries.length > 5 && (
+            <button className="button-secondary" onClick={() => setShowAll(!showAll)}>
+              {showAll ? 'Show Less' : `Show ${slowQueries.length - 5} More`}
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+export default SlowQueryList;
+```
+
+```js
+// === frontend/src/components/Dashboard.js ===
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import { databases } from '../services/api';
+import RecommendationCard from './RecommendationCard';
+import SlowQueryList from './SlowQueryList';
+
+const Dashboard = () => {
+  const { id } = useParams();
+  const [dbConfig, setDbConfig] = useState(null);
+  const [latestMetrics, setLatestMetrics] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [queryPlanInput, setQueryPlanInput] = useState('');
+  const [queryPlanOutput, setQueryPlanOutput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const config = await databases.getById(id);
+      setDbConfig(config);
+
+      const metrics = await databases.getMetrics(id);
+      setLatestMetrics(metrics);
+
+      const recs = await databases.getRecommendations(id);
+      setRecommendations(recs);
+
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to load dashboard data.');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchData();
+    // Set up auto-refresh for metrics every minute
+    const refreshInterval = setInterval(fetchData, 60000); // 60 seconds
+    return () => clearInterval(refreshInterval);
+  }, [fetchData]);
+
+  const handleGetQueryPlan = async () => {
+    setError('');
+    setQueryPlanOutput('Loading query plan...');
+    try {
+      const plan = await databases.getQueryPlan(id, queryPlanInput);
+      setQueryPlanOutput(JSON.stringify(JSON.parse(plan.query_plan), null, 2)); // Pretty print JSON
+    } catch (err) {
+      setQueryPlanOutput('Error fetching query plan: ' + (err.response?.data?.error || err.message));
+      setError(err.response?.data?.error || 'Failed to get query plan.');
+    }
+  };
+
+  if (loading) return <div className="container">Loading dashboard...</div>;
+  if (error) return <div className="container error-message">{error}</div>;
+  if (!dbConfig) return <div className="container">Database not found.</div>;
+
+  return (
+    <div className="container">
+      <h2>Dashboard for {dbConfig.name}</h2>
+      <p>Last Updated: {latestMetrics ? new Date(latestMetrics.timestamp).toLocaleString() : 'N/A'}</p>
+
+      {latestMetrics && (
+        <div className="metric-grid">
+          <div className="metric-card">
+            <h4>Total Connections</h4>
+            <p>{latestMetrics.total_connections}</p>
+          </div>
+          <div className="metric-card">
+            <h4>Active Connections</h4>
+            <p>{latestMetrics.active_connections}</p>
+          </div>
+          <div className="metric-card">
+            <h4>CPU Usage</h4>
+            <p>{latestMetrics.cpu_usage_percent === -1 ? 'N/A' : `${latestMetrics.cpu_usage_percent.toFixed(2)}%`}</p>
+          </div>
+          <div className="metric-card">
+            <h4>Tx Bytes</h4>
+            <p>{latestMetrics.tx_bytes === -1 ? 'N/A' : (latestMetrics.tx_bytes / (1024 * 1024)).toFixed(2) + ' MB'}</p>
+          </div>
+          <div className="metric-card">
+            <h4>Rx Bytes</h4>
+            <p>{latestMetrics.rx_bytes === -1 ? 'N/A' : (latestMetrics.rx_bytes / (1024 * 1024)).toFixed(2) + ' MB'}</p>
+          </div>
+        </div>
+      )}
+
+      {latestMetrics?.slow_queries && <SlowQueryList slowQueries={latestMetrics.slow_queries} />}
+
+      <div className="card">
+        <h3>Optimization Recommendations</h3>
+        {recommendations.length === 0 ? (
+          <p>No pending recommendations. Good job!</p>
+        ) : (
+          recommendations.map((rec) => (
+            <RecommendationCard key={rec.id} recommendation={rec} onUpdateStatus={fetchData} />
+          ))
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Query Plan Analyzer</h3>
+        <div className="form-group">
+          <label htmlFor="queryInput">Enter SQL Query to Explain:</label>
+          <textarea
+            id="queryInput"
+            rows="5"
+            placeholder="e.g., SELECT * FROM users WHERE id = 1;"
+            value={queryPlanInput}
+            onChange={(e) => setQueryPlanInput(e.target.value)}
+          ></textarea>
+        </div>
+        <button className="button-primary" onClick={handleGetQueryPlan}>Get Query Plan</button>
+        {queryPlanOutput && (
+          <div style={{ marginTop: '20px' }}>
+            <h4>Query Plan (EXPLAIN ANALYZE FORMAT JSON)</h4>
+            <pre className="query-plan-output">{queryPlanOutput}</pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
+```
+---
