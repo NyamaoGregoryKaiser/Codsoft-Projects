@@ -1,0 +1,25 @@
+# Base image for Node.js development
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Command to run the application (overridden by docker-compose for dev)
+CMD ["npm", "run", "dev"]
+```
+
+#### **4.4. `.env.example` (Backend)**
+
+```

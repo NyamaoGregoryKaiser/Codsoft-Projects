@@ -1,91 +1,61 @@
-```yaml
 version: '3.8'
 
 services:
   db:
     image: postgres:15-alpine
-    container_name: ecommerce_db
+    restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ecommerce_db
     ports:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql
-      - ./database/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: ecommerce_redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "GET", "ping"]
+      test: ["CMD-SHELL", "pg_isready -U user -d ecommerce_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ecommerce_backend
-    environment:
-      # Pass environment variables to the backend container
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      APP_PORT: 8080
-      LOG_LEVEL: ${LOG_LEVEL}
+      context: ./backend
+      dockerfile: Dockerfile.dev
     ports:
-      - "${APP_PORT}:${APP_PORT}"
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/ecommerce_db?schema=public
+      JWT_SECRET: supersecretjwtkey_change_me_in_prod
+      FRONTEND_URL: http://localhost:3000
+      NODE_ENV: development
+      PORT: 5000
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
-      - ./logs:/app/logs # Mount host logs directory
-    restart: on-failure
+      - ./backend:/app
+      - /app/node_modules # Avoid overwriting node_modules inside container
+    command: npm run dev # Use nodemon for live reloading
 
-  # Optional: Nginx reverse proxy
-  nginx:
-    image: nginx:alpine
-    container_name: ecommerce_nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     ports:
-      - "80:80"
-      - "443:443"
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:5000/api
+      NODE_ENV: development
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro # For HTTPS
-      - ./frontend/build:/usr/share/nginx/html:ro # For serving static frontend files
-    depends_on:
-      - backend
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
 
 volumes:
   db_data:
-  redis_data:
 ```
-**Note:** `DB_HOST` and `REDIS_HOST` in `docker-compose.yml` point to the service names (`db`, `redis`) because they are on the same Docker network.
 
-### CI/CD Pipeline Configuration (GitHub Actions)
+#### **4.2. `backend/Dockerfile.dev`**
+
+```dockerfile

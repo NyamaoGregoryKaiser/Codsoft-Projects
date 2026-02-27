@@ -1,0 +1,204 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend_ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint backend
+        run: npm run lint
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Run backend tests
+        run: npm run test:coverage # Requires a test database setup or mocking, for simplicity here, just runs tests
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/test_db?schema=public # Or use test container
+          JWT_SECRET: your_test_secret
+
+  frontend_ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        run: npm run test
+
+  # Example CD step (requires cloud provider setup, e.g., AWS ECR, ECS, S3, CloudFront)
+  # This is illustrative and needs actual implementation for your chosen cloud.
+  # deploy:
+  #   needs: [backend_ci, frontend_ci]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Configure AWS Credentials
+  #       uses: aws-actions/configure-aws-credentials@v1
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: us-east-1
+  #     - name: Build and push backend Docker image
+  #       run: |
+  #         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_ECR_REGISTRY_URL
+  #         docker build -t backend:latest ./backend
+  #         docker tag backend:latest YOUR_ECR_REGISTRY_URL/backend:latest
+  #         docker push YOUR_ECR_REGISTRY_URL/backend:latest
+  #     - name: Build and push frontend Docker image
+  #       run: |
+  #         aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_ECR_REGISTRY_URL
+  #         docker build -t frontend:latest ./frontend
+  #         docker tag frontend:latest YOUR_ECR_REGISTRY_URL/frontend:latest
+  #         docker push YOUR_ECR_REGISTRY_URL/frontend:latest
+  #     - name: Deploy to ECS
+  #       run: |
+  #         aws ecs update-service --cluster YOUR_ECS_CLUSTER --service YOUR_ECS_SERVICE --force-new-deployment
+  #     - name: Invalidate CloudFront cache (for frontend)
+  #       run: |
+  #         aws cloudfront create-invalidation --distribution-id YOUR_CLOUDFRONT_DISTRIBUTION_ID --paths "/*"
+```
+
+## 11. Deployment Guide
+
+For a production deployment, consider the following steps:
+
+1.  **Containerization:** Use optimized Dockerfiles for production builds (multi-stage builds to minimize image size).
+    *   Example `backend/Dockerfile`:
+        ```dockerfile
+        # === backend/Dockerfile ===
+        # Stage 1: Build
+        FROM node:18-alpine AS builder
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install --omit=dev # Only install production dependencies
+        COPY . .
+        RUN npm run build # Compile TypeScript
+
+        # Stage 2: Run
+        FROM node:18-alpine
+        WORKDIR /app
+        COPY --from=builder /app/package*.json ./
+        COPY --from=builder /app/node_modules ./node_modules
+        COPY --from=builder /app/dist ./dist
+        COPY --from=builder /app/prisma ./prisma
+        # Copy prisma migration files and schema
+        RUN npx prisma migrate deploy # Apply migrations on deploy
+        EXPOSE 5000
+        CMD ["node", "dist/server.js"]
+        # === END backend/Dockerfile ===
+        ```
+    *   Example `frontend/Dockerfile`:
+        ```dockerfile
+        # === frontend/Dockerfile ===
+        # Stage 1: Build
+        FROM node:18-alpine AS builder
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install
+        COPY . .
+        RUN npm run build
+
+        # Stage 2: Serve with Nginx
+        FROM nginx:alpine
+        COPY --from=builder /app/dist /usr/share/nginx/html
+        # COPY nginx.conf /etc/nginx/conf.d/default.conf # Custom Nginx config
+        EXPOSE 80
+        CMD ["nginx", "-g", "daemon off;"]
+        # === END frontend/Dockerfile ===
+        ```
+2.  **Cloud Provider:** Choose a cloud platform (AWS, GCP, Azure, DigitalOcean, Heroku).
+    *   **AWS Example:**
+        *   **Database:** RDS PostgreSQL
+        *   **Backend:** ECS (Fargate) or EC2 instances behind an Application Load Balancer (ALB).
+        *   **Frontend:** S3 for static hosting + CloudFront for CDN and caching.
+        *   **Container Registry:** ECR for Docker images.
+        *   **CI/CD:** GitHub Actions or AWS CodePipeline.
+        *   **Monitoring:** CloudWatch for logs and metrics.
+        *   **Secrets Management:** AWS Secrets Manager for environment variables like `JWT_SECRET`, `DATABASE_URL`.
+3.  **Scalability:**
+    *   **Backend:** Implement auto-scaling based on CPU utilization or request count.
+    *   **Database:** Use read replicas for heavy read loads.
+    *   **Caching:** Integrate a distributed cache like Redis for better performance and reduced database load.
+4.  **Security:**
+    *   Always use HTTPS.
+    *   Regularly update dependencies.
+    *   Implement input validation rigorously.
+    *   Scan Docker images for vulnerabilities.
+    *   Apply network security groups/firewalls.
+5.  **Monitoring & Alerting:**
+    *   Centralized logging (e.g., ELK stack, Datadog, CloudWatch Logs).
+    *   Performance monitoring (e.g., Prometheus/Grafana, Datadog, New Relic).
+    *   Set up alerts for errors, high latency, or resource utilization spikes.
+
+## 12. Future Enhancements
+
+*   **Payment Gateway Integration:** Stripe, PayPal for actual transactions.
+*   **Search Engine:** ElasticSearch for advanced product search and filtering.
+*   **Real-time Features:** WebSockets for instant notifications (e.g., order status updates).
+*   **Image Upload Service:** AWS S3 or similar for product images.
+*   **Email Notifications:** Send order confirmations, shipping updates.
+*   **Admin Dashboard:** Comprehensive UI for managing products, orders, users.
+*   **User Reviews & Ratings.**
+*   **Discount & Coupon System.**
+*   **Shopping Cart Persistence:** Beyond session, for logged-in users.
+*   **TypeScript Validation:** Full integration of Zod or similar for all DTOs and API requests.
+
+## 13. Contributing
+
+Contributions are welcome! Please follow these steps:
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/your-feature`).
+3.  Make your changes and write tests.
+4.  Commit your changes (`git commit -m 'feat: Add new feature'`).
+5.  Push to the branch (`git push origin feature/your-feature`).
+6.  Create a Pull Request.
+
+## 14. License
+
+This project is licensed under the MIT License.
+```

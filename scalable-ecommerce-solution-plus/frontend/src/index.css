@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+body {
+  font-family: 'Inter', sans-serif;
+  @apply text-gray-700 antialiased;
+}
+```
+
+---
+
+### **4. Configuration & Setup**
+
+#### **4.1. `docker-compose.yml` (Development Setup)**
+
+```yaml
