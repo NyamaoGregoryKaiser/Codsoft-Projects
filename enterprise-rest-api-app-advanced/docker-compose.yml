@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: projectpulse-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-projectpulse}
+      POSTGRES_USER: ${DB_USERNAME:-projectpulse_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Mount schema and data scripts to be executed by Spring Boot on startup
+      # Spring Boot's default behavior for H2, but can be configured for other DBs
+      # For a production setup, explicit migrations (Flyway/Liquibase) are preferred.
+      - ./backend/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
+      - ./backend/src/main/resources/db/data.sql:/docker-entrypoint-initdb.d/2_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-projectpulse_user} -d ${DB_NAME:-projectpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: projectpulse-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-projectpulse}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-projectpulse_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-password}
+      JWT_SECRET: ${JWT_SECRET:-aSuperSecretKeyForProjectPulseApplicationThatIsLongEnoughAndSecure}
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
+    depends_on:
+      db:
+        condition: service_healthy
+    # Ensure Spring Boot waits for DB to be fully up and schema applied
+    command: ["sh", "-c", "java -jar /app/projectpulse.jar"]
+    networks:
+      - projectpulse-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: projectpulse-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:8080/api/v1 # When running locally, directly access backend
+    depends_on:
+      - backend
+    # For production, might use Nginx to serve static files and proxy API
+    networks:
+      - projectpulse-network
+
+volumes:
+  pg_data:
+
+networks:
+  projectpulse-network:
+    driver: bridge
+```
+**`backend/Dockerfile`**
+```dockerfile

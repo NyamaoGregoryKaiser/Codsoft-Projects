@@ -1,0 +1,86 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+spring:
+  application:
+    name: project-pulse-api
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:projectpulse}
+    username: ${DB_USERNAME:projectpulse_user}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none # Managed by db/schema.sql
+    show-sql: true # For development, set to false in production
+    properties:
+      hibernate:
+        format_sql: true
+    defer-datasource-initialization: true # Ensures schema.sql/data.sql run after JPA is ready
+  sql:
+    init:
+      mode: always # Always run schema.sql and data.sql on startup
+      continue-on-error: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080 # Not actually used for custom JWT, but good practice
+  cache:
+    cache-names: projects, tasks # Define cache names
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s # Default cache settings
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:aSuperSecretKeyForProjectPulseApplicationThatIsLongEnoughAndSecure} # DO NOT use default in production
+  expiration: 86400000 # 24 hours in milliseconds
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.projectpulse: DEBUG # More verbose logging for our application package
+    org.springframework.security: INFO
+    org.hibernate: INFO
+    org.springdoc: INFO
+  file:
+    name: logs/projectpulse.log # Log to file
+    max-size: 10MB
+    max-history: 7 # Keep 7 days of logs
+
+# Actuator Endpoints (Monitoring)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus, loggers, caches
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+# OpenAPI (Swagger) Configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json
+
+# Frontend CORS Configuration (adjust for production)
+app:
+  cors:
+    allowed-origins: http://localhost:3000,http://localhost:8080
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: '*'
+    exposed-headers: 'Authorization,Cache-Control,Content-Language,Content-Type,Expires,Last-Modified,Pragma'
+    allow-credentials: true
+```
+**`backend/src/main/java/com/projectpulse/projectpulse/config/AppConfig.java`**
+```java

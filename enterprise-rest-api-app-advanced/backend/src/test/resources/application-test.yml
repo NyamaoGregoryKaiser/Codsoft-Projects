@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:15-alpine:///testdb
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop # Automatically create and drop tables for tests
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  sql:
+    init:
+      mode: always # Always run schema.sql (empty for testcontainers as it handles schema) and data.sql
+      continue-on-error: false # Important for test integrity
+  # Disable caching in tests to avoid test isolation issues
+  cache:
+    type: none
+jwt:
+  secret: testSecretKeyForTestsProjectPulseApplicationThatIsLongEnoughAndSecure # Unique secret for tests
+  expiration: 3600000 # 1 hour for tests
+
+logging:
+  level:
+    root: WARN # Suppress verbose logs during tests
+    com.projectpulse: INFO
+```
+**`backend/src/test/java/com/projectpulse/projectpulse/project/service/ProjectServiceTest.java`**
+```java
