@@ -1,0 +1,55 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cms_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cms_db}
+      POSTGRES_USER: ${DB_USERNAME:-cms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cms_password}
+    volumes:
+      - cms_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development/debugging, remove in production if not needed
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: cms_backend
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db # Service name for the database container
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-cms_db}
+      DB_USERNAME: ${DB_USERNAME:-cms_user}
+      DB_PASSWORD: ${DB_PASSWORD:-cms_password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      file.upload-dir: /app/uploads # Internal path for uploads
+    ports:
+      - "8080:8080"
+    volumes:
+      - cms_uploads:/app/uploads # Mount volume for persistent file uploads
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: cms_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80" # Expose frontend on port 80
+    # No specific environment variables needed for Nginx based on current frontend setup
+    # If using Vite's dev server locally, use 'npm run dev' in frontend directory
+
+volumes:
+  cms_data:
+  cms_uploads:
+```

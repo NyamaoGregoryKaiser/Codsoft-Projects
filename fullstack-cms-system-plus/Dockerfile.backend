@@ -1,0 +1,46 @@
+```dockerfile
+# Stage 1: Build the Spring Boot application
+FROM maven:3.9.6-eclipse-temurin-17-alpine AS build
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy the pom.xml and download dependencies (for caching layers)
+COPY backend/pom.xml .
+RUN mvn dependency:go-offline
+
+# Copy the rest of the backend source code
+COPY backend/src ./src
+
+# Build the Spring Boot application
+# -DskipTests to skip tests during build, they should be run in CI
+# -Pprod (if you have a production profile in pom.xml)
+RUN mvn clean install -DskipTests
+
+# Stage 2: Create the final image
+FROM eclipse-temurin:17-jre-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built JAR from the build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose the port the Spring Boot app runs on
+EXPOSE 8080
+
+# Create a directory for file uploads
+RUN mkdir -p /app/uploads
+
+# Set the entrypoint to run the JAR
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# Define environment variables to be set during runtime or in docker-compose
+ENV DB_HOST=db
+ENV DB_PORT=5432
+ENV DB_NAME=cms_db
+ENV DB_USERNAME=cms_user
+ENV DB_PASSWORD=cms_password
+ENV JWT_SECRET_KEY=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+ENV file_upload-dir=/app/uploads
+```

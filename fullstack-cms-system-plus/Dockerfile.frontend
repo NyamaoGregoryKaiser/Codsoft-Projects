@@ -1,0 +1,40 @@
+```dockerfile
+# Stage 1: Build the React application
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+# Copy package.json and package-lock.json (or yarn.lock)
+COPY frontend/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the frontend source code
+COPY frontend .
+
+# Build the React app
+# Using Vite, 'npm run build' typically outputs to 'dist'
+RUN npm run build
+
+# Stage 2: Serve the React application with Nginx
+FROM nginx:alpine
+
+# Copy the Nginx configuration
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+
+# Remove default Nginx welcome page
+RUN rm -rf /etc/nginx/conf.d/*
+
+# Copy the Nginx site configuration
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# Copy the built React app from the build stage to Nginx's public directory
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Expose port 80 (Nginx default)
+EXPOSE 80
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"]
+```
