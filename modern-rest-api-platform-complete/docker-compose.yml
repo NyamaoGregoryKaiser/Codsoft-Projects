@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432" # Expose for local access if needed
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379" # Expose for local access if needed
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app # Mount current directory for live reloading (dev only, remove for prod)
+    command: sh -c "alembic upgrade head && python seed_db.py && gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"
+    # Note: Running migrations and seed data with 'command' is for convenience in local dev setup.
+    # In production, migrations should be run as a separate step/job before deployment.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - .env # For REACT_APP_API_BASE_URL
+    ports:
+      - "3000:80" # Map host port 3000 to container's Nginx port 80
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./frontend:/app # Mount frontend code for development with hot-reloading
+      - /app/node_modules # Exclude node_modules from host mount to prevent conflicts with container's node_modules
+
+
+volumes:
+  pgdata:
+```
