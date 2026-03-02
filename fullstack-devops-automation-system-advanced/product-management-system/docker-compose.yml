@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: product_management_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - product_management_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: product_management_redis
+    restart: always
+    ports:
+      - "${REDIS_PORT}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - product_management_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production # Pass NODE_ENV during build if needed
+    container_name: product_management_backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: ${BACKEND_PORT}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION_DAYS: ${JWT_EXPIRATION_DAYS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB to be healthy
+      redis:
+        condition: service_healthy # Wait for Redis to be healthy
+    command: ["sh", "-c", "npm install && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && npm start"]
+    # The command above runs migrations and seeds on every start.
+    # For production, migrations should typically be handled as part of a release process
+    # and not necessarily on every container restart.
+    # A more robust approach would be to have a separate "migrate" service or init container.
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Pass backend API URL at build time for React (create-react-app)
+        REACT_APP_API_BASE_URL: http://localhost:${BACKEND_PORT}/api/v1
+    container_name: product_management_frontend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: ${FRONTEND_PORT}
+      REACT_APP_API_BASE_URL: http://backend:${BACKEND_PORT}/api/v1 # For communication within Docker network
+    ports:
+      - "${FRONTEND_PORT}:80" # Nginx/Serve will listen on 80 inside container
+    depends_on:
+      - backend
+
+volumes:
+  product_management_data: # For PostgreSQL persistent data
+  product_management_redis_data: # For Redis persistent data
+```
+
+```

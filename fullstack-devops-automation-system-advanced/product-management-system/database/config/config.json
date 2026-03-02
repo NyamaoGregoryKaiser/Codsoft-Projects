@@ -1,0 +1,27 @@
+{
+  "development": {
+    "username": "productuser",
+    "password": "productpassword",
+    "database": "productdb",
+    "host": "localhost",
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "testuser",
+    "password": "testpassword",
+    "database": "testdb",
+    "host": "localhost",
+    "dialect": "postgres",
+    "logging": false
+  },
+  "production": {
+    "username": "productuser",
+    "password": "productpassword",
+    "database": "productdb",
+    "host": "db",
+    "dialect": "postgres"
+  }
+}
+```
+
+```
