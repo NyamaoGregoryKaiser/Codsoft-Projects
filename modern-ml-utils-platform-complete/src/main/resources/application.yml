@@ -1,0 +1,68 @@
+```yaml
+spring:
+  application:
+    name: ml-utilities-system
+  jpa:
+    hibernate:
+      ddl-auto: validate # Do not allow hibernate to manage schema in prod
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false # Prevents N+1 issues and keeps transactions short
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ml_util_db}
+    username: ${DB_USERNAME:mluser}
+    password: ${DB_PASSWORD:mlpassword}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Good for existing databases, disable in production if migrations are strict
+    user: ${DB_USERNAME:mluser}
+    password: ${DB_PASSWORD:mlpassword}
+  cache:
+    cache-names: models, modelVersions # Define cache names
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=60s # Default Caffeine spec for all caches
+
+# JWT Configuration
+app:
+  jwtSecret: ${JWT_SECRET:YOUR_SECURE_JWT_SECRET_KEY_THAT_IS_AT_LEAST_256_BITS_LONG} # CHANGE THIS IN PRODUCTION
+  jwtExpirationInMs: 86400000 # 24 hours
+
+# Server Configuration
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /
+
+# Actuator Endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, caches, beans, metrics, loggers
+  endpoint:
+    health:
+      show-details: always
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+
+# SpringDoc OpenAPI/Swagger UI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  # Disable default security scheme if you define your own using annotations
+  # security.oauth2.client.client-id:
+  # security.oauth2.client.client-secret:
+
+```

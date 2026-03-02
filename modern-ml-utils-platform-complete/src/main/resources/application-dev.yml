@@ -1,0 +1,23 @@
+```yaml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update # Allow hibernate to update schema in development
+  h2: # In-memory H2 database for faster development, local testing
+    console:
+      enabled: true
+      path: /h2-console
+  datasource:
+    url: jdbc:h2:mem:ml_util_db_dev;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: password
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false # Disable Flyway if using H2 for dev, or configure separately
+logging:
+  level:
+    com.mlutil: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE # Show parameter binding
+```

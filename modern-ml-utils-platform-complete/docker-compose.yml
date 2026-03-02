@@ -1,0 +1,58 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Inject database credentials and JWT secret
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ml_util_db
+      DB_USERNAME: mluser
+      DB_PASSWORD: mlpassword
+      JWT_SECRET: YOUR_SECURE_JWT_SECRET_KEY_THAT_IS_AT_LEAST_256_BITS_LONG_COMPOSE
+      # Other Spring Boot properties can be set here, e.g., for memory limits
+      # JAVA_OPTS: "-Xmx512m -Xms256m"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ml-net
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ml_util_db
+      POSTGRES_USER: mluser
+      POSTGRES_PASSWORD: mlpassword
+    volumes:
+      - ml_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development/inspection
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mluser -d ml_util_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ml-net
+
+# Define a network for communication between services
+networks:
+  ml-net:
+    driver: bridge
+
+# Define named volumes for data persistence
+volumes:
+  ml_db_data:
+```

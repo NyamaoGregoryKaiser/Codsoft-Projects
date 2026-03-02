@@ -1,0 +1,32 @@
+graph TD
+    A[Client UI/API Consumer] -->|HTTP/S| B(Load Balancer/API Gateway)
+    B --> C{ML Utilities Service}
+
+    C -->|JWT Auth| D[Spring Security]
+    C -->|REST API| E[Model Controller]
+    C -->|REST API| F[Prediction Controller]
+    C -->|REST API| G[Data Processing Controller]
+
+    E -.-> H[ModelService]
+    F -.-> I[PredictionService]
+    G -.-> J[DataProcessingService]
+
+    H -.-> K[ModelRepository]
+    H -.-> L[ModelVersionRepository]
+    I -.-> M[PredictionLogRepository]
+
+    K & L & M --> N(PostgreSQL Database)
+
+    subgraph Infrastructure
+        N
+        O[Caching Layer (Caffeine)]
+        P[Logging (Logback)]
+        Q[Monitoring (Spring Actuator/Prometheus)]
+    end
+
+    C --> O
+    C --> P
+    C --> Q
+
+    D -.-> N
+    H -- Cache --> O
