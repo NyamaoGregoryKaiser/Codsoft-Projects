@@ -1,0 +1,31 @@
++------------------+     +--------------------------+     +-------------------+
+|     User's       |<----|  Performance Snippet   |<----|                   |
+|  Web Application |     |   (Client-Side JS)     |     |    PerfMon        |
++------------------+     +--------------------------+     |    Frontend     |
+         |                                                 | (React/Next.js) |
+         | (Sends Perf Data)                               |                   |
+         v                                                 +---------+---------+
++--------------------------+                                         | (API Calls)
+|                          |                                         v
+|      PerfMon Backend     |<---------------------------------------+
+|  (Node.js/Express/TS)    |
+|                          |
+|  - Auth/User Mgmt        |
+|  - App/Page Mgmt         |
+|  - Performance Data Ingestion <-----+  (Rate Limiting, Cache)
+|  - Reporting/Aggregation |          |
+|  - Logging/Error Handling|          |
+|                          |          |
++----------+---------------+          |
+           |                          |
+           | (TypeORM)                |
+           v                          |
++--------------------------+          |
+|       PostgreSQL         |          |
+|  - Users                 |          |
+|  - Applications          |          |
+|  - Pages                 |          |
+|  - PerformanceMetrics    |          |
++--------------------------+          |
+                                      |
+                                      +----------------> (External Monitoring, e.g., Prometheus)

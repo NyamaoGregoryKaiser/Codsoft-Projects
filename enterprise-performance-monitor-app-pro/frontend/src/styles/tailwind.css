@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles can go here if needed */
+```
+
+**`frontend/src/types/index.ts`**
+```typescript
