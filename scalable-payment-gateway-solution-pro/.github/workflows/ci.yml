@@ -1,0 +1,142 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Create .env file for backend tests
+        run: |
+          echo "NODE_ENV=test" >> backend/.env
+          echo "JWT_SECRET=testsecret" >> backend/.env
+          echo "DB_HOST=localhost" >> backend/.env
+          echo "DB_PORT=5432" >> backend/.env
+          echo "DB_USER=testuser" >> backend/.env
+          echo "DB_PASSWORD=testpassword" >> backend/.env
+          echo "DB_NAME=test_db" >> backend/.env
+
+      - name: Start PostgreSQL for tests
+        run: docker-compose -f docker-compose.test.yml up -d db
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in `seq 1 10`; do
+            nc -z localhost 5432 && echo Success && exit 0
+            echo -n .
+            sleep 1
+          done
+          echo Failed waiting for Postgres && exit 1
+        
+      - name: Run Knex Migrations (Test DB)
+        run: npm run migrate
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: test_db
+      
+      - name: Run Knex Seeds (Test DB)
+        run: npm run seed
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: test_db
+
+      - name: Run backend tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: test_db
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker-compose -f docker-compose.test.yml down
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --coverage --watchAll=false
+        working-directory: ./frontend
+
+  # Build & Deploy (Example - can be expanded)
+  # deploy:
+  #   name: Deploy to Production
+  #   needs: [backend-test, frontend-test]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+
+  #     - name: Build Docker images
+  #       run: docker-compose build
+
+  #     - name: Log in to Docker Hub (or other registry)
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Push Docker images
+  #       run: |
+  #         docker tag backend_image yourrepo/backend:${GITHUB_SHA}
+  #         docker push yourrepo/backend:${GITHUB_SHA}
+  #         docker tag frontend_image yourrepo/frontend:${GITHUB_SHA}
+  #         docker push yourrepo/frontend:${GITHUB_SHA}
+
+  #     - name: Deploy to Server (e.g., using SSH and docker-compose pull/up)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           cd /path/to/your/app
+  #           docker-compose pull
+  #           docker-compose up -d --remove-orphans
+  #           docker system prune -f

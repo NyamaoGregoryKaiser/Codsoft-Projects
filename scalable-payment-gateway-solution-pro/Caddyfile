@@ -1,0 +1,34 @@
+{
+  email your-email@example.com # For Let's Encrypt certificates
+}
+
+# Frontend
+app.yourdomain.com {
+    reverse_proxy frontend:80 { # Proxy to the frontend service on port 80
+        header_up Host {http.request.host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    encode gzip
+}
+
+# Backend API
+api.yourdomain.com {
+    reverse_proxy backend:5000 { # Proxy to the backend service on port 5000
+        header_up Host {http.request.host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+    encode gzip
+
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10MB
+            roll_keep 5
+            roll_keep_days 7
+        }
+        format json
+    }
+}
