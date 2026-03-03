@@ -1,0 +1,40 @@
+```json
+{
+    "app": {
+        "listen_ip": "0.0.0.0",
+        "listen_port": 8080,
+        "document_root": "./static",
+        "log_path": "./logs",
+        "log_file": "apexcontent.log",
+        "log_level": "debug",
+        "session_timeout": 3600,
+        "enable_orm": true
+    },
+    "db_client": [
+        {
+            "host": "postgres",
+            "port": 5432,
+            "dbname": "apexcontent_db",
+            "user": "apexuser",
+            "password": "apexpassword",
+            "number_of_connections": 10,
+            "is_fast": true,
+            "type": "postgresql"
+        }
+    ],
+    "plugins": [],
+    "filters": [
+        "AuthFilter",
+        "RateLimitFilter"
+    ],
+    "custom": {
+        "jwt_secret": "${JWT_SECRET}",
+        "jwt_expiration_seconds": 3600,
+        "refresh_token_expiration_seconds": 604800,
+        "rate_limit": {
+            "max_requests": 100,
+            "window_seconds": 60
+        }
+    }
+}
+```

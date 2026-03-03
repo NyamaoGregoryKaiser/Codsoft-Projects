@@ -1,0 +1,46 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apexcontent_app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/app/logs # Persist application logs
+      - ./uploads:/app/uploads # Persist uploaded media
+    depends_on:
+      - postgres
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION_SECONDS=${JWT_EXPIRATION_SECONDS}
+      - REFRESH_TOKEN_EXPIRATION_SECONDS=${REFRESH_TOKEN_EXPIRATION_SECONDS}
+    restart: always
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: apexcontent_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d/migrations # Copy migrations
+      - ./database/seed:/docker-entrypoint-initdb.d/seed # Copy seed data
+      - ./database/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh # Custom init script
+    ports:
+      - "5432:5432"
+    restart: always
+
+volumes:
+  postgres_data:
+```
