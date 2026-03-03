@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: task-db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: task-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: task-backend
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+    ports:
+      - "${PORT}:${PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs # Persist logs
+    # Migrations & Seeds run on start in server.ts, so no explicit command here.
+    # For a more robust setup, you might separate migration/seed containers.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend # Custom Dockerfile for frontend
+    container_name: task-frontend
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:${PORT}/api/v1 # Or point to an Nginx proxy
+    ports:
+      - "3000:80" # Serve React app on port 80 inside container, expose on 3000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+*Note: You would create a `frontend/Dockerfile.frontend` for the frontend as well. This typically uses Nginx to serve the static React build artifacts.*
+
+#### `frontend/Dockerfile.frontend` (Frontend Dockerfile)
+```dockerfile

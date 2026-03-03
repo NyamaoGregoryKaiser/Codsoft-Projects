@@ -1,0 +1,171 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in `seq 1 10`; do
+            pg_isready -h localhost -p 5432 -U testuser && break
+            echo "Waiting for PostgreSQL..."
+            sleep 5
+          done
+      
+      - name: Wait for Redis
+        run: |
+          for i in `seq 1 10`; do
+            redis-cli -h localhost -p 6379 ping && break
+            echo "Waiting for Redis..."
+            sleep 5
+          done
+
+      - name: Build Backend
+        run: yarn build
+
+      - name: Run Backend Migrations
+        # Point TypeORM to the built config file
+        run: yarn typeorm migration:run -d dist/ormconfig.js
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: test_db
+
+      - name: Run Backend Tests
+        run: yarn test
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage-report
+          path: backend/coverage
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Frontend
+        run: yarn build
+
+      - name: Run Frontend Tests
+        run: yarn test --watchAll=false
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+
+  # cd-pipeline: # Example for a Continuous Deployment stage
+  #   name: Deploy to Production
+  #   runs-on: ubuntu-latest
+  #   needs: [backend-ci, frontend-ci] # Depends on successful CI runs
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v3
+
+  #     - name: Download Backend Build
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: backend-build
+  #         path: ./backend/dist # Assuming you'd upload dist from backend-ci
+
+  #     - name: Download Frontend Build
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: frontend-build
+  #         path: ./frontend/build
+
+  #     - name: Deploy to Server (e.g., using SSH or cloud provider CLI)
+  #       env:
+  #         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         SSH_HOST: ${{ secrets.PROD_SSH_HOST }}
+  #         SSH_USER: ${{ secrets.PROD_SSH_USER }}
+  #       run: |
+  #         echo "${SSH_PRIVATE_KEY}" > deploy_key
+  #         chmod 600 deploy_key
+  #         # Example: Copy files and restart Docker services on remote server
+  #         ssh -i deploy_key -o StrictHostKeyChecking=no ${SSH_USER}@${SSH_HOST} "
+  #           cd /path/to/your/app
+  #           # Copy updated backend/frontend files from GH Actions workspace to remote
+  #           # rsync -avz --exclude 'node_modules' ./backend/dist ${SSH_USER}@${SSH_HOST}:/path/to/your/app/backend/dist
+  #           # rsync -avz ./frontend/build ${SSH_USER}@${SSH_HOST}:/path/to/your/app/frontend/build
+  #           docker-compose pull # Pull new images if you're building/pushing to a registry
+  #           docker-compose up -d --build # Rebuild and restart services
+  #         "
+```
+
+---
+
+### **Performance Testing (Example with k6)**
+
+#### `k6_performance_test.js`
+```javascript
