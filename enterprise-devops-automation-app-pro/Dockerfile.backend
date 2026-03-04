@@ -1,0 +1,21 @@
+# Use a Node.js 18 Alpine image for smaller size
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json first to leverage Docker cache
+COPY server/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application code
+COPY server/ .
+
+# Expose the port the app runs on
+EXPOSE 5000
+
+# Command to run the application (in production, use 'npm start')
+# For development, this will be overridden by docker-compose.yml
+CMD ["npm", "start"]

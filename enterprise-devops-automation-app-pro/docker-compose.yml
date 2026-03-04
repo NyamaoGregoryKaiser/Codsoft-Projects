@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    command: redis-server --requirepass ${REDIS_PASS}
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "AUTH", "${REDIS_PASS}", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: ../Dockerfile.backend
+    container_name: ecommerce_backend
+    environment:
+      NODE_ENV: development # Can be overridden by prod deployment
+      PORT: ${BACKEND_PORT}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASS}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      LOG_LEVEL: ${LOG_LEVEL}
+      CLIENT_URL: http://localhost:${CLIENT_PORT} # For CORS
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./server:/app # Mount the server directory for hot-reloading in development
+      - /app/node_modules # Exclude node_modules from host mount
+    restart: unless-stopped
+    command: sh -c "npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && npm run dev" # Run migrations, seed and then start in dev
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: ../Dockerfile.frontend
+      args:
+        REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    container_name: ecommerce_frontend
+    environment:
+      NODE_ENV: development # Can be overridden
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    ports:
+      - "${CLIENT_PORT}:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./client:/app # Mount client directory for hot-reloading in development
+      - /app/node_modules # Exclude node_modules from host mount
+    restart: unless-stopped
+    command: npm start # React dev server
+
+volumes:
+  postgres_data:
+  redis_data:
+
+# Network configuration (optional but good for explicit control)
+networks:
+  default:
+    name: ecommerce_network
