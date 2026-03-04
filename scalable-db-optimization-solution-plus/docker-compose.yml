@@ -1,0 +1,55 @@
+```yaml
+version: '3.8'
+
+services:
+  optidb_postgres:
+    image: postgres:15-alpine
+    container_name: optidb_postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-optidb}
+      POSTGRES_USER: ${DB_USER:-optidb_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-optidb_password}
+    volumes:
+      - optidb_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local access if needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-optidb_user} -d ${DB_NAME:-optidb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  optidb_app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: optidb_app
+    ports:
+      - "18080:18080"
+    environment:
+      # Pass through environment variables from host or .env
+      DB_HOST: optidb_postgres # Service name within Docker network
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-optidb}
+      DB_USER: ${DB_USER:-optidb_user}
+      DB_PASSWORD: ${DB_PASSWORD:-optidb_password}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY_SECONDS: ${JWT_EXPIRY_SECONDS:-3600}
+      SERVER_PORT: ${SERVER_PORT:-18080}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TARGET_DB_CONN_TIMEOUT_MS: ${TARGET_DB_CONN_TIMEOUT_MS:-5000}
+      TARGET_DB_MAX_CONN: ${TARGET_DB_MAX_CONN:-5}
+    depends_on:
+      optidb_postgres:
+        condition: service_healthy # Wait for PostgreSQL to be healthy
+    # Enable hot reloading for development (optional, requires additional tools like watchman or recompiling)
+    # volumes:
+    #   - ./src:/app/src
+    #   - ./CMakeLists.txt:/app/CMakeLists.txt
+    #   - ./docker:/app/docker
+    #   - ./db_migrations:/app/db_migrations
+    # command: bash -c "cmake -DCMAKE_BUILD_TYPE=Debug . && make -j$(nproc) && /usr/local/bin/entrypoint.sh ./OptiDB" # For dev rebuild
+
+volumes:
+  optidb_data:
+```
