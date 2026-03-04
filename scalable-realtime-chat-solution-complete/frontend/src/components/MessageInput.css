@@ -1,0 +1,49 @@
+```css
+.message-input-form {
+  display: flex;
+  padding: 1rem;
+  background-color: #2f3136; /* Darker background for input area */
+  border-top: 1px solid #36393f;
+}
+
+.message-input-field {
+  flex-grow: 1;
+  padding: 0.75rem 1rem;
+  border: 1px solid #4f545c;
+  border-radius: 8px;
+  background-color: #40444b; /* Input field background */
+  color: white;
+  font-size: 1rem;
+  outline: none; /* Remove default focus outline */
+  margin-right: 0.5rem;
+}
+
+.message-input-field::placeholder {
+  color: #99aab5;
+}
+
+.message-input-field:focus {
+  border-color: #7289da; /* Highlight border on focus */
+}
+
+.message-send-button {
+  background-color: #7289da; /* Discord brand color for send button */
+  color: white;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.message-send-button:hover {
+  background-color: #6272c7; /* Darker shade on hover */
+}
+
+.message-send-button:disabled {
+  background-color: #5b6271;
+  cursor: not-allowed;
+}
+```

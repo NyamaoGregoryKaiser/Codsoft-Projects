@@ -1,0 +1,39 @@
+graph TD
+    A[Client - React App] -- HTTP/REST --> B(Backend - Node.js/Express)
+    A -- WebSocket/Socket.IO --> B
+    B -- Prisma ORM --> C[Database - PostgreSQL]
+    B -- Cache Reads/Writes --> D[Cache - Redis]
+
+    subgraph Backend Services
+        B1[Auth/User Service]
+        B2[Channel Service]
+        B3[Message Service]
+        B4[WebSocket Handler]
+        B5[Middleware - Auth, Log, Error, Rate Limit]
+    end
+
+    B --> B1
+    B --> B2
+    B --> B3
+    B --> B4
+    B --> B5
+
+    B1 --> C
+    B2 --> C
+    B3 --> C
+    B4 --> C
+    B5 -- Logs --> E[Logging Service/File]
+
+    subgraph Client Components
+        A1[Login/Register]
+        A2[Chat List]
+        A3[Chat Window]
+        A4[Message Input]
+        A5[User Profile]
+    end
+
+    A --> A1
+    A --> A2
+    A --> A3
+    A --> A4
+    A --> A5

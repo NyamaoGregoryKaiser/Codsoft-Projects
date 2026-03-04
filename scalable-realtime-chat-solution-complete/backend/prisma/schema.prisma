@@ -1,0 +1,73 @@
+```prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(uuid())
+  username  String    @unique
+  email     String    @unique
+  password  String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  memberships ChannelMembership[]
+  messages    Message[]
+  channels    Channel[] // Channels created by this user
+
+  @@map("users")
+}
+
+model Channel {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isPrivate   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  creatorId   String // ID of the user who created this channel
+  creator     User    @relation(fields: [creatorId], references: [id])
+
+  memberships ChannelMembership[]
+  messages    Message[]
+
+  @@map("channels")
+}
+
+model ChannelMembership {
+  id        String   @id @default(uuid())
+  userId    String
+  channelId String
+  joinedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId]) // A user can only be a member of a channel once
+  @@map("channel_memberships")
+}
+
+model Message {
+  id        String    @id @default(uuid())
+  content   String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id])
+
+  channelId String
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+```

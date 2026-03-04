@@ -1,0 +1,123 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Set up PostgreSQL for Backend Tests
+        uses: Harmonize-IO/action-setup-postgres@v1
+        with:
+          postgres-version: '14'
+          database-name: 'test_db'
+          user: 'test_user'
+          password: 'test_password'
+          port: 5432
+
+      - name: Set up Backend Test Environment Variables
+        run: |
+          echo "DATABASE_URL=postgresql://test_user:test_password@localhost:5432/test_db?schema=public" >> $GITHUB_ENV
+          echo "JWT_SECRET=testsecret" >> $GITHUB_ENV
+          echo "NODE_ENV=test" >> $GITHUB_ENV
+        working-directory: ./backend
+
+      - name: Run Prisma Migrations for Tests
+        run: npx prisma migrate deploy
+        working-directory: ./backend
+
+      - name: Run Backend Tests
+        run: npm test
+        working-directory: ./backend
+
+      - name: Upload Backend Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage-report
+          path: backend/coverage
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Set up Frontend Test Environment Variables
+        run: |
+          echo "REACT_APP_BACKEND_API_URL=http://localhost:5000/api" >> $GITHUB_ENV
+          echo "REACT_APP_SOCKET_URL=http://localhost:5000" >> $GITHUB_ENV
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage
+        working-directory: ./frontend
+
+      - name: Upload Frontend Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend, build-and-test-frontend] # Ensure tests pass before deploying
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main branch
+    environment: production # Use GitHub Environments for production secrets
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+      SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      DOCKER_COMPOSE_PATH: '/path/to/your/app/on/server' # Path to your docker-compose.yml on the server
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USERNAME }}
+          key: ${{ env.SSH_KEY }}
+          script: |
+            cd ${{ env.DOCKER_COMPOSE_PATH }}
+            git pull origin main
+            # Ensure .env files are updated on the server or managed via external secret management
+            # Rebuild images
+            docker-compose build --no-cache
+            # Redeploy services
+            docker-compose up -d --force-recreate --remove-orphans
+            echo "Deployment completed successfully!"
+```

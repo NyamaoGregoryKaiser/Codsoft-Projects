@@ -1,0 +1,69 @@
+```css
+.channel-card {
+  background-color: #36393f; /* Discord-like dark background */
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  color: #dcddde; /* Light grey text */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.channel-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.channel-card-link {
+  text-decoration: none;
+  color: inherit;
+  flex-grow: 1;
+}
+
+.channel-card-name {
+  margin: 0 0 0.5rem 0;
+  color: #7289da; /* Discord brand color */
+  font-size: 1.25rem;
+}
+
+.channel-card-description {
+  font-size: 0.9rem;
+  color: #b9bbbe;
+  margin-bottom: 0.8rem;
+}
+
+.channel-card-meta {
+  font-size: 0.8rem;
+  color: #99aab5;
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto; /* Pushes meta to the bottom if content grows */
+}
+
+.channel-card-private {
+  background-color: #f04747; /* Red for private */
+  color: white;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.channel-card-join-button {
+  background-color: #43b581; /* Green for join */
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 1rem;
+  align-self: flex-start; /* Align button to start */
+  transition: background-color 0.3s ease;
+}
+
+.channel-card-join-button:hover {
+  background-color: #3ca36d;
+}
+```

@@ -1,0 +1,40 @@
+```dockerfile
+# Stage 1: Build the TypeScript application
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+COPY backend/package*.json ./
+RUN npm install
+
+COPY backend/tsconfig.json ./
+COPY backend/prisma ./prisma/
+COPY backend/src ./src/
+
+# Generate Prisma client for production build
+RUN npx prisma generate
+
+# Build the TypeScript code
+RUN npm run build
+
+# Stage 2: Run the production application
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install production dependencies only
+COPY backend/package*.json ./
+RUN npm install --only=production
+
+# Copy built application and Prisma files from the builder stage
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY backend/.env.example ./.env # Use example for production or manage via orchestrator
+
+# Ensure prisma client is generated in the final image
+RUN npx prisma generate --data-proxy false
+
+EXPOSE 5000
+
+CMD ["node", "dist/server.js"]
+```

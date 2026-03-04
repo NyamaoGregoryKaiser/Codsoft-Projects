@@ -1,0 +1,91 @@
+```css
+.message-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  background-color: #2f3136; /* Message background */
+  color: #dcddde; /* Message text color */
+  max-width: 70%; /* Limit message bubble width */
+  align-self: flex-start; /* Default for others' messages */
+  position: relative;
+}
+
+.message-item.my-message {
+  align-self: flex-end; /* Align my messages to the right */
+  background-color: #40444b; /* Darker background for my messages */
+}
+
+.message-header {
+  display: flex;
+  align-items: baseline;
+  margin-bottom: 0.25rem;
+}
+
+.message-sender {
+  font-weight: bold;
+  color: #7289da; /* Sender name color */
+  margin-right: 0.5rem;
+}
+
+.message-item.my-message .message-sender {
+  color: #43b581; /* My sender name color */
+}
+
+.message-timestamp {
+  font-size: 0.75rem;
+  color: #99aab5; /* Timestamp color */
+}
+
+.message-content {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  word-wrap: break-word; /* Ensure long words break */
+}
+
+.message-edit-input {
+  width: calc(100% - 10px);
+  padding: 5px;
+  background-color: #202225;
+  border: 1px solid #4f545c;
+  border-radius: 4px;
+  color: white;
+}
+
+.message-actions {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: none; /* Hidden by default */
+  gap: 5px;
+  background-color: rgba(47, 49, 54, 0.8); /* Semi-transparent background for actions */
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+
+.message-item:hover .message-actions {
+  display: flex; /* Show on hover */
+}
+
+.message-action-button {
+  background: none;
+  border: none;
+  color: #99aab5;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 3px 5px;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
+}
+
+.message-action-button:hover {
+  background-color: #4f545c;
+  color: white;
+}
+
+.message-action-button.delete:hover {
+  background-color: #f04747; /* Red for delete */
+  color: white;
+}
+```
