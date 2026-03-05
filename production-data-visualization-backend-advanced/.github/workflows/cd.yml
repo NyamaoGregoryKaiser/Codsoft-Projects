@@ -1,0 +1,87 @@
+name: CD - Build & Deploy
+
+on:
+  push:
+    branches:
+      - main # Deploy on pushes to main branch
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy to Staging/Production
+    runs-on: ubuntu-latest
+    environment: production # Use GitHub Environments for secrets and deployments
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to DockerHub (or other registry)
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build backend Docker image
+      run: docker build -t your_docker_username/dataviz-backend:latest ./backend
+
+    - name: Push backend Docker image
+      run: docker push your_docker_username/dataviz-backend:latest
+
+    - name: Build frontend Docker image
+      run: docker build -t your_docker_username/dataviz-frontend:latest ./frontend
+
+    - name: Push frontend Docker image
+      run: docker push your_docker_username/dataviz-frontend:latest
+
+    # --- Deployment Steps (Conceptual) ---
+    - name: Deploy to Server (e.g., SSH, update docker-compose, restart services)
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SERVER_USER: ${{ secrets.PROD_SERVER_USER }}
+        SERVER_HOST: ${{ secrets.PROD_SERVER_HOST }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > deploy_key
+        chmod 600 deploy_key
+        ssh -i deploy_key -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_HOST} << 'EOF'
+          cd /path/to/your/app # Change to your application directory on the server
+          # Update docker-compose.yml with new image tags (if not using 'latest')
+          # Pull latest images
+          docker compose pull
+          # Restart services (downtime expected, use zero-downtime strategies for prod)
+          docker compose up -d --remove-orphans
+          echo "Deployment complete."
+        EOF
+      # For zero-downtime, consider Kubernetes deployment, blue/green, canary deployments.
+      # This example is a simple 'docker compose up' which causes downtime.
+
+    - name: Notify on deployment status (e.g., Slack, Email)
+      if: always() # Run even if previous steps fail
+      run: echo "Deployment status: ${{ job.status }}"
+
+```
+
+---
+
+## 4. Testing & Quality
+
+### Testing Strategy
+
+- **Unit Tests:** Focus on individual functions, methods, or components in isolation. Mock external dependencies.
+  - *Backend:* Controllers, services, utility functions.
+  - *Frontend:* React components, custom hooks, utility functions.
+- **Integration Tests:** Verify that different modules or services interact correctly.
+  - *Backend:* API endpoint tests, ensuring routes, middleware, and controllers work together and interact with the database.
+  - *Frontend:* Component interactions, Redux/Context state flow, API calls and rendering updates.
+- **API Tests:** (Covered by backend integration tests) Ensure API endpoints respond correctly, handle different inputs, and enforce authentication/authorization.
+- **Performance Tests:** (Conceptual for this project, due to complexity of full implementation)
+  - *Strategy:* Use tools like Apache JMeter, K6, or Locust.
+  - *Metrics:* Response time, throughput, error rate, resource utilization (CPU, memory) under load.
+  - *Targets:* Identify bottlenecks, test scalability limits.
+
+### Implementation Examples
+
+**`backend/tests/auth.test.js`**
+```javascript

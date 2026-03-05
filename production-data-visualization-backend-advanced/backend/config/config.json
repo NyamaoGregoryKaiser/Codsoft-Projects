@@ -1,0 +1,33 @@
+{
+  "development": {
+    "username": "datavizuser",
+    "password": "password",
+    "database": "dataviz",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "datavizuser",
+    "password": "password",
+    "database": "dataviz_test",
+    "host": "localhost",
+    "port": 5433,
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "datavizuser",
+    "password": "password",
+    "database": "dataviz_prod",
+    "host": "db",
+    "port": 5432,
+    "dialect": "postgres",
+    "logging": false,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
+  }
+}

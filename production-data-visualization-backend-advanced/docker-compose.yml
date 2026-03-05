@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: dataviz_db
+    restart: unless-stopped
+    env_file:
+      - .env # Use .env for database credentials
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432" # Expose DB port for local access/tools
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dataviz_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override DB_HOST to use the Docker service name
+      DB_HOST: db
+      # Ensure frontend URL is correct for CORS
+      FRONTEND_URL: ${FRONTEND_URL}
+      # Make sure all other relevant env vars are passed
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app:delegated # Mount for live reload in dev, remove for prod
+      - /app/node_modules # Keep node_modules inside container, important for nodemon
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB to be healthy
+    command: sh -c "npm install && npx sequelize-cli db:migrate && npm run seed && npm run dev" # For dev with nodemon, seed.js includes `sequelize.sync({force:true})`
+    # For production, consider `npm start` and separate migration/seed steps
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dataviz_frontend
+    restart: unless-stopped
+    env_file:
+      - .env # Use .env for REACT_APP_API_BASE_URL
+    environment:
+      # If using Nginx proxy for frontend, REACT_APP_API_BASE_URL should point to the Nginx service's exposed backend endpoint, e.g., http://localhost/api
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Directly hit backend for dev, without Nginx proxy
+    ports:
+      - "3000:3000" # Frontend dev server port
+    volumes:
+      - ./frontend:/app:delegated # Mount for live reload in dev
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm start # For dev with react-scripts start
+    # For production, this would serve static assets built into the image by Nginx
+
+volumes:
+  db_data:
+```
+
+**`backend/Dockerfile`**
+```dockerfile

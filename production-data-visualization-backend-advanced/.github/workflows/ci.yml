@@ -1,0 +1,117 @@
+name: CI/CD - Test
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: dataviz_test
+          POSTGRES_USER: datavizuser
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5433:5432 # Map to a different port for testing
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install backend dependencies
+      run: npm install
+      working-directory: ./backend
+
+    - name: Wait for PostgreSQL to be ready
+      run: |
+        until pg_isready -h localhost -p 5433 -U datavizuser -d dataviz_test; do
+          echo "Waiting for PostgreSQL to start..."
+          sleep 2
+        done
+      working-directory: ./backend
+
+    - name: Run backend migrations and seed
+      env:
+        NODE_ENV: test
+        DB_HOST: localhost
+        DB_PORT: 5433
+        DB_NAME: dataviz_test
+        DB_USER: datavizuser
+        DB_PASSWORD: password
+      run: |
+        npx sequelize-cli db:create || true # Create DB if it doesn't exist
+        npx sequelize-cli db:migrate
+        node src/seeders/seed.js # Ensure seeders run without force:true in prod, seed for test data
+      working-directory: ./backend
+
+    - name: Run backend tests
+      env:
+        NODE_ENV: test
+        DB_HOST: localhost
+        DB_PORT: 5433
+        DB_NAME: dataviz_test
+        DB_USER: datavizuser
+        DB_PASSWORD: password
+        JWT_SECRET: test_secret
+      run: npm test
+      working-directory: ./backend
+
+    - name: Upload backend coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: backend-coverage
+        path: backend/coverage/lcov.info
+
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install frontend dependencies
+      run: npm install
+      working-directory: ./frontend
+
+    - name: Run frontend tests
+      run: npm test -- --watchAll=false
+      working-directory: ./frontend
+
+    - name: Upload frontend coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-coverage
+        path: frontend/coverage/lcov-report
+
+```
+
+**`.github/workflows/cd.yml`** (Continuous Deployment - Build and Deploy)
+*Note: This is a placeholder. Real deployment involves cloud providers (AWS ECS/EKS, Azure AKS, GCP GKE), Docker registries, and more complex orchestration.*
+```yaml
