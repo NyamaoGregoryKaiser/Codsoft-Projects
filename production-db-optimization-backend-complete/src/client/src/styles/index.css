@@ -1,0 +1,72 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+#root {
+  min-height: 100vh;
+}
+/* General Ant Design overrides */
+.ant-layout-header {
+  height: 64px;
+  line-height: 64px;
+  padding: 0 16px;
+  background-color: #fff; /* Ensure header has a background */
+}
+
+/* Specific for Sider logo */
+.ant-layout-sider-children .logo-vertical {
+  height: 32px;
+  margin: 16px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.ant-layout-sider-children .ant-menu-dark.ant-menu-inline-collapsed > .ant-menu-item .anticon {
+  font-size: 16px; /* Adjust icon size in collapsed menu */
+}
+
+/* Custom styling for specific components or elements */
+.ant-statistic-content {
+  font-size: 24px !important; /* Make statistics more prominent */
+}
+
+.ant-tag.ant-tag-red {
+  background-color: #fff1f0;
+  border-color: #ffa39e;
+  color: #ff4d4f;
+}
+
+.ant-tag.ant-tag-orange {
+  background-color: #fff7e6;
+  border-color: #ffd591;
+  color: #fa8c16;
+}
+
+.ant-tag.ant-tag-blue {
+  background-color: #e6f7ff;
+  border-color: #91d5ff;
+  color: #1890ff;
+}
+
+.ant-tag.ant-tag-green {
+  background-color: #f6ffed;
+  border-color: #b7eb8f;
+  color: #52c41a;
+}
+.ant-card .ant-card-head {
+  padding: 0 16px;
+}
+.ant-card .ant-card-body {
+  padding: 16px;
+}
+```
+**`src/client/src/styles/theme.js`**
+```javascript

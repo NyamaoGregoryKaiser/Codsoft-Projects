@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: dbtune_postgres
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - dbtune_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose DBTune's internal DB port
+
+  # Optionally, a separate PostgreSQL for testing. Unused unless you manually configure client/server tests to use it.
+  # test_db:
+  #   image: postgres:14-alpine
+  #   container_name: dbtune_test_postgres
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     POSTGRES_USER: ${TEST_DB_USER}
+  #     POSTGRES_PASSWORD: ${TEST_DB_PASSWORD}
+  #     POSTGRES_DB: ${TEST_DB_NAME}
+  #   volumes:
+  #     - dbtune_test_pg_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5433:5432" # Expose test DB on a different port
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-builder # Build only the backend stage for dev
+    container_name: dbtune_backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db # Connect to the 'db' service in docker-compose network
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      NODE_ENV: development # Override for development environment
+      CLIENT_URL: http://localhost:3000
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    command: sh -c "yarn migrate:latest && yarn seed:run && yarn dev" # Run migrations, seeds, then start dev server
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-builder # Build only the frontend stage for dev
+    container_name: dbtune_frontend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api
+      NODE_ENV: development
+    volumes:
+      - ./src/client:/app/client:delegated # Mount for live reload
+      - /app/client/node_modules # Prevent node_modules from being overwritten by host
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    command: yarn start # Start React dev server
+
+volumes:
+  dbtune_pg_data:
+  dbtune_test_pg_data: # If you decide to use the test_db service
+```
+*(Note: For production `docker-compose.yml`, you'd use the full multi-stage build, remove dev mounts/commands, and possibly add a reverse proxy like Nginx.)*
+
+**`package.json` (Root - simplified for monorepo concept)**
+```json

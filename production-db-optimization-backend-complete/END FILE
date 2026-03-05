@@ -1,0 +1,8 @@
+```
+
+**Performance Tests (K6/Artillery - example config only)**
+
+I will provide a skeleton for K6. A full K6 script involves more setup (like reading tokens, handling multiple endpoints), but this illustrates the structure.
+
+**`perf-tests/k6_load_test.js`**
+```javascript

@@ -1,0 +1,31 @@
+{
+  "name": "dbtune",
+  "version": "1.0.0",
+  "description": "A Database Performance Monitoring and Optimization Assistant",
+  "main": "index.js",
+  "scripts": {
+    "start:backend": "cd src/server && yarn dev",
+    "start:frontend": "cd src/client && yarn start",
+    "install:backend": "cd src/server && yarn install",
+    "install:frontend": "cd src/client && yarn install",
+    "install:all": "yarn install:backend && yarn install:frontend",
+    "dev": "docker-compose up --build",
+    "build:docker": "docker build -t dbtune-app .",
+    "migrate:latest": "cd src/server && yarn migrate:latest",
+    "seed:run": "cd src/server && yarn seed:run",
+    "test:backend": "cd src/server && yarn test",
+    "test:frontend": "cd src/client && yarn test"
+  },
+  "keywords": [
+    "database",
+    "optimization",
+    "performance",
+    "react",
+    "node",
+    "express",
+    "postgresql",
+    "fullstack"
+  ],
+  "author": "AI Assistant",
+  "license": "MIT"
+}
