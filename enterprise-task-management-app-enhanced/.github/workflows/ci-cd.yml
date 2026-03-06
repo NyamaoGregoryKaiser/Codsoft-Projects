@@ -1,0 +1,183 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Wait for Postgres to be ready
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client && pg_isready -h localhost -p 5432 -U testuser -d testdb
+
+      - name: Wait for Redis to be ready
+        run: |
+          REDIS_HOST="localhost"
+          REDIS_PORT="6379"
+          echo "Waiting for Redis to be ready at $REDIS_HOST:$REDIS_PORT..."
+          for i in $(seq 1 10); do
+            if nc -z $REDIS_HOST $REDIS_PORT; then
+              echo "Redis is ready!"
+              break
+            else
+              echo "Waiting for Redis... ($i/10)"
+              sleep 5
+            fi
+          done
+
+      - name: Run Backend Unit & Integration Tests
+        working-directory: ./backend
+        run: npm run test:cov
+        env:
+          NODE_ENV: test
+          PORT: 3001 # Use a different port for tests
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: testuser
+          DB_PASSWORD: testpassword
+          DB_DATABASE: testdb
+          SYNCHRONIZE_DB: true # Allow TypeORM to create schema for tests
+          LOGGING_DB: false
+          JWT_SECRET: testJwtSecret
+          JWT_EXPIRATION_TIME: 1h
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_TTL: 10 # 10 seconds for test cache
+          THROTTLE_TTL: 10
+          THROTTLE_LIMIT: 5
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./backend/coverage/lcov.info
+          fail_ci_if_error: true
+          verbose: true
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run Frontend Tests
+        working-directory: ./frontend
+        run: npm run test
+
+  build-and-push-docker:
+    name: Build & Push Docker Images
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    needs: [backend-test, frontend-test] # Ensure tests pass before building/pushing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: your-dockerhub-username/task-management-backend:latest
+          build-args: |
+            NODE_ENV=production
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: your-dockerhub-username/task-management-frontend:latest
+          build-args: |
+            VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }} # Use secret for production API URL
+
+  deploy:
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/main'
+    needs: [build-and-push-docker]
+    runs-on: self-hosted # Use a self-hosted runner on your server
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Pull and Restart Docker Compose
+        run: |
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d --remove-orphans
+        env:
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_DATABASE: ${{ secrets.DB_DATABASE }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRATION_TIME: ${{ secrets.JWT_EXPIRATION_TIME }}
+          REDIS_HOST: redis
+          REDIS_PORT: 6379
+          REDIS_TTL: 300
+          THROTTLE_TTL: 60
+          THROTTLE_LIMIT: 100
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+
+# Note: You would need a docker-compose.prod.yml that uses the pushed images
+# instead of building them, and has production-ready configurations (e.g., SSL for Nginx).
+# This example uses a simplified `docker compose pull` on the self-hosted runner.
