@@ -1,0 +1,52 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app  # Mount current directory for development, remove in production for better performance
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - payment-processor-network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_processor}
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Persist database data
+    networks:
+      - payment-processor-network
+    ports:
+      - "5432:5432" # Expose for local development tools
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    networks:
+      - payment-processor-network
+    volumes:
+      - redisdata:/data # Persist redis data (e.g., rate limits, sessions)
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  payment-processor-network:
+    driver: bridge
+```

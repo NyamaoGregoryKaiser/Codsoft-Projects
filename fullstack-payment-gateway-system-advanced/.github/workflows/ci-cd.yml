@@ -1,0 +1,123 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: payment_processor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m venv .venv
+        . .venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        # Install Alembic for migrations in test environment
+        pip install alembic
+
+    - name: Create .env file for tests
+      run: |
+        echo "DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/payment_processor_test" >> .env
+        echo "SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> .env
+        echo "REDIS_HOST=localhost" >> .env
+        echo "REDIS_PORT=6379" >> .env
+        echo "MOCK_GATEWAY_SUCCESS_RATE=0.9" >> .env
+        echo "MOCK_GATEWAY_PROCESSING_DELAY_SECONDS=0" >> .env
+
+    - name: Wait for PostgreSQL and Redis to be ready
+      run: |
+        dockerize -wait tcp://localhost:5432 -timeout 1m
+        dockerize -wait tcp://localhost:6379 -timeout 1m
+      # You might need to install `dockerize` if not available: `apt-get install -y dockerize` or use a different wait strategy
+
+    - name: Run Alembic Migrations
+      run: |
+        . .venv/bin/activate
+        alembic upgrade head
+
+    - name: Run Linting
+      run: |
+        . .venv/bin/activate
+        pip install pre-commit # Install pre-commit for linting checks
+        pre-commit run --all-files
+
+    - name: Run Tests
+      run: |
+        . .venv/bin/activate
+        pytest --cov=app --cov-report=xml --cov-report=term-missing
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }} # Recommended to set this secret
+        files: ./coverage.xml
+        fail_ci_if_error: true # Optional: don't fail CI if there's an error uploading coverage reports
+        verbose: true # Optional: enable verbose logging for easier debugging
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    environment: production # Define a GitHub Environment for production deployments
+    steps:
+    - name: Deploy to Production
+      # This is a placeholder for your actual deployment steps.
+      # This could involve:
+      # - Building Docker images and pushing to a registry (e.g., ECR, Docker Hub)
+      # - Updating Kubernetes deployments (e.g., using kubectl, Helm, ArgoCD)
+      # - Deploying to a PaaS (e.g., Heroku, Render)
+      # - SSHing to a server and running deployment scripts
+      run: |
+        echo "Deploying application to production..."
+        echo "Replace this with actual deployment commands, e.g., using AWS ECR/ECS, Kubernetes, or other cloud provider tools."
+        # Example for Docker login and push (requires secrets for DOCKER_USERNAME, DOCKER_PASSWORD)
+        # echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+        # docker build -t your-docker-repo/payment-processor:${{ github.sha }} .
+        # docker push your-docker-repo/payment-processor:${{ github.sha }}
+        #
+        # Example for Kubernetes deployment:
+        # kubectl config use-context your-kube-context
+        # kubectl set image deployment/payment-processor payment-processor=your-docker-repo/payment-processor:${{ github.sha }}
+        echo "Deployment complete (simulated)."
+```
