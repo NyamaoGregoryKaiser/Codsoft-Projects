@@ -1,0 +1,231 @@
+```css
+.task-detail-page {
+  padding: 20px;
+}
+
+.task-detail-page .back-link {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #007bff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.task-detail-page .back-link:hover {
+  text-decoration: underline;
+}
+
+.task-detail-page h1 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 2.2em;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.task-detail-page h1 .task-status-todo,
+.task-detail-page h1 .task-status-in-progress,
+.task-detail-page h1 .task-status-done,
+.task-detail-page h1 .task-status-blocked {
+  font-size: 0.6em;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-weight: normal;
+  color: white; /* Ensure text is white */
+}
+
+/* Specific background for status tags */
+.task-detail-page h1 .task-status-todo { background-color: #6c757d; }
+.task-detail-page h1 .task-status-in-progress { background-color: #007bff; }
+.task-detail-page h1 .task-status-done { background-color: #28a745; }
+.task-detail-page h1 .task-status-blocked { background-color: #dc3545; }
+
+
+.task-detail-page p {
+  margin-bottom: 10px;
+  color: #555;
+  font-size: 1.1em;
+}
+
+.task-detail-page p strong {
+  color: #333;
+}
+
+.task-detail-page .task-priority-low {
+  background-color: #e0f7fa;
+  color: #00796b;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.task-detail-page .task-priority-medium {
+  background-color: #fff3cd;
+  color: #e65100;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.task-detail-page .task-priority-high {
+  background-color: #fbe9e7;
+  color: #d84315;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.task-edit-form {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+  margin-bottom: 30px;
+}
+
+.task-edit-form .form-group {
+  margin-bottom: 15px;
+}
+
+.task-edit-form .form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #333;
+}
+
+.task-edit-form input[type="text"],
+.task-edit-form textarea,
+.task-edit-form select,
+.task-edit-form input[type="date"] {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 1em;
+  box-sizing: border-box;
+}
+
+.task-edit-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.task-edit-form .form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.task-edit-form .form-actions button {
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.2s ease;
+}
+
+.task-edit-form .form-actions button[type="submit"] {
+  background-color: #007bff;
+  color: white;
+}
+
+.task-edit-form .form-actions button[type="submit"]:hover {
+  background-color: #0056b3;
+}
+
+.task-edit-form .form-actions button:not([type="submit"]) {
+  background-color: #6c757d;
+  color: white;
+}
+
+.task-edit-form .form-actions button:not([type="submit"]):hover {
+  background-color: #5a6268;
+}
+
+.edit-btn, .delete-btn {
+  margin-right: 10px;
+  margin-top: 15px;
+  padding: 8px 15px;
+  border-radius: 5px;
+  font-size: 0.9em;
+}
+
+.edit-btn {
+  background-color: #ffc107;
+  color: #333;
+}
+.edit-btn:hover {
+  background-color: #e0a800;
+}
+
+.delete-btn {
+  background-color: #dc3545;
+}
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+
+.task-comments-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 30px;
+  margin-top: 30px;
+}
+
+.task-comments-section h2 {
+  color: #34495e;
+  margin-top: 0;
+  margin-bottom: 25px;
+  font-size: 1.8em;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 10px;
+}
+
+.comments-list {
+  margin-bottom: 20px;
+}
+
+.comment-item {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 5px;
+  padding: 15px;
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.comment-item .comment-author {
+  font-size: 0.9em;
+  color: #6c757d;
+  margin-bottom: 5px;
+}
+
+.comment-item .comment-content {
+  font-size: 1em;
+  color: #343a40;
+  margin-bottom: 0;
+}
+
+.comment-item .delete-comment-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.75em;
+  transition: background-color 0.2s ease;
+}
+
+.comment-item .delete-comment-btn:hover {
+  background-color: #c82333;
+}
+```

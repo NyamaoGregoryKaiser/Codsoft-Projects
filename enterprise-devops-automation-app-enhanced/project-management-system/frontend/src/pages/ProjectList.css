@@ -1,0 +1,79 @@
+```css
+.project-list-page {
+  padding: 20px;
+}
+
+.project-list-page h1 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #2c3e50;
+  font-size: 2.5em;
+}
+
+.create-project-section,
+.existing-projects-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 30px;
+  margin-bottom: 30px;
+}
+
+.create-project-section h2,
+.existing-projects-section h2 {
+  color: #34495e;
+  margin-top: 0;
+  margin-bottom: 25px;
+  font-size: 1.8em;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 10px;
+}
+
+.create-project-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.create-project-form input[type="text"],
+.create-project-form textarea {
+  padding: 12px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 1em;
+  box-sizing: border-box;
+}
+
+.create-project-form textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.create-project-form button {
+  background-color: #28a745;
+  color: white;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1.1em;
+  transition: background-color 0.2s ease;
+}
+
+.create-project-form button:hover {
+  background-color: #218838;
+}
+
+.project-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.project-list-page p {
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
+}
+```

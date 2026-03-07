@@ -1,0 +1,92 @@
+```css
+.task-card {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-left: 5px solid; /* For status indication */
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.1s ease-in-out;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.task-card h4 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1.2em;
+}
+
+.task-card h4 a {
+  color: #343a40;
+  text-decoration: none;
+}
+
+.task-card h4 a:hover {
+  text-decoration: underline;
+}
+
+.task-card .task-description {
+  color: #6c757d;
+  font-size: 0.85em;
+  margin-bottom: 10px;
+}
+
+.task-card .task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.8em;
+  color: #868e96;
+}
+
+.task-card .task-meta span {
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* Task Status Colors */
+.task-status-todo {
+  background-color: #6c757d; /* Grey */
+  color: white;
+  border-left-color: #6c757d;
+}
+
+.task-status-in-progress {
+  background-color: #007bff; /* Blue */
+  color: white;
+  border-left-color: #007bff;
+}
+
+.task-status-done {
+  background-color: #28a745; /* Green */
+  color: white;
+  border-left-color: #28a745;
+}
+
+.task-status-blocked {
+  background-color: #dc3545; /* Red */
+  color: white;
+  border-left-color: #dc3545;
+}
+
+/* Task Priority Colors */
+.task-priority-low {
+  background-color: #e0f7fa;
+  color: #00796b;
+}
+
+.task-priority-medium {
+  background-color: #fff3cd;
+  color: #e65100;
+}
+
+.task-priority-high {
+  background-color: #fbe9e7;
+  color: #d84315;
+}
+```

@@ -1,0 +1,74 @@
+```yaml
+version: '3.8'
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        REACT_APP_API_URL: http://localhost/api # Frontend will use Nginx to proxy /api requests
+    container_name: pms_nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - pms-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: pms_backend
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgres://pms_user:pms_password@db:5432/pms_db
+      JWT_SECRET: supersecretkeythatshouldbepulledfromenv # Use strong, env-variable in production
+      JWT_ACCESS_EXPIRATION_MINUTES: 30
+      JWT_REFRESH_EXPIRATION_DAYS: 30
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: # Leave empty if no password
+    depends_on:
+      - db
+      - redis
+    networks:
+      - pms-network
+    volumes:
+      - ./backend:/app # Mount for live reload in dev
+      - /app/node_modules # Exclude node_modules from host mount
+
+  db:
+    image: postgres:13-alpine
+    container_name: pms_db
+    environment:
+      POSTGRES_DB: pms_db
+      POSTGRES_USER: pms_user
+      POSTGRES_PASSWORD: pms_password
+    ports:
+      - "5432:5432" # Expose for local DB clients if needed
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - pms-network
+
+  redis:
+    image: redis:6-alpine
+    container_name: pms_redis
+    ports:
+      - "6379:6379" # Expose for local Redis clients if needed
+    volumes:
+      - redis_data:/data
+    networks:
+      - pms-network
+
+networks:
+  pms-network:
+    driver: bridge
+
+volumes:
+  pg_data:
+  redis_data:
+```

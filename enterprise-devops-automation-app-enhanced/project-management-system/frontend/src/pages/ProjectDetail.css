@@ -1,0 +1,155 @@
+```css
+.project-detail-page {
+  padding: 20px;
+}
+
+.project-detail-page h1 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  font-size: 2.2em;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.project-detail-page h1 .project-status-pending,
+.project-detail-page h1 .project-status-active,
+.project-detail-page h1 .project-status-completed,
+.project-detail-page h1 .project-status-cancelled {
+  font-size: 0.6em;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-weight: normal;
+}
+
+.project-detail-page p {
+  margin-bottom: 10px;
+  color: #555;
+  font-size: 1.1em;
+}
+
+.project-detail-page p strong {
+  color: #333;
+}
+
+.delete-project-btn {
+  background-color: #dc3545;
+  margin-top: 15px;
+  margin-bottom: 30px;
+}
+
+.delete-project-btn:hover {
+  background-color: #c82333;
+}
+
+.project-members-section,
+.project-tasks-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 30px;
+  margin-top: 30px;
+}
+
+.project-members-section h2,
+.project-tasks-section h2 {
+  color: #34495e;
+  margin-top: 0;
+  margin-bottom: 25px;
+  font-size: 1.8em;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 10px;
+}
+
+.member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.member-item {
+  background-color: #e9ecef;
+  padding: 8px 12px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95em;
+  color: #333;
+}
+
+.remove-member-btn {
+  background-color: #dc3545;
+  padding: 5px 10px;
+  font-size: 0.8em;
+  border-radius: 3px;
+}
+
+.remove-member-btn:hover {
+  background-color: #c82333;
+}
+
+.add-member-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.add-member-form select {
+  flex-grow: 1;
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 1em;
+}
+
+.add-member-form button {
+  background-color: #007bff;
+  padding: 10px 15px;
+}
+
+.create-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 30px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #f8f9fa;
+}
+
+.create-task-form h3 {
+  margin-top: 0;
+  color: #34495e;
+  margin-bottom: 15px;
+}
+
+.create-task-form input[type="text"],
+.create-task-form textarea,
+.create-task-form select,
+.create-task-form input[type="date"] {
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 5px;
+  font-size: 1em;
+  box-sizing: border-box;
+}
+
+.create-task-form textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.create-task-form button {
+  background-color: #28a745;
+  padding: 10px 15px;
+}
+
+.task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 15px;
+}
+```

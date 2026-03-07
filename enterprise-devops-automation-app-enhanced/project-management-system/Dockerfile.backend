@@ -1,0 +1,32 @@
+```dockerfile
+# Stage 1: Build dependencies
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+COPY backend/package*.json ./
+RUN npm install --omit=dev
+
+# Stage 2: Production image
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy production dependencies from build stage
+COPY --from=build /app/node_modules ./node_modules
+COPY backend/package*.json ./
+
+# Copy application code
+COPY backend/src ./src
+COPY backend/migrations ./migrations
+COPY backend/seeders ./seeders
+COPY backend/config/config.json ./config/config.json
+
+# Copy .env.production if it exists, otherwise just expect environment variables
+# For production, it's better to pass env variables directly via orchestrator
+COPY backend/.env.example ./.env
+
+EXPOSE 3001
+
+CMD ["node", "src/server.js"]
+```
