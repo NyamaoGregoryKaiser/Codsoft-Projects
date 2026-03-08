@@ -1,0 +1,22 @@
+```css
+/* src/index.css or src/App.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles can go here if needed */
+/* For example, a global font or base colors */
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure full height for main content area */
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+```
+*Note: You would need to set up Tailwind CSS in your React project. If you are starting fresh, follow the Tailwind CSS installation guide for Create React App, which typically involves `npx tailwindcss init -p` and configuring `tailwind.config.js` and `src/index.css`.*

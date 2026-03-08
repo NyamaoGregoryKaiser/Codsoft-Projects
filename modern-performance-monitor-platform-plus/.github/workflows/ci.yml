@@ -1,0 +1,139 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_DB: pmsdb_test
+          POSTGRES_USER: pmsuser
+          POSTGRES_PASSWORD: pmspassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:6-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Create backend .env file for tests
+        run: |
+          echo "NODE_ENV=test" > ./backend/.env
+          echo "PORT=5000" >> ./backend/.env
+          echo "API_VERSION=v1" >> ./backend/.env
+          echo "FRONTEND_URL=http://localhost:3000" >> ./backend/.env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
+          echo "DB_HOST=localhost" >> ./backend/.env
+          echo "DB_PORT=5432" >> ./backend/.env
+          echo "DB_USER=pmsuser" >> ./backend/.env
+          echo "DB_PASSWORD=pmspassword" >> ./backend/.env
+          echo "DB_NAME=pmsdb_test" >> ./backend/.env
+          echo "REDIS_HOST=localhost" >> ./backend/.env
+          echo "REDIS_PORT=6379" >> ./backend/.env
+          echo "REDIS_PASSWORD=" >> ./backend/.env
+          echo "RATE_LIMIT_WINDOW_MS=60000" >> ./backend/.env
+          echo "RATE_LIMIT_MAX_REQUESTS=100" >> ./backend/.env
+          echo "CACHE_TTL_SECONDS=3600" >> ./backend/.env
+          echo "ADMIN_EMAIL=admin@example.com" >> ./backend/.env
+          echo "ADMIN_PASSWORD=adminpassword" >> ./backend/.env
+
+      - name: Wait for Postgres to be ready
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432 -U pmsuser; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+        working-directory: ./backend # Doesn't actually matter where this runs, but good practice
+
+      - name: Run Knex migrations
+        run: npm run migrate
+        working-directory: ./backend
+
+      - name: Run backend tests
+        run: npm test
+        working-directory: ./backend
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false # Run tests without watch mode
+        working-directory: ./frontend
+
+  build-docker-images:
+    needs: [backend-tests, frontend-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build backend Docker image
+        run: docker build -t performance-monitoring-backend:latest ./backend
+
+      - name: Build frontend Docker image
+        run: docker build -t performance-monitoring-frontend:latest ./frontend
+
+      # You would typically push these images to a Docker registry here
+      # - name: Log in to Docker Hub
+      #   uses: docker/login-action@v2
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+      # - name: Push backend image
+      #   run: docker push your-docker-hub-username/performance-monitoring-backend:latest
+      # - name: Push frontend image
+      #   run: docker push your-docker-hub-username/performance-monitoring-frontend:latest
+```
+*Note: The `JWT_SECRET` in the CI/CD workflow should be configured as a GitHub Secret for security.*

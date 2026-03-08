@@ -1,0 +1,69 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: pms_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pms_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pms-network
+
+  redis:
+    image: redis:6-alpine
+    container_name: pms_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - pms-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pms_backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - pms-network
+    command: ["./start.sh"] # Execute start.sh to run migrations/seeds then start the app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pms_frontend
+    restart: always
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - pms-network
+    # In production, you'd typically serve static assets, but for dev, we run the dev server
+    command: ["npm", "start"]
+
+networks:
+  pms-network:
+    driver: bridge
+
+volumes:
+  pms_db_data:
+```
