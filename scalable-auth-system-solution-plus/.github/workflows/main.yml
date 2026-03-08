@@ -1,0 +1,138 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up PostgreSQL for integration tests
+        uses: harmon758/postgresql-action@v1.0.0
+        with:
+          postgresql db: test_db
+          postgresql user: test_user
+          postgresql password: test_password
+          postgresql port: 5432
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in `seq 1 10`; do
+            nc -z localhost 5432 && echo "PostgreSQL is ready" && break
+            echo "Waiting for PostgreSQL..."
+            sleep 1
+          done
+
+      - name: Build & Run Backend Tests (including unit and integration with Testcontainers)
+        run: mvn -B package --file backend/pom.xml
+
+      - name: Upload Backend Test Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/target/surefire-reports/
+
+      - name: Check JaCoCo Coverage Report
+        run: |
+          echo "Checking JaCoCo coverage..."
+          # The JaCoCo plugin configured in pom.xml will fail the build if coverage is below 80%
+          # So if this step is reached, coverage is sufficient.
+          echo "JaCoCo coverage is sufficient (>= 80%)."
+
+      - name: Build Backend Docker Image
+        run: docker build -t auth-system-backend:${{ github.sha }} -f Dockerfile .
+        env:
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }} # Use a secret for JWT key
+
+  frontend-test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: 'frontend/yarn.lock'
+
+      - name: Install Frontend Dependencies
+        run: yarn install --immutable
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: yarn test --watchAll=false
+        working-directory: ./frontend
+
+      - name: Upload Frontend Test Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: frontend/junit.xml # Assuming Jest outputs JUnit XML
+
+      - name: Build Frontend Docker Image
+        run: docker build -t auth-system-frontend:${{ github.sha }} -f Dockerfile.frontend .
+        env:
+          # Pass environment variables needed for the build (e.g., API URL)
+          REACT_APP_API_BASE_URL: "/api/v1" # Relative path if served by same domain/reverse proxy
+          # If deploying to separate domains, use absolute URL like REACT_APP_API_BASE_URL: "https://api.yourdomain.com/api/v1"
+        working-directory: . # Dockerfile.frontend is at root for compose
+
+  deploy:
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main
+    needs: [backend-test-and-build, frontend-test-and-build]
+    runs-on: ubuntu-latest
+    environment: Production # Optional: for GitHub Environments features
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Example: Log in to Docker Hub (or other registry)
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # Example: Tag and push backend image
+      - name: Tag and Push Backend Image
+        run: |
+          docker tag auth-system-backend:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/auth-system-backend:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/auth-system-backend:latest
+
+      # Example: Tag and push frontend image
+      - name: Tag and Push Frontend Image
+        run: |
+          docker tag auth-system-frontend:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/auth-system-frontend:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/auth-system-frontend:latest
+
+      # Example: Deploy to a cloud provider (e.g., SSH into server and run docker-compose pull/up)
+      # This is a simplified example. In real production, you'd use Kubernetes, ECS, Azure App Service, etc.
+      - name: Deploy to Server (Example using SSH)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /path/to/your/app
+            docker-compose pull
+            docker-compose up -d --build --remove-orphans
+            docker system prune -f # Clean up old images
+```

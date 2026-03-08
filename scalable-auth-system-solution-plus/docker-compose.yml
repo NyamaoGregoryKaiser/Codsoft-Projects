@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: auth-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-auth_db}
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-auth_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-auth_db}
+      DB_USER: ${DB_USER:-user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      SPRING_PROFILES_ACTIVE: prod # Use 'prod' profile for better performance/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: auth-frontend
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80 (Nginx default)
+    environment:
+      # These variables will be injected into the React app at build time
+      # Make sure to prefix with REACT_APP_ if using create-react-app default env handling
+      # For custom webpack/vite, check their env variable handling
+      REACT_APP_API_BASE_URL: http://localhost:8080/api/v1
+    depends_on:
+      backend:
+        condition: service_started
+    restart: on-failure
+
+volumes:
+  pgdata:
+```
+
+#### `.github/workflows/main.yml`
+```yaml
