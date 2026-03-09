@@ -1,0 +1,37 @@
+```json
+{
+  "development": {
+    "username": "scraperhub_user",
+    "password": "scraperhub_password",
+    "database": "scraperhub_db",
+    "host": "db",
+    "dialect": "postgres",
+    "port": 5432,
+    "seederStorage": "sequelize"
+  },
+  "test": {
+    "username": "scraperhub_user",
+    "password": "scraperhub_password",
+    "database": "scraperhub_db_test",
+    "host": "db",
+    "dialect": "postgres",
+    "port": 5432,
+    "seederStorage": "sequelize"
+  },
+  "production": {
+    "username": "scraperhub_user",
+    "password": "scraperhub_password",
+    "database": "scraperhub_db",
+    "host": "db",
+    "dialect": "postgres",
+    "port": 5432,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    },
+    "seederStorage": "sequelize"
+  }
+}
+```

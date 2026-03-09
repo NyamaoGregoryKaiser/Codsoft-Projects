@@ -1,0 +1,91 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './backend/package-lock.json'
+
+      - name: Install backend dependencies
+        run: npm install --prefix ./backend
+
+      - name: Lint backend
+        run: npm run lint --prefix ./backend
+
+      - name: Start PostgreSQL (for integration tests)
+        run: docker-compose -f docker-compose.test.yml up -d db # Use a test-specific compose file
+
+      - name: Wait for PostgreSQL
+        run: sleep 10 # Give DB time to start up and be ready
+
+      - name: Run backend tests
+        env:
+          NODE_ENV: test
+          DB_NAME: scraperhub_db_test
+          DB_USER: scraperhub_user
+          DB_PASS: scraperhub_password
+          DB_HOST: localhost # When running directly on host, use localhost for DB_HOST
+          DB_PORT: 5432
+          JWT_SECRET: testsecret
+        run: npm test --prefix ./backend
+
+      - name: Stop PostgreSQL
+        if: always() # Run even if tests fail
+        run: docker-compose -f docker-compose.test.yml down
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: npm install --prefix ./frontend
+
+      - name: Lint frontend
+        run: npm run lint --prefix ./frontend # Assuming lint script exists
+
+      - name: Run frontend tests
+        run: npm test --prefix ./frontend -- --watchAll=false # Run all tests, not in watch mode
+
+  # Placeholder for build and deployment stages
+  # This typically involves building Docker images and pushing them to a registry,
+  # then deploying to a cloud provider (e.g., AWS EKS, Google Cloud Run, Azure Kubernetes)
+  # deploy:
+  #   needs: [backend-test, frontend-test]
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Build & Push Docker Images
+  #       # Steps to login to Docker registry, build and push images
+  #     - name: Deploy to Production
+  #       # Steps to deploy to your cloud provider, e.g., via kubectl, terraform, or specific CLI
+```

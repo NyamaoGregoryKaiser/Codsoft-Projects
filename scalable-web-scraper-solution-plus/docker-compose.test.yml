@@ -1,0 +1,18 @@
+```yaml
+version: '3.8'
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: scraperhub_test_db
+    environment:
+      POSTGRES_DB: scraperhub_db_test # Use test database name
+      POSTGRES_USER: scraperhub_user
+      POSTGRES_PASSWORD: scraperhub_password
+    ports:
+      - "5432:5432" # Expose for host access during CI tests
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+```

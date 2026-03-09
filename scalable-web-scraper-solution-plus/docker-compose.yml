@@ -1,0 +1,72 @@
+```yaml
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:14-alpine
+    container_name: scraperhub_db
+    restart: unless-stopped
+    env_files:
+      - ./backend/.env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend Service (Node.js/Express)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scraperhub_backend
+    restart: unless-stopped
+    env_files:
+      - ./backend/.env
+    environment:
+      # Explicitly set DB_HOST to 'db' (the service name) for internal Docker networking
+      DB_HOST: db
+      # This DATABASE_URL should match the internal service name
+      DATABASE_URL: "postgres://${DB_USER}:${DB_PASS}@db:5432/${DB_NAME}"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Preserve node_modules from being overwritten by host bind mount
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is healthy before starting backend
+    # Commands to run migrations and seeds could be here, or within the backend Dockerfile/entrypoint.
+    # For this project, server.js handles migrations for dev/test automatically.
+    # For production, `npm run db:migrate` would be part of CI/CD or a separate command.
+
+  # Frontend Service (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scraperhub_frontend
+    restart: unless-stopped
+    env_files:
+      - ./frontend/.env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Preserve node_modules
+    depends_on:
+      backend:
+        condition: service_started # Frontend needs backend to be started to make API calls
+
+volumes:
+  pgdata:
+```
