@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: scraper_db
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432" # Expose for local development/debugging
+    healthcheck:
+      test: ["CMD-HEALHTCHECK", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: scraper_redis
+    ports:
+      - "6379:6379" # Expose for local development/debugging
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scraper_backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    # The command is set in entrypoint.sh for 'web' service
+    # command: /usr/local/bin/gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scraper_celery_worker
+    env_file:
+      - ./backend/.env
+    command: celery_worker # This command is handled by entrypoint.sh
+    depends_on:
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started # Ensure backend is ready for task definition lookup
+
+  flower:
+    image: mher/flower:2.0
+    container_name: scraper_flower
+    env_file:
+      - ./backend/.env
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+    ports:
+      - "5555:5555" # Celery monitoring UI
+    depends_on:
+      redis:
+        condition: service_started
+      celery_worker:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    container_name: scraper_frontend
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:80" # Map host port 3000 to container's Nginx port 80
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+```
+---

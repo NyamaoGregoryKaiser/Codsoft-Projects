@@ -1,0 +1,127 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_scraper_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Set up backend .env for tests
+      working-directory: ./backend
+      run: |
+        echo "SECRET_KEY=testsecretkeyforciverylongandsecure" >> .env
+        echo "DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/test_scraper_db" >> .env
+        echo "REDIS_URL=redis://localhost:6379/0" >> .env
+        echo "CELERY_BROKER_URL=redis://localhost:6379/1" >> .env
+        echo "CELERY_RESULT_BACKEND=redis://localhost:6379/2" >> .env
+        echo "FIRST_SUPERUSER_EMAIL=ciadmin@example.com" >> .env
+        echo "FIRST_SUPERUSER_PASSWORD=cipassword" >> .env
+        echo "ACCESS_TOKEN_EXPIRE_MINUTES=5" >> .env
+        echo "BACKEND_CORS_ORIGINS=http://localhost:3000" >> .env
+        echo "RATE_LIMIT_PER_MINUTE=100/minute" >> .env
+
+    - name: Wait for PostgreSQL
+      uses: jakejarvis/wait-for-service-action@master
+      with:
+        host: localhost
+        port: 5432
+        timeout: 60
+
+    - name: Run Alembic Migrations
+      working-directory: ./backend
+      run: |
+        alembic init -t async # Initialize if not already done, for testing.
+        # Patch alembic.ini to use the test DB
+        sed -i "s|sqlalchemy.url = postgresql+psycopg2://user:password@localhost:5432/scraper_db|sqlalchemy.url = postgresql+psycopg2://user:password@localhost:5432/test_scraper_db|" alembic.ini
+        alembic upgrade head
+    
+    - name: Run Backend Tests
+      working-directory: ./backend
+      run: |
+        pytest --cov=app --cov-report=xml tests/
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./backend/coverage.xml
+        fail_ci_if_error: true
+        verbose: true
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+
+    # - name: Run Frontend Tests (if any)
+    #   working-directory: ./frontend
+    #   run: npm test -- --coverage
+    # Note: Frontend testing usually involves Jest/React Testing Library setup within the frontend
+    # This is a placeholder for future frontend specific tests.
+
+  # Placeholder for deployment job (e.g., to a cloud provider)
+  # deploy:
+  #   needs: [build-and-test-backend, build-frontend]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to Production
+  #       run: echo "Deployment steps here..."
+  #       # e.g., using SSH to trigger docker-compose pull/up on server, or deploying to a cloud service.
+```
+---
