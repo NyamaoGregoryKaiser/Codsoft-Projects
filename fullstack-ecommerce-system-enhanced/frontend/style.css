@@ -1,0 +1,85 @@
+```css
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.content-section {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.05);
+}
+
+h2, h3, h4 {
+    color: #0056b3;
+    margin-bottom: 15px;
+}
+
+.card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card-title {
+    color: #343a40;
+}
+
+.btn-primary, .btn-success, .btn-warning, .btn-danger {
+    border-radius: 5px;
+}
+
+.alert {
+    padding: 10px 15px;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeeba;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-color: #bee5eb;
+}
+
+.form-label {
+    font-weight: 500;
+}
+
+/* Specific styling for product images */
+.card-img-top {
+    width: 100%;
+    height: 200px; /* Fixed height for consistency */
+    object-fit: cover; /* Ensures image covers area without distortion */
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+```
