@@ -1,0 +1,144 @@
+```yaml
+# GitLab CI/CD Pipeline Configuration
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DOCKER_IMAGE_NAME: $CI_REGISTRY_IMAGE/mlops-core-service
+  DOCKER_IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  DOCKER_LATEST_TAG: latest
+
+.kaniko_template: &kaniko_build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile Dockerfile --destination $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG --destination $DOCKER_IMAGE_NAME:$DOCKER_LATEST_TAG
+
+build_and_push_docker_image:
+  stage: build
+  <<: *kaniko_build
+  tags:
+    - docker
+  only:
+    - main
+    - merge_requests
+
+# Unit Tests for C++
+unit_tests_cpp:
+  stage: test
+  image: gcc:12.2.0
+  before_script:
+    - apt-get update && apt-get install -y cmake libsqlite3-dev libssl-dev build-essential git
+    - cmake -B build -S .
+  script:
+    - cmake --build build --target mlops-unit-tests
+    - ./build/mlops-unit-tests --gtest_output="xml:${CI_PROJECT_DIR}/test_results/cpp_unit_tests.xml"
+  artifacts:
+    when: always
+    reports:
+      junit: test_results/cpp_unit_tests.xml
+    paths:
+      - test_results/
+  tags:
+    - shared
+
+# Integration Tests for API (Python)
+integration_tests_api:
+  stage: test
+  image: python:3.10-slim-buster
+  services:
+    - name: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} # Use the image built in the build stage
+      alias: mlops-backend-test
+  before_script:
+    - pip install -r requirements.txt
+    # Ensure the backend service is ready before tests start
+    - echo "Waiting for mlops-backend-test to start on port 18080..."
+    - apt-get update && apt-get install -y curl
+    - for i in $(seq 1 30); do curl -s http://mlops-backend-test:18080/health_check && break || sleep 1; done
+    - curl http://mlops-backend-test:18080/health_check # Verify it's up
+    - python scripts/db/full # Reset, migrate and seed the test database
+  script:
+    - pytest tests/integration/integration_test.py --junitxml=${CI_PROJECT_DIR}/test_results/api_integration_tests.xml
+  artifacts:
+    when: always
+    reports:
+      junit: test_results/api_integration_tests.xml
+    paths:
+      - test_results/
+  tags:
+    - shared
+
+# Performance Tests (Locust) - This would run against a deployed test environment, not directly in CI
+# For simplicity, we can run a quick check, or just define it conceptually.
+# A full performance test would target a dedicated perf environment.
+performance_tests:
+  stage: test
+  image: python:3.10-slim-buster
+  services:
+    - name: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+      alias: mlops-backend-perf
+  before_script:
+    - pip install -r requirements.txt
+    - apt-get update && apt-get install -y curl
+    - for i in $(seq 1 30); do curl -s http://mlops-backend-perf:18080/health_check && break || sleep 1; done
+    - curl http://mlops-backend-perf:18080/health_check
+    - python scripts/db/full # Reset, migrate and seed the test database
+  script:
+    # Run Locust in headless mode for a short duration
+    - locust -f scripts/perf/locustfile.py --host=http://mlops-backend-perf:18080 --users 5 --spawn-rate 1 --run-time 30s --html test_results/locust_report.html --exit-code-on-error 1
+  allow_failure: true # Performance tests can be configured to allow non-critical failures
+  artifacts:
+    when: always
+    paths:
+      - test_results/locust_report.html
+  tags:
+    - shared
+
+
+# Deployment to staging environment
+deploy_staging:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - echo "Deploying to staging environment..."
+    # Placeholder for actual deployment logic (e.g., Kubernetes, Docker Swarm, SSH to a VM)
+    # Example: kubectl apply -f kubernetes/staging.yaml
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - echo "Simulating deployment of $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG to staging."
+    # For a real deployment, you'd update a K8s deployment, restart a service on a VM, etc.
+    # Example: ssh user@staging.example.com "docker pull $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG && docker stop mlops-backend && docker rm mlops-backend && docker run -d --name mlops-backend -p 18080:18080 $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+    - echo "Deployment to staging complete."
+  environment:
+    name: staging
+    url: http://staging.example.com:18080
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Manual Deployment to production environment
+deploy_production:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - echo "Deploying to production environment..."
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker pull $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - echo "Simulating deployment of $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG to production."
+    - echo "Deployment to production complete."
+  environment:
+    name: production
+    url: http://prod.example.com:18080
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual # Manual approval for production deployment
+```

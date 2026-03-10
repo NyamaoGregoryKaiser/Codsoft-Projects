@@ -1,0 +1,16 @@
+```
+# For database migration script
+SQLAlchemy==2.0.25 # (optional, but good for more complex migrations)
+# For simple sqlite3, only built-in python modules are needed.
+# But adding a placeholder for a more robust DB management system.
+
+# For API integration tests
+requests==2.31.0
+
+# For performance tests (Locust)
+locust==2.18.0
+
+# For JWT generation utility
+PyJWT==2.8.0
+cryptography==41.0.7
+```

@@ -1,0 +1,58 @@
+```yaml
+version: '3.8'
+
+services:
+  mlops-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "18080:18080"
+    volumes:
+      - ./data:/app/data # Persist SQLite database
+      - ./logs:/app/logs # Persist application logs
+      - ./models:/app/models # Persist dummy model files
+      - ./config:/app/config # Mount config to allow external changes without rebuilding
+    environment:
+      # Example of overriding config via environment variables (requires app to read them)
+      # MLOPS_DB_PATH: /app/data/mlops_core.db
+      # MLOPS_JWT_SECRET: "another_super_secret_from_env"
+      # For this project, config is read from JSON. Env vars would be parsed in src/utils/Config.cpp.
+      # For simplicity, we assume default.json is used.
+      MLOPS_JWT_SECRET: "your_super_secret_jwt_key_here_for_prod_use_a_strong_one_and_env_var" # Make sure this matches config/default.json or is read by app
+    restart: unless-stopped
+    command: ["./mlops-core-service", "config/default.json"] # Explicitly pass config file path
+
+  # A conceptual frontend service (e.g., React/Vue/Angular)
+  # For this project, a full frontend is not implemented, but its service can be defined here.
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - mlops-backend
+  #   # command: npm start # Example command for a Node.js frontend
+
+  # A conceptual Prometheus/Grafana stack for monitoring (optional)
+  # prometheus:
+  #   image: prom/prometheus
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   command: --config.file=/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"
+
+  # grafana:
+  #   image: grafana/grafana
+  #   ports:
+  #     - "3001:3000"
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #   depends_on:
+  #     - prometheus
+
+volumes:
+  grafana-data:
+```
