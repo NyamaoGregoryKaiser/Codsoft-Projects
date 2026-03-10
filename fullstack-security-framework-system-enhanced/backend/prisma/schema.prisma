@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/models/prisma" // Output Prisma client to a specific folder
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  name      String
+  role      String    @default("user") // 'user' | 'admin'
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  tokens    Token[]
+  products  Product[] // Products created by this user (optional)
+
+  @@map("users")
+}
+
+model Product {
+  id          String    @id @default(uuid())
+  name        String
+  description String
+  price       Float
+  stock       Int
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("products")
+}
+
+model Token {
+  id        String    @id @default(uuid())
+  token     String    @unique // The JWT string itself
+  type      String    // 'REFRESH' | 'RESET_PASSWORD'
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("tokens")
+}
+
+// Add custom logic to Prisma Client for extended functionality
+// This is done via extensions in Prisma 5.x+
+// For older versions, this would be a separate utility.
+// Currently, we add a helper method directly to the model where it makes sense.
+// This is not a direct Prisma extension but a common pattern.
+// More advanced extensions (e.g., global middleware for Soft Deletes) require PrismaClient extensions.
+// For `isEmailTaken`, it's common to define it as a static method-like utility or on a service.
+// This is not a direct schema definition, but related to the model.
+// We'll define `isEmailTaken` in `backend/src/models/prisma.ts` by extending the PrismaClient type.
+```
+
+#### Migration Scripts (Example after `prisma migrate dev --name init`)
+
+You would run `npx prisma migrate dev --name init` to generate the initial migration.
+
+```sql

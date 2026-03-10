@@ -1,0 +1,116 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'backend/pnpm-lock.yaml'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Backend Dependencies
+        run: pnpm install --dir backend
+
+      - name: Run Backend Lint
+        run: pnpm lint --dir backend
+
+      - name: Run Backend Tests
+        run: pnpm test --dir backend
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/test_db?schema=public
+          JWT_SECRET: supersecretjwtkeyforci
+          JWT_ACCESS_EXPIRATION_MINUTES: 1
+          JWT_REFRESH_EXPIRATION_DAYS: 1
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        # Need a temporary test database and redis for integration tests
+        # For simplicity, unit tests might be run without DB. Integration tests would need docker-compose services.
+        # This example assumes unit tests only, or a mocked/in-memory DB for integration.
+        # For full integration tests, consider `services` block in workflow or separate job with docker-compose.
+
+      - name: Build Backend
+        run: pnpm build --dir backend
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: 'frontend/pnpm-lock.yaml'
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install Frontend Dependencies
+        run: pnpm install --dir frontend
+
+      - name: Run Frontend Lint
+        run: pnpm lint --dir frontend
+
+      - name: Run Frontend Tests
+        run: pnpm test --dir frontend -- --watchAll=false # Run tests once without watch
+
+      - name: Build Frontend
+        run: pnpm build --dir frontend
+
+  # deploy-backend-docker:
+  #   needs: [backend-ci, frontend-ci] # Ensure both pass before deployment
+  #   runs-on: ubuntu-latest
+  #   # This would be a more complex step involving pushing to a container registry
+  #   # and deploying to a cloud provider (e.g., AWS ECR/ECS, GCP GKE, Azure AKS)
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Build and push Backend Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./backend
+  #         push: true
+  #         tags: your-docker-username/secure-app-backend:latest
+  #     - name: Build and push Frontend Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./frontend
+  #         push: true
+  #         tags: your-docker-username/secure-app-frontend:latest
+  #     - name: Deploy to Cloud Provider (e.g., SSH to EC2 and run docker compose pull/up)
+  #       run: |
+  #         echo "Deployment steps go here..."
+  #         # Example: ssh -i key.pem user@your-server.com "cd /path/to/app && docker compose pull && docker compose up -d"
+```
+
+---
+
+### 4. Testing & Quality
+
+#### Backend Unit Tests (Jest)
+
+```typescript
