@@ -1,0 +1,23 @@
+#include <drogon/drogon.h>
+#include <iostream>
+
+int main() {
+    // Load config file
+    drogon::app().loadConfigFile("../config/config.json");
+
+    // Enable logging
+    drogon::app().setLogPath("./logs");
+    drogon::app().setLogLevel(trantor::Logger::LogLevel::kDebug);
+    std::cout << "Server starting on " << drogon::app().get  ("listen_ip")
+              << ":" << drogon::app().get("listen_port") << std::endl;
+    
+    // Set custom error handler
+    drogon::app().setCustomErrorHandler([](const drogon::HttpResponsePtr &resp) {
+        resp->setStatusCode(drogon::k500InternalServerError);
+        resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+        resp->setBody(R"({"code":500,"message":"Internal Server Error"})");
+    });
+
+    drogon::app().run();
+    return 0;
+}
