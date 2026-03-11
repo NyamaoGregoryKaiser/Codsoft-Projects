@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles here if needed */
+.react-grid-item.react-grid-placeholder {
+  background: #ccc !important;
+  opacity: 0.8;
+  border-radius: 8px;
+}
+.react-grid-item.react-draggable-dragging {
+  cursor: grabbing;
+}
+.react-grid-item.react-resizable {
+  background-color: #f0f0f0;
+  border: 1px dashed #999;
+}
+```
+
+```js
