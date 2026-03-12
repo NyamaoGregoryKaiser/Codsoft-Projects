@@ -1,0 +1,56 @@
+```json
+{
+  "name": "payment-processor-backend",
+  "version": "1.0.0",
+  "description": "Backend for a production-ready payment processing system",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "cross-env NODE_ENV=test jest --detectOpenHandles --forceExit --coverage",
+    "lint": "eslint src/",
+    "migrate:make": "knex migrate:make -x js --knexfile src/db/knexfile.js",
+    "migrate:latest": "knex migrate:latest --knexfile src/db/knexfile.js",
+    "migrate:rollback": "knex migrate:rollback --knexfile src/db/knexfile.js",
+    "seed:make": "knex seed:make -x js --knexfile src/db/knexfile.js",
+    "seed:run": "knex seed:run --knexfile src/db/knexfile.js"
+  },
+  "keywords": [],
+  "author": "AI Developer",
+  "license": "MIT",
+  "dependencies": {
+    "apicache": "^1.6.3",
+    "axios": "^1.6.8",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "joi": "^17.12.3",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "pg": "^8.11.5",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/",
+      "src/server.js",
+      "src/db/knexfile.js",
+      "src/db/migrations/",
+      "src/db/seeds/"
+    ]
+  }
+}
+```

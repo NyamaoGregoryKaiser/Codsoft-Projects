@@ -1,0 +1,168 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies (Backend)
+        run: npm install
+        working-directory: ./server
+
+      - name: Set up PostgreSQL for tests
+        run: |
+          docker run --name test-db -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpassword -e POSTGRES_DB=payment_processor_test_db -p 5433:5432 -d postgres:14-alpine
+          sleep 10 # Give DB time to start
+        # Use localhost:5433 for tests instead of standard 5432 to avoid conflicts if local DB is running
+
+      - name: Run Backend Tests
+        run: cross-env TEST_DATABASE_URL="postgresql://testuser:testpassword@localhost:5433/payment_processor_test_db" npm test
+        working-directory: ./server
+
+      - name: Stop PostgreSQL test container
+        run: docker stop test-db && docker rm test-db
+        if: always() # Ensure cleanup even if tests fail
+
+      - name: Lint Backend Code
+        run: npm run lint
+        working-directory: ./server
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies (Frontend)
+        run: npm install
+        working-directory: ./client
+
+      - name: Run Frontend Tests
+        run: npm test -- --watchAll=false # Run all tests once
+        working-directory: ./client
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./client
+
+      # Optional: Upload build artifact
+      - name: Upload Frontend Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: ./client/build
+
+  # This job would handle deployment to a cloud provider
+  # This is a conceptual example and needs actual cloud provider integration (e.g., AWS, GCP, Azure)
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend, build-and-test-frontend]
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main branch
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download Frontend Build Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: ./client/build
+
+      - name: Set up Docker BuildX
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker images
+        run: |
+          docker-compose -f docker-compose.prod.yml build
+          docker tag payment_processor_backend:latest your_docker_username/payment_processor_backend:latest
+          docker tag payment_processor_frontend:latest your_docker_username/payment_processor_frontend:latest
+          docker push your_docker_username/payment_processor_backend:latest
+          docker push your_docker_username/payment_processor_frontend:latest
+        env:
+          # Use specific .env variables for production if needed
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          # ... other production secrets
+
+      - name: Deploy to Cloud Provider (e.g., SSH into EC2 and run docker-compose pull/up)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
+          # Add other cloud provider specific secrets and tools
+        run: |
+          echo "Simulating deployment to production..."
+          echo "Pulling latest images on remote server and restarting services."
+          # Example for an EC2 instance:
+          # ssh -i ~/.ssh/your-key.pem ubuntu@your-ec2-ip "
+          #   cd /path/to/your/app &&
+          #   docker-compose down &&
+          #   docker-compose pull &&
+          #   docker-compose up -d
+          # "
+          echo "Deployment complete!"
+```
+
+---
+
+### 4. Testing & Quality
+
+#### Backend Tests (Jest, Supertest)
+
+**Test Setup & Utilities**
+
+```javascript
+// server/__tests__/setup.js (or directly in test files)
+const request = require('supertest');
+const app = require('../src/server'); // Your Express app
+const { db } = require('../src/db/connection');
+const knexConfig = require('../src/db/knexfile');
+const config = require('../src/config');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const testDb = knex(knexConfig.test);
+
+const setupTestDB = async () => {
+  await testDb.migrate.rollback();
+  await testDb.migrate.latest();
+  await testDb.seed.run();
+};
+
+const tearDownTestDB = async () => {
+  await testDb.migrate.rollback();
+};
+
+const generateToken = (userId, role) => {
+  return jwt.sign({ id: userId, role }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+};
+
+module.exports = { request: () => request(app), testDb, setupTestDB, tearDownTestDB, generateToken };
+```

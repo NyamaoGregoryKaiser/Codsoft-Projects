@@ -1,0 +1,61 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: payment_processor_db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: payment_processor_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck: # Add a healthcheck to ensure DB is ready before app starts
+      test: ["CMD-SHELL", "pg_isready -U user -d payment_processor_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./server
+    container_name: payment_processor_backend
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgresql://user:password@db:5432/payment_processor_db
+      JWT_SECRET: supersecretjwtkeythatshouldbeverylongandrandomforproduction # Use actual secret in production
+      JWT_EXPIRES_IN: 1h
+      CLIENT_URL: http://localhost:3000
+      MOCK_PAYMENT_GATEWAY_URL: http://backend:5000/api/payments/mock-gateway # Backend itself hosts a mock for simplicity
+      MOCK_PAYMENT_GATEWAY_API_KEY: mock_api_key_123
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app # Mount the host directory to enable live reloading for development
+      - /app/node_modules # Exclude node_modules from host mount
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npm run dev # Use nodemon for development
+    # For production, use `command: npm start`
+
+  frontend:
+    build: ./client
+    container_name: payment_processor_frontend
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm start
+
+volumes:
+  db_data:
+```
