@@ -1,0 +1,116 @@
+name: CI/CD Pipeline for CMS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+          pip install -r backend/requirements.txt
+        working-directory: ./backend
+
+      - name: Lint backend code with Flake8
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        working-directory: ./backend
+
+      - name: Run backend tests
+        run: |
+          # Create a dummy .env for testing (or use GitHub secrets for real values)
+          cp .env.example .env
+          python manage.py test --settings=cms_project.settings.development
+        env: # Pass dummy env vars for CI tests
+          SECRET_KEY: ci_secret_key
+          DB_NAME: ci_test_db
+          DB_USER: ci_test_user
+          DB_PASSWORD: ci_test_password
+          DB_HOST: localhost # Or a test db service
+          DB_PORT: 5432
+        working-directory: ./backend
+
+  frontend-lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: ./frontend
+
+      - name: Lint frontend code
+        run: yarn eslint src/
+        continue-on-error: true # Allow build to pass even if linting fails, but report it
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: yarn test --watchAll=false
+        working-directory: ./frontend
+
+  build-and-push-docker-images:
+    needs: [backend-lint-test, frontend-lint-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only push to registry on main branch merges
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: your_dockerhub_username/cms-backend:latest
+          build-args:
+            DJANGO_SETTINGS_MODULE=cms_project.settings.production
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: your_dockerhub_username/cms-frontend:latest
+          build-args:
+            REACT_APP_API_BASE_URL: https://api.yourdomain.com/api/v1 # Use production API URL
+
+```
+
+---
+
+### 5. Testing & Quality
+
+#### Backend Tests (`backend/content/tests/`)
+
+```python
