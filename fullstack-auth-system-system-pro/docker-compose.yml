@@ -1,0 +1,2 @@
+docker-compose exec backend alembic upgrade head
+    docker-compose exec backend python backend/seed_db.py

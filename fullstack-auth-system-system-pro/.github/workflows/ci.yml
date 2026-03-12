@@ -1,0 +1,102 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:13
+        env:
+          POSTGRES_DB: secureauth_test_db
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:6-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+        working-directory: ./backend
+
+      - name: Wait for PostgreSQL and Redis to be ready
+        run: |
+          # Wait for PostgreSQL
+          for i in `seq 1 10`; do pg_isready -h localhost -p 5432 -U user && break; sleep 5; done
+          # Wait for Redis
+          for i in `seq 1 10`; do nc -z localhost 6379 && break; sleep 5; done
+        
+      - name: Run backend tests with coverage
+        env:
+          FLASK_CONFIG: testing
+          DATABASE_URL: postgresql://user:password@localhost:5432/secureauth_test_db
+          SECRET_KEY: ci-test-secret-key
+          JWT_SECRET_KEY: ci-test-jwt-secret-key
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          pytest tests --cov=app --cov-report=xml
+        working-directory: ./backend
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./backend/coverage.xml
+          flags: backend
+          name: codecov-backend
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --coverage
+        working-directory: ./frontend
+        env:
+          CI: true # Required for Create React App test command in CI environments
+          REACT_APP_API_BASE_URL: http://localhost:5000/api # Mocked or not used in unit tests
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: codecov-frontend
+```
