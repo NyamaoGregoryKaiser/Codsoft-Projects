@@ -1,0 +1,114 @@
+#include "AuthService.h"
+#include "Poco/Exception.h"
+#include "Poco/Data/Session.h"
+#include "Poco/Data/Statement.h"
+#include "Poco/SHA1Engine.h" // For simple hashing demonstration (use bcrypt in production!)
+
+namespace SecurePay {
+namespace Service {
+
+AuthService::AuthService(const std::string& jwtSecret)
+    : _logger(Poco::Logger::get("SecurePay")), _jwtSecret(jwtSecret) {}
+
+SecurePay::Model::User AuthService::registerUser(const std::string& email, const std::string& password, const std::string& merchantName) {
+    Poco::Data::Session session = SecurePay::DB::DatabaseManager::getInstance().getSession();
+
+    // Check if user already exists
+    int count = 0;
+    session << "SELECT COUNT(*) FROM Users WHERE email = ?", Poco::Data::into(count), Poco::Data::use(email), Poco::Data::now;
+    if (count > 0) {
+        throw Poco::ExistsException("User with this email already exists.");
+    }
+
+    // Hash password (for demonstration, using a simple SHA1. **Use bcrypt or similar in production!**)
+    std::string hashedPassword = SecurePay::Util::CryptoUtil::hashPassword(password);
+
+    // Generate UUIDs
+    std::string userId = SecurePay::Util::UUID::generate();
+    std::string merchantId = SecurePay::Util::UUID::generate();
+
+    try {
+        session.begin();
+
+        // Create Merchant
+        SecurePay::Model::Merchant merchant(merchantId, merchantName, SecurePay::Model::Merchant::Status::ACTIVE);
+        session << "INSERT INTO Merchants (id, name, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            Poco::Data::use(merchant.getId()),
+            Poco::Data::use(merchant.getName()),
+            Poco::Data::use(static_cast<int>(merchant.getStatus())),
+            Poco::Data::use(merchant.getCreatedAt()),
+            Poco::Data::use(merchant.getUpdatedAt()),
+            Poco::Data::now;
+
+        // Create User
+        SecurePay::Model::User user(userId, email, hashedPassword, merchantId, SecurePay::Model::User::Role::ADMIN);
+        session << "INSERT INTO Users (id, email, password_hash, merchant_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            Poco::Data::use(user.getId()),
+            Poco::Data::use(user.getEmail()),
+            Poco::Data::use(user.getPasswordHash()),
+            Poco::Data::use(user.getMerchantId()),
+            Poco::Data::use(static_cast<int>(user.getRole())),
+            Poco::Data::use(user.getCreatedAt()),
+            Poco::Data::use(user.getUpdatedAt()),
+            Poco::Data::now;
+
+        session.commit();
+        _logger.information("New user registered: %s (Merchant: %s)", email, merchantName);
+        return user;
+
+    } catch (const Poco::Data::DataException& e) {
+        session.rollback();
+        _logger.error("Database error during registration: %s", e.displayText());
+        throw Poco::RuntimeException("Failed to register user due to database error.");
+    } catch (const Poco::Exception& e) {
+        session.rollback();
+        _logger.error("Poco Exception during registration: %s", e.displayText());
+        throw;
+    }
+}
+
+std::string AuthService::login(const std::string& email, const std::string& password) {
+    Poco::Data::Session session = SecurePay::DB::DatabaseManager::getInstance().getSession();
+
+    SecurePay::Model::User user;
+    try {
+        session << "SELECT id, email, password_hash, merchant_id, role, created_at, updated_at FROM Users WHERE email = ?",
+            Poco::Data::into(user.id),
+            Poco::Data::into(user.email),
+            Poco::Data::into(user.passwordHash),
+            Poco::Data::into(user.merchantId),
+            Poco::Data::into(reinterpret_cast<int&>(user.role)), // Cast enum to int for DB
+            Poco::Data::into(user.createdAt),
+            Poco::Data::into(user.updatedAt),
+            Poco::Data::use(email),
+            Poco::Data::now;
+    } catch (const Poco::Data::NotFoundException&) {
+        throw Poco::NotFoundException("User not found.");
+    } catch (const Poco::Data::DataException& e) {
+        _logger.error("Database error during login for %s: %s", email, e.displayText());
+        throw Poco::RuntimeException("Login failed due to database error.");
+    }
+
+    // Verify password (again, simple SHA1 for demo, use bcrypt!)
+    if (!SecurePay::Util::CryptoUtil::verifyPassword(password, user.getPasswordHash())) {
+        throw Poco::Security::LoginException("Invalid credentials.");
+    }
+
+    _logger.information("User logged in: %s", email);
+
+    // Generate JWT
+    return SecurePay::Util::JWTUtil::generateToken(user.getId(), user.getMerchantId(), user.getRole(), _jwtSecret);
+}
+
+SecurePay::Model::Session AuthService::validateToken(const std::string& token) {
+    try {
+        Poco::JWT::Token jwtToken = SecurePay::Util::JWTUtil::decodeToken(token, _jwtSecret);
+        return SecurePay::Model::Session(jwtToken);
+    } catch (const Poco::Exception& e) {
+        _logger.warning("JWT validation failed: %s", e.displayText());
+        throw Poco::InvalidArgumentException("Invalid or expired token.");
+    }
+}
+
+} // namespace Service
+} // namespace SecurePay

@@ -1,0 +1,2 @@
+All services (`backend`, `frontend`) should be `Up` and `healthy`.
+2.  **Check Logs:**
