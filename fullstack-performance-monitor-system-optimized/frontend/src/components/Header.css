@@ -1,0 +1,114 @@
+```css
+.header {
+  background-color: #282c34; /* Dark background for header */
+  padding: 15px 20px;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-title {
+  color: white;
+  text-decoration: none;
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin-right: 20px;
+  transition: color 0.3s ease;
+}
+
+.header-title:hover {
+  color: #61dafb; /* React blue on hover */
+  text-decoration: none;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px; /* Space between navigation items */
+}
+
+.header-welcome {
+  color: #a0a0a0;
+  font-size: 1rem;
+  margin-right: 10px;
+}
+
+.header-link {
+  color: white;
+  text-decoration: none;
+  font-size: 1rem;
+  padding: 8px 12px;
+  border-radius: 5px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.header-link:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #61dafb;
+  text-decoration: none;
+}
+
+.header-button {
+  background-color: #007bff; /* Primary button color */
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.header-button:hover {
+  background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-right {
+    margin-top: 15px;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .header-title {
+    margin-bottom: 10px;
+    margin-right: 0;
+  }
+
+  .header-welcome {
+    margin-right: 0;
+    margin-bottom: 5px;
+  }
+
+  .header-link,
+  .header-button {
+    flex-shrink: 0; /* Prevent items from shrinking too much */
+  }
+}
+
+@media (max-width: 480px) {
+  .header-title {
+    font-size: 1.5rem;
+  }
+  .header-link, .header-button, .header-welcome {
+    font-size: 0.9rem;
+    padding: 6px 10px;
+  }
+}
+```

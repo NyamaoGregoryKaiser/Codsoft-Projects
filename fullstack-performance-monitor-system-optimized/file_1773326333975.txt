@@ -1,0 +1,2 @@
+git clone https://github.com/yourusername/performance-monitor.git
+cd performance-monitor

@@ -1,0 +1,75 @@
+```css
+.metric-chart-container {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  min-height: 380px; /* Ensure charts have a consistent height */
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-chart-container:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.metric-chart-container.no-data {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #6c757d;
+  font-size: 1.1rem;
+  text-align: center;
+}
+
+.metric-chart-title {
+  font-size: 1.5rem;
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+/* Specific styling for Recharts elements if needed */
+.recharts-wrapper {
+  flex-grow: 1; /* Allow the chart to fill available space */
+}
+
+.recharts-legend-wrapper {
+  margin-top: 10px;
+}
+
+/* Tooltip custom styling (Recharts uses inline styles, so override can be tricky) */
+.recharts-tooltip-wrapper {
+  background-color: rgba(255, 255, 255, 0.95);
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.recharts-tooltip-label {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.recharts-tooltip-item {
+  color: #555;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .metric-chart-container {
+    padding: 15px;
+    min-height: 300px; /* Smaller height on smaller screens */
+  }
+  .metric-chart-title {
+    font-size: 1.3rem;
+    margin-bottom: 10px;
+  }
+}
+```

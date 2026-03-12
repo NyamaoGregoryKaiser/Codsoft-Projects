@@ -1,0 +1,116 @@
+```css
+.app-card {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Pushes buttons to bottom */
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.app-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.app-card-link-wrapper {
+  text-decoration: none;
+  color: inherit; /* Inherit text color from parent */
+  flex-grow: 1; /* Allows content to take available space */
+}
+
+.app-card-name {
+  font-size: 1.6rem;
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 10px;
+  word-break: break-word; /* Prevent long names from overflowing */
+}
+
+.app-card-description {
+  font-size: 0.95rem;
+  color: #666;
+  margin-bottom: 15px;
+  line-height: 1.5;
+  min-height: 45px; /* Ensure consistent height even if no description */
+}
+
+.app-card-info {
+  font-size: 0.85rem;
+  color: #999;
+  margin-bottom: 10px;
+}
+
+.app-card-api-key {
+  font-family: 'Courier New', Courier, monospace;
+  background-color: #f8f8f8;
+  border: 1px dashed #e0e0e0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #555;
+  word-break: break-all; /* Break long API keys */
+  margin-bottom: 15px;
+}
+
+.api-key-value {
+  user-select: all; /* Allow easy selection */
+}
+
+.app-card-actions {
+  display: flex;
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 10px; /* Space between buttons */
+  margin-top: 10px; /* Space from content above */
+}
+
+.action-button {
+  padding: 8px 15px;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.regenerate-button {
+  background-color: #ffc107; /* Warning yellow */
+  color: #333;
+  border: none;
+}
+
+.regenerate-button:hover {
+  background-color: #e0a800; /* Darker yellow */
+  transform: translateY(-1px);
+}
+
+.delete-button {
+  background-color: #dc3544; /* Danger red */
+  color: white;
+  border: none;
+}
+
+.delete-button:hover {
+  background-color: #c82333; /* Darker red */
+  transform: translateY(-1px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .app-card {
+    padding: 15px;
+  }
+  .app-card-name {
+    font-size: 1.4rem;
+  }
+  .action-button {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+  .app-card-actions {
+    flex-wrap: wrap; /* Allow buttons to wrap */
+    justify-content: center;
+  }
+}
+```

@@ -1,0 +1,73 @@
+```yaml
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: perfmon_db
+    restart: always
+    environment:
+      POSTGRES_USER: perfmon_user
+      POSTGRES_PASSWORD: perfmon_password
+      POSTGRES_DB: perfmon_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development/tools
+
+  redis:
+    image: redis:7-alpine
+    container_name: perfmon_redis
+    restart: always
+    ports:
+      - "6379:6379" # Expose for local development/tools
+    volumes:
+      - redisdata:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: perfmon_backend
+    restart: always
+    environment:
+      # Use service names defined in docker-compose for inter-container communication
+      DATABASE_URL: postgres://perfmon_user:perfmon_password@database:5432/perfmon_db
+      REDIS_URL: redis://redis:6379
+      PORT: 5000
+      JWT_SECRET: your_jwt_secret_key_here_please_make_it_long_and_complex # IMPORTANT: Change in production
+      JWT_EXPIRES_IN: 1d
+      NODE_ENV: development # Change to 'production' for deployment
+      FRONTEND_URL: http://localhost:3000 # For CORS in development
+    volumes:
+      - ./backend:/app # Mount backend code for live reloading in development
+      - /app/node_modules # Exclude node_modules from host mount to prevent conflicts
+    ports:
+      - "5000:5000"
+    depends_on:
+      - database
+      - redis
+    # Command to run migrations and seeds after DB is ready (run manually after `docker-compose up`)
+    # Command to run tests: `docker exec perfmon_backend npm test`
+    command: npm run dev # Use `npm start` for production
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: perfmon_frontend
+    restart: always
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Connects to backend service
+    volumes:
+      - ./frontend:/app # Mount frontend code for live reloading in development
+      - /app/node_modules # Exclude node_modules from host mount
+    ports:
+      - "3000:80" # Map host port 3000 to container's Nginx port 80
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+```

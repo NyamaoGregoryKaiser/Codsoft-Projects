@@ -1,0 +1,29 @@
+```css
+.auth-page-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 80px); /* Adjust based on header height */
+  background-color: #f0f2f5;
+  padding: 20px;
+}
+
+.auth-switch-text {
+  margin-top: 20px;
+  font-size: 1rem;
+  color: #666;
+}
+
+.auth-switch-text a {
+  color: #007bff;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.auth-switch-text a:hover {
+  text-decoration: underline;
+}
+
+/* The AuthForm component itself has its own styling for the form elements */
+```

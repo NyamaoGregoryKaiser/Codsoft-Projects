@@ -1,0 +1,32 @@
+```dockerfile
+# Stage 1: Build production-ready Node.js application
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY backend/package*.json ./
+
+# Install dependencies
+RUN npm install --production
+
+# Copy the rest of the application code
+COPY backend/ .
+
+# Expose port (if applicable)
+EXPOSE 5000
+
+# Stage 2: Create a smaller production image
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy production dependencies and application code from builder stage
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
+
+# Command to run the application
+CMD ["npm", "start"]
+```

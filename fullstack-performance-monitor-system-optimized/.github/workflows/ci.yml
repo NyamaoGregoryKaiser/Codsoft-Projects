@@ -1,0 +1,120 @@
+```yaml
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: perfmon_user
+          POSTGRES_PASSWORD: perfmon_password
+          POSTGRES_DB: perfmon_test_db
+        ports:
+          - 5433:5432 # Map to a different port for tests if 5432 is used by other services
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Create .env for backend tests
+        run: |
+          echo "NODE_ENV=test" > ./.env
+          echo "DATABASE_URL_TEST=postgres://perfmon_user:perfmon_password@localhost:5433/perfmon_test_db" >> ./.env
+          echo "JWT_SECRET=ci_test_jwt_secret" >> ./.env
+        working-directory: ./backend
+
+      - name: Run backend migrations
+        run: npx sequelize-cli db:migrate
+        working-directory: ./backend
+        env:
+          DATABASE_URL_TEST: postgres://perfmon_user:perfmon_password@localhost:5433/perfmon_test_db # Ensure URL matches service config
+
+      - name: Run backend tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+        env:
+          DATABASE_URL_TEST: postgres://perfmon_user:perfmon_password@localhost:5433/perfmon_test_db
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Create .env for frontend tests
+        run: |
+          echo "REACT_APP_API_BASE_URL=http://localhost:5000/api" > ./.env
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --coverage
+        working-directory: ./frontend
+
+  build-and-lint:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies and lint
+        run: |
+          npm install
+          npm run lint
+        working-directory: ./backend
+
+      - name: Install frontend dependencies and lint
+        run: |
+          npm install
+          npm run lint
+        working-directory: ./frontend
+
+      - name: Build frontend application
+        run: npm run build
+        working-directory: ./frontend
+```
