@@ -1,0 +1,20 @@
+```json
+[
+  {
+    "name": "K6-Test-DB-1",
+    "host": "localhost",
+    "port": 5432,
+    "dbName": "test_k6_db",
+    "dbUser": "k6user",
+    "dbPasswordEncrypted": ""
+  },
+  {
+    "name": "K6-Test-DB-2",
+    "host": "localhost",
+    "port": 5432,
+    "dbName": "another_k6_db",
+    "dbUser": "k6user",
+    "dbPasswordEncrypted": ""
+  }
+]
+```
