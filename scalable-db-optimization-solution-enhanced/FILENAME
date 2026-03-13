@@ -1,0 +1,195 @@
+frontend/src/pages/TasksPage.tsx
+import React, { useState } from 'react';
+import { Table, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tag, Alert, Tooltip, Typography } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, CheckSquareOutlined } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getTasksByDbInstance, createTask, updateTask, deleteTask } from '@/api/tasks';
+import { getAllDbInstancesList } from '@/api/dbInstances';
+import { OptimizationTask, DbInstance, TaskStatus } from '@/types';
+import dayjs from 'dayjs';
+import { useParams, useNavigate } from 'react-router-dom';
+
+const { TextArea } = Input;
+const { Option } = Select;
+const { Text } = Typography;
+
+const TasksPage: React.FC = () => {
+  const { dbInstanceId: routeDbInstanceId } = useParams<{ dbInstanceId?: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [editingTask, setEditingTask] = useState<OptimizationTask | null>(null);
+  const [form] = Form.useForm();
+  const [selectedDbInstanceId, setSelectedDbInstanceId] = useState<number | undefined>(
+    routeDbInstanceId ? parseInt(routeDbInstanceId) : undefined
+  );
+
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+    sortField: 'createdAt',
+    sortOrder: 'descend',
+  });
+
+  const { data: dbInstancesList, isLoading: isLoadingDbInstances } = useQuery({
+    queryKey: ['allDbInstancesList'],
+    queryFn: getAllDbInstancesList,
+    onSuccess: (data) => {
+      if (!selectedDbInstanceId && data.length > 0) {
+        setSelectedDbInstanceId(data[0].id);
+        navigate(`/tasks/${data[0].id}`, { replace: true });
+      } else if (selectedDbInstanceId && !data.some(db => db.id === selectedDbInstanceId)) {
+        setSelectedDbInstanceId(undefined);
+        navigate('/tasks', { replace: true });
+      }
+    }
+  });
+
+  const { data: tasks, isLoading: isLoadingTasks, isError, error } = useQuery({
+    queryKey: ['tasks', selectedDbInstanceId, pagination.current, pagination.pageSize, pagination.sortField, pagination.sortOrder],
+    queryFn: () => selectedDbInstanceId ? getTasksByDbInstance(
+      selectedDbInstanceId,
+      pagination.current - 1,
+      pagination.pageSize,
+      `${pagination.sortField},${pagination.sortOrder === 'ascend' ? 'asc' : 'desc'}`
+    ) : Promise.resolve(null),
+    enabled: !!selectedDbInstanceId,
+    select: (res) => res ? ({
+      ...res.data,
+      content: res.data.content.map(task => ({ ...task, key: task.id }))
+    }) : { content: [], totalElements: 0, totalPages: 0, pageable: {}, last: true, size: 0, number: 0, sort: {}, first: true, numberOfElements: 0, empty: true },
+    placeholderData: (previousData) => previousData,
+  });
+
+  React.useEffect(() => {
+    if (tasks) {
+      setPagination(prev => ({
+        ...prev,
+        total: tasks.totalElements,
+      }));
+    }
+  }, [tasks]);
+
+  const createMutation = useMutation({
+    mutationFn: createTask,
+    onSuccess: () => {
+      message.success('Optimization task created successfully!');
+      setIsModalVisible(false);
+      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (err: any) => {
+      message.error(err.response?.data?.message || 'Failed to create task.');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { id: number; task: Omit<OptimizationTask, 'createdAt' | 'updatedAt'> }) =>
+      updateTask(data.id, data.task),
+    onSuccess: () => {
+      message.success('Optimization task updated successfully!');
+      setIsModalVisible(false);
+      form.resetFields();
+      setEditingTask(null);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (err: any) => {
+      message.error(err.response?.data?.message || 'Failed to update task.');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTask,
+    onSuccess: () => {
+      message.success('Optimization task deleted successfully!');
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (err: any) => {
+      message.error(err.response?.data?.message || 'Failed to delete task.');
+    },
+  });
+
+  const handleTableChange = (paginationChange: any, _filters: any, sorter: any) => {
+    setPagination(prev => ({
+      ...prev,
+      current: paginationChange.current,
+      pageSize: paginationChange.pageSize,
+      sortField: sorter.field || 'createdAt',
+      sortOrder: sorter.order || 'descend',
+    }));
+  };
+
+  const showModal = (task?: OptimizationTask) => {
+    if (task) {
+      setEditingTask(task);
+      form.setFieldsValue({
+        ...task,
+        databaseInstanceId: task.databaseInstanceId,
+        status: task.status,
+      });
+    } else {
+      setEditingTask(null);
+      form.resetFields();
+      if (selectedDbInstanceId) {
+        form.setFieldsValue({ databaseInstanceId: selectedDbInstanceId, status: 'PENDING' });
+      } else {
+        form.setFieldsValue({ status: 'PENDING' }); // Default status for new tasks
+      }
+    }
+    setIsModalVisible(true);
+  };
+
+  const handleOk = () => {
+    form.validateFields()
+      .then(values => {
+        if (editingTask) {
+          updateMutation.mutate({ id: editingTask.id, task: values });
+        } else {
+          createMutation.mutate(values);
+        }
+      })
+      .catch(info => {
+        console.log('Validate Failed:', info);
+      });
+  };
+
+  const handleCancel = () => {
+    setIsModalVisible(false);
+    form.resetFields();
+    setEditingTask(null);
+  };
+
+  const handleDelete = (id: number) => {
+    deleteMutation.mutate(id);
+  };
+
+  const getStatusTag = (status: TaskStatus) => {
+    switch (status) {
+      case 'PENDING': return <Tag color="blue">{status}</Tag>;
+      case 'IN_PROGRESS': return <Tag color="orange">{status}</Tag>;
+      case 'COMPLETED': return <Tag color="green">{status}</Tag>;
+      case 'FAILED': return <Tag color="red">{status}</Tag>;
+      default: return <Tag>{status}</Tag>;
+    }
+  };
+
+  const columns = [
+    {
+      title: 'Title',
+      dataIndex: 'title',
+      key: 'title',
+      sorter: true,
+      ellipsis: true,
+    },
+    {
+      title: 'Action Taken',
+      dataIndex: 'actionTaken',
+      key: 'actionTaken',
+      ellipsis: true,
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status:
