@@ -1,0 +1,130 @@
+### API Tests (Description)
+API tests are covered by the **Backend Integration Tests** using `Supertest` in `backend/tests/integration/api.test.js`.
+These tests hit actual API endpoints, ensuring correct request/response handling, authentication, and data persistence.
+
+**Manual/Postman API Testing:**
+A Postman collection or similar tool can be used for manual API testing.
+Common API endpoints to test:
+*   `POST /api/auth/register`
+*   `POST /api/auth/login`
+*   `GET /api/auth/profile` (with valid/invalid token)
+*   `PUT /api/auth/profile` (with valid/invalid token, partial data, invalid data)
+*   `POST /api/auth/logout`
+*   `GET /api/users`
+*   `GET /api/users/:id`
+*   `POST /api/rooms`
+*   `GET /api/rooms`
+*   `GET /api/rooms/:roomId`
+*   `PUT /api/rooms/:roomId`
+*   `DELETE /api/rooms/:roomId`
+*   `POST /api/rooms/:roomId/join`
+*   `POST /api/rooms/:roomId/leave`
+*   `GET /api/rooms/:roomId/messages` (with pagination, for private/public rooms)
+*   `POST /api/messages` (direct REST message send)
+
+**Testing Real-time Communication (Socket.IO):**
+Testing Socket.IO requires a client that connects to the server.
+*   **Unit/Integration Tests:** Use `socket.io-client` in Jest tests to simulate client connections and events. This is typically done by mocking the `io` instance or by having a test server. For this comprehensive example, the integration tests focus on REST, but `socket.js` itself uses the mocked logger for internal events. Full Socket.IO integration tests would involve creating a `socket.io-client` instance within the test and asserting server-side emits.
+*   **Manual Testing:** Use a simple frontend or a dedicated WebSocket client (like Postman's WebSocket feature or `wscat`) to connect and send/receive events.
+
+### Performance Tests (Description)
+Performance tests aim to evaluate system responsiveness and stability under various load conditions.
+
+**Tools:**
+*   **JMeter**: Open-source tool for load testing functional behavior and measuring performance.
+*   **k6**: Modern load testing tool that is scriptable in JavaScript, offering good developer experience.
+*   **Artillery**: High-performance, low-latency, and distributed load testing tool.
+
+**Key Scenarios to Test:**
+1.  **Concurrent Users Login/Registration**: Simulate many users trying to log in or register at the same time. This tests the authentication and database layers.
+2.  **Concurrent Room Creation/Joining**: Stress test the room management API.
+3.  **High Volume of Messages in a Room**: Simulate many users sending messages to a single popular room, measuring message delivery latency and server CPU/memory usage. This is critical for real-time applications.
+4.  **Many Active Rooms with Moderate Messaging**: Simulate a scenario with numerous active rooms, each with a moderate number of messages.
+5.  **User Status Updates**: Test the overhead of status updates (online/offline) from a large number of users.
+6.  **Retrieving Message History**: Test fetching message history with different `limit` and `offset` values under load.
+
+**Metrics to Monitor:**
+*   **Response Time (Latency)**: Time taken for API calls to return.
+*   **Throughput**: Number of requests/messages processed per second.
+*   **Error Rate**: Percentage of failed requests.
+*   **Resource Utilization**: CPU, Memory, Network I/O, Database connections, Redis connections on server and database.
+*   **Message Delivery Latency**: For Socket.IO, the time from when a message is sent by one client until it's received by others.
+
+**Example k6 Script Idea (Conceptual):**
+```javascript
+// // k6 script (conceptual)
+// import http from 'k6/http';
+// import { sleep, check } from 'k6';
+// import { SharedArray } from 'k6/data';
+// import ws from 'k6/ws';
+
+// const users = new SharedArray('users', function () {
+//   return JSON.parse(open('./users.json')).users; // Pre-registered users
+// });
+
+// export const options = {
+//   stages: [
+//     { duration: '30s', target: 50 }, // Ramp up to 50 users
+//     { duration: '1m', target: 50 },  // Stay at 50 users
+//     { duration: '30s', target: 0 },  // Ramp down
+//   ],
+//   thresholds: {
+//     http_req_duration: ['p(95)<500'], // 95% of HTTP requests must complete within 500ms
+//     ws_msgs_sent: ['count>100'],
+//     ws_msgs_received: ['count>100'],
+//   },
+// };
+
+// export default function () {
+//   const user = users[__VU % users.length]; // Each virtual user gets a unique pre-registered user
+//   let loginRes = http.post('http://localhost:5000/api/auth/login', JSON.stringify({
+//     identifier: user.email,
+//     password: 'password123',
+//   }), {
+//     headers: { 'Content-Type': 'application/json' },
+//   });
+
+//   check(loginRes, { 'logged in successfully': (r) => r.status === 200 });
+//   const token = loginRes.json('token');
+
+//   if (token) {
+//     const wsUrl = `ws://localhost:5000?token=${token}`; // Assuming token in query for k6
+//     ws.connect(wsUrl, {}, function (socket) {
+//       socket.on('open', () => console.log('connected'));
+//       socket.on('message', (data) => console.log('Message received: ', data));
+//       socket.on('close', () => console.log('disconnected'));
+//       socket.on('error', (e) => {
+//         if (e.error() != 'websocket: close sent') {
+//           console.error('An unexpected error occurred: ', e.error());
+//         }
+//       });
+
+//       socket.setInterval(function () {
+//         socket.send(JSON.stringify({ type: 'chat:message', roomId: 'someRoomId', content: `Hello from VU ${__VU} at ${new Date().toISOString()}` }));
+//       }, 1000); // Send message every second
+
+//       socket.setTimeout(function () {
+//         socket.close();
+//       }, 30 * 1000); // Keep socket open for 30 seconds
+//     });
+//   }
+
+//   sleep(1); // Short pause between iterations
+// }
+```
+
+---
+
+## 7. Documentation
+
+### Comprehensive README (This file)
+You are currently reading the comprehensive README. It covers setup, project structure, technologies, and features.
+
+### API Documentation
+API documentation is inlined with JSDoc comments in the `backend/src/routes/*.js` files.
+This is then processed by `swagger-jsdoc` and served by `swagger-ui-express` at `/api-docs`.
+The `backend/src/config/swagger.js` defines the overall Swagger configuration and reusable schemas/responses.
+
+**Access**: After starting the backend, navigate to `http://localhost:5000/api-docs` to view the interactive API documentation.
+
+### Architecture Documentation

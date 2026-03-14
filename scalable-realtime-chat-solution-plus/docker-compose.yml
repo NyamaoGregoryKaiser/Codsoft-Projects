@@ -1,0 +1,91 @@
+```yaml
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres_db:
+    image: postgres:14-alpine
+    container_name: chat_postgres_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-chat_app_db}
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432" # Expose DB port only if needed for local management
+    volumes:
+      - chat_db_data:/var/lib/postgresql/data # Persistent data storage
+    healthcheck: # Health check for database readiness
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} -d ${DB_NAME:-chat_app_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Redis Cache Service
+  redis_cache:
+    image: redis:6-alpine
+    container_name: chat_redis_cache
+    command: redis-server --requirepass ${REDIS_PASSWORD:-} # Start Redis with optional password
+    ports:
+      - "6379:6379" # Expose Redis port only if needed for local management
+    volumes:
+      - chat_redis_data:/data # Persistent data storage for Redis
+    restart: always
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend # Path to your backend Dockerfile
+      dockerfile: Dockerfile
+    container_name: chat_backend
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-5000}
+      SERVER_URL: http://localhost:${PORT:-5000}
+      CLIENT_URL: http://localhost:${FRONTEND_PORT:-3000} # Assuming frontend uses default port 3000
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkeythatshouldbechangedinproduction123}
+      DB_HOST: postgres_db # Service name of the PostgreSQL container
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-chat_app_db}
+      DB_USER: ${DB_USER:-admin}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      REDIS_HOST: redis_cache # Service name of the Redis container
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      LOG_LEVEL: info
+    ports:
+      - "5000:5000" # Expose backend API port
+    depends_on:
+      postgres_db:
+        condition: service_healthy # Ensure DB is healthy before starting backend
+      redis_cache:
+        condition: service_started # Ensure Redis is started
+    restart: always
+
+  # Frontend Service (served by Nginx)
+  frontend:
+    build:
+      context: ./frontend # Path to your frontend Dockerfile
+      dockerfile: Dockerfile
+      args: # Pass build arguments for React env variables
+        REACT_APP_API_BASE_URL: http://localhost/api # Nginx will proxy /api to backend
+        REACT_APP_SOCKET_URL: http://localhost # Nginx will proxy /socket.io to backend
+    container_name: chat_frontend
+    ports:
+      - "80:80" # Expose frontend on standard HTTP port
+    depends_on:
+      backend:
+        condition: service_started # Frontend only needs backend to be started, not fully healthy API
+    restart: always
+
+volumes:
+  chat_db_data: # Define named volume for PostgreSQL data
+  chat_redis_data: # Define named volume for Redis data
+```
+**To run with Docker Compose:**
+1.  Place `.env` files in `backend/` and `frontend/` directories (or define variables directly in `docker-compose.yml`).
+2.  Navigate to the root `chat-app` directory.
+3.  Run `docker-compose up --build -d`.
+4.  Access the frontend at `http://localhost`.
+
+### CI/CD Pipeline Configuration (GitHub Actions)
