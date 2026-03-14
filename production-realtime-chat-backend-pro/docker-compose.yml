@@ -1,0 +1,89 @@
+```yaml
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes # Enable AOF persistence
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+  server:
+    build:
+      context: ./server
+      dockerfile: ../Dockerfile.server
+    container_name: chat-server
+    ports:
+      - "5000:5000"
+    environment:
+      # These variables are crucial for the server to connect to other services
+      MONGO_URI: mongodb://mongodb:27017/chatdb
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Other .env variables should be set here or loaded via .env file on host
+      # For development, you can mount the .env file:
+      # JWT_SECRET: ${JWT_SECRET} # Example, or define directly
+      # JWT_EXPIRE: ${JWT_EXPIRE}
+      # LOG_LEVEL: ${LOG_LEVEL}
+      # RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      # RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      # CLIENT_URL: ${CLIENT_URL}
+    env_file:
+      - ./server/.env # Load all env vars from this file
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - app-network
+    # Use nodemon for live-reloading in development
+    command: npm run dev
+    volumes:
+      - ./server:/app
+      - /app/node_modules # Anonymous volume to prevent host node_modules from overriding container ones
+
+  client:
+    build:
+      context: ./client
+      dockerfile: ../Dockerfile.client
+    container_name: chat-client
+    ports:
+      - "3000:3000"
+    environment:
+      # REACT_APP_SERVER_URL: ${REACT_APP_SERVER_URL} # Example
+      # REACT_APP_SOCKET_URL: ${REACT_APP_SOCKET_URL}
+      WDS_SOCKET_PORT: 0 # Fix for a known issue with hot reloading in Docker
+    env_file:
+      - ./client/.env # Load all env vars from this file
+    depends_on:
+      - server # Client depends on server for API access
+    networks:
+      - app-network
+    # Use react-scripts start for live-reloading in development
+    command: npm start
+    volumes:
+      - ./client:/app
+      - /app/node_modules # Anonymous volume to prevent host node_modules from overriding container ones
+
+volumes:
+  mongo-data:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
+```

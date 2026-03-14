@@ -1,0 +1,35 @@
+```
+# Ignore .git directory
+.git
+
+# Ignore node_modules for both client and server when building images.
+# They will be installed inside the Docker container.
+client/node_modules
+server/node_modules
+
+# Ignore environment files from source control and Docker builds
+.env
+client/.env
+server/.env
+
+# Ignore build output
+client/build
+server/dist
+
+# Ignore editor and IDE files
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# Ignore logs
+logs
+*.log
+
+# Jest cache
+.jest-cache
+
+# npm debug logs
+npm-debug.log*
+.npm
+```

@@ -1,0 +1,165 @@
+```yaml
+name: CI/CD Pipeline for Realtime Chat App
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-server:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache Node.js modules (server)
+        uses: actions/cache@v4
+        with:
+          path: server/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('server/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Dependencies (server)
+        run: npm install --prefix server
+
+      - name: Setup MongoDB (for server tests)
+        uses: supercharge/mongodb-github-action@1.11.0
+        with:
+          mongodb-version: 6.0
+          port: 27017
+
+      - name: Setup Redis (for server tests)
+        uses: shogo82148/actions-setup-redis@v1
+        with:
+          redis-version: '6.x'
+          port: 6379
+
+      - name: Run Server Tests
+        run: npm test --prefix server
+        env:
+          NODE_ENV: test
+          MONGO_URI: mongodb://localhost:27017/chatdb_test_ci # Ensure test DB name
+          JWT_SECRET: ci_secret_key
+          JWT_EXPIRE: 1h
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          LOG_LEVEL: debug
+
+      - name: Upload Server Coverage Report
+        uses: codecov/codecov-action@v4
+        with:
+          directory: server/coverage
+          flags: server
+          name: codecov-server
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }} # If using Codecov.io
+
+  build-and-test-client:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache Node.js modules (client)
+        uses: actions/cache@v4
+        with:
+          path: client/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('client/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Dependencies (client)
+        run: npm install --prefix client
+
+      - name: Run Frontend Tests
+        run: npm test --prefix client -- --watchAll=false
+        env:
+          CI: true # Important for React scripts to run tests in CI mode
+          # Provide dummy env vars if tests rely on them, e.g.:
+          # REACT_APP_SERVER_URL: http://localhost:5000
+          # REACT_APP_SOCKET_URL: http://localhost:5000
+
+      - name: Upload Client Coverage Report
+        uses: codecov/codecov-action@v4
+        with:
+          directory: client/coverage
+          flags: client
+          name: codecov-client
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }} # If using Codecov.io
+
+      - name: Build Frontend
+        run: npm run build --prefix client
+        env:
+          # These are usually baked into the build process or passed as build args for Docker
+          REACT_APP_SERVER_URL: http://your-prod-backend-url:5000 # Example production URL
+          REACT_APP_SOCKET_URL: http://your-prod-backend-url:5000 # Example production URL
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-test-server, build-and-test-client]
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    environment:
+      name: Production
+      url: http://your-chat-app.com # Link to your deployed application
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Example deployment using Docker Compose on a remote server via SSH
+      # This is a simplified example. In production, you'd use proper deployment tools
+      # like Capistrano, Ansible, Kubernetes, or cloud-specific deployment services.
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/app # Change to your application directory on the server
+            git pull origin main # Pull the latest code
+            docker-compose -f docker-compose.yml down --remove-orphans # Stop existing containers
+            # Build production images (if you have a separate docker-compose.prod.yml)
+            # docker-compose -f docker-compose.prod.yml build
+            # docker-compose -f docker-compose.prod.yml up -d # Start services in detached mode
+            docker-compose up --build -d # For simplicity, reuse dev compose for now (NOT recommended for prod)
+            echo "Deployment successful!"
+
+      # Alternative for deploying to a cloud provider like Heroku, Vercel, AWS, etc.
+      # - name: Deploy to Heroku
+      #   uses: akhileshns/heroku-deploy@v3.12.12
+      #   with:
+      #     heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+      #     heroku_app_name: "your-chat-app-name"
+      #     heroku_email: "your-email@example.com"
+      #     usedocker: true # If your app uses Docker
+
+      # - name: Deploy to Vercel
+      #   uses: amondnet/vercel-action@v20
+      #   with:
+      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
+      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID}}
+      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID}}
+      #     scope: "your-org-name" # If your Vercel project is under an organization
+```

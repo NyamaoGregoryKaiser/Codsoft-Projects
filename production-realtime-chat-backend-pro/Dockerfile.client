@@ -1,0 +1,53 @@
+```dockerfile
+# Stage 1: Build React app
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY client/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the client code
+COPY client/ .
+
+# Build the React app
+ARG REACT_APP_SERVER_URL
+ARG REACT_APP_SOCKET_URL
+ENV REACT_APP_SERVER_URL=$REACT_APP_SERVER_URL
+ENV REACT_APP_SOCKET_URL=$REACT_APP_SOCKET_URL
+RUN npm run build
+
+# Stage 2: Serve the React app with Nginx (for production) or simply for development with react-scripts
+# For production, a proper web server like Nginx is usually used to serve static files.
+# For simplicity in this dev setup, we will just copy the build output.
+# In a real production setup, you might use an Nginx container.
+
+FROM node:18-alpine # Or use a lightweight server like Nginx if serving static files only
+
+WORKDIR /app
+
+# Copy the built React app from the builder stage
+COPY --from=builder /app/build ./build
+
+# This Dockerfile is primarily for local dev in docker-compose, using `npm start`.
+# For production, you'd typically have an Nginx server serving the static build folder.
+# CMD is set in docker-compose.yml for dev, but for a standalone client image, it would be:
+# CMD ["npx", "serve", "-s", "build", "-l", "3000"]
+# For development via `npm start`, the `package.json` entry is used.
+
+# Ensure react-scripts start (or whatever serves in dev) is in your client's package.json
+# and `command: npm start` is used in docker-compose.yml for dev.
+
+# For a production client-only image that serves the static assets:
+# FROM nginx:alpine
+# COPY --from=builder /app/build /usr/share/nginx/html
+# EXPOSE 80
+# CMD ["nginx", "-g", "daemon off;"]
+
+# For this comprehensive project with docker-compose, the client container will run `npm start`
+# for development hot-reloading. The `build` stage here is primarily for demonstration/future use
+# in a separate static serving container.
+```

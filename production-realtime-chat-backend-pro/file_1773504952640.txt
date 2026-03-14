@@ -1,0 +1,4 @@
+npm install -g pm2
+        pm2 start server.js --name chat-backend
+        pm2 save
+        pm2 startup
