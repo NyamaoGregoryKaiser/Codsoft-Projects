@@ -1,0 +1,32 @@
+```dockerfile
+# server/Dockerfile
+# Stage 1: Build dependencies
+FROM node:18-alpine as builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+
+RUN npm install --omit=dev # Install production dependencies
+
+# Stage 2: Create the production image
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy production dependencies from builder stage
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy application source code
+COPY . .
+
+# Generate Prisma client at build time
+RUN npx prisma generate
+
+# Expose the port the app runs on
+EXPOSE 5000
+
+# Run migrations and start the application
+CMD ["sh", "-c", "npx prisma migrate deploy && node src/server.js"]
+
+```

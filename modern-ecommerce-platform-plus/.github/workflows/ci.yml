@@ -1,0 +1,140 @@
+```yaml
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://user:password@localhost:5432/ecommerce_test_db?schema=public"
+      JWT_SECRET: "testsecret"
+      NODE_ENV: test
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: ecommerce_test_db
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Backend dependencies
+        run: npm install
+        working-directory: ./server
+
+      - name: Wait for PostgreSQL
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client && pg_isready -h localhost -p 5432 -U user -d ecommerce_test_db
+        # This is a bit of a hack. GitHub Actions `services` typically handles this.
+        # Adding a manual check for robustness or for specific setup requirements.
+
+      - name: Generate Prisma client & Migrate DB (Backend Test)
+        run: |
+          npx prisma generate
+          npx prisma migrate dev --name init_test_db --skip-seed
+        working-directory: ./server
+
+      - name: Run Backend Tests
+        run: npm test
+        working-directory: ./server
+
+      - name: Upload Backend Coverage Report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: backend-coverage-report
+          path: ./server/coverage
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Frontend dependencies
+        run: npm install
+        working-directory: ./client
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./client
+        env:
+          REACT_APP_API_BASE_URL: /api # For production build, assume API is proxied
+
+      - name: Upload Frontend Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: ./client/build
+
+  # Optional: Deployment Stage (Example - needs cloud provider config)
+  # deploy:
+  #   name: Deploy to Production
+  #   needs: [build-and-test-backend, build-frontend] # Ensure all previous jobs pass
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   environment: production # Link to a GitHub Environment for secrets
+  #   steps:
+  #     - name: Download Frontend Build
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: frontend-build
+  #         path: ./client/build
+
+  #     - name: Login to Docker Hub (or ECR/GCR)
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Build and Push Backend Docker Image
+  #       run: |
+  #         docker build ./server -t your-dockerhub-user/ecommerce-backend:${{ github.sha }}
+  #         docker push your-dockerhub-user/ecommerce-backend:${{ github.sha }}
+
+  #     - name: Deploy to Server (e.g., SSH into server and run docker compose up)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.PROD_SSH_HOST }}
+  #         username: ${{ secrets.PROD_SSH_USERNAME }}
+  #         key: ${{ secrets.PROD_SSH_KEY }}
+  #         script: |
+  #           cd /path/to/your/app
+  #           # Pull the latest backend image
+  #           docker pull your-dockerhub-user/ecommerce-backend:${{ github.sha }}
+  #           # Update frontend files in nginx volume (if not using a separate image for frontend)
+  #           # You'd typically use rsync or another mechanism to update /path/to/nginx/html with ./client/build
+  #           # Restart services with new image
+  #           docker-compose down && docker-compose up -d --build
+  #           # Or use a blue-green/canary deployment strategy
+```
