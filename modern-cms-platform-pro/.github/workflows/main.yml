@@ -1,4 +1,4 @@
-name: CI/CD Pipeline for CMS
+name: CI/CD Pipeline for CMS-CPP
 
 on:
   push:
@@ -11,106 +11,93 @@ on:
       - develop
 
 jobs:
-  backend-lint-test:
+  build-and-test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      - name: Set up Docker BuildX
+        uses: docker/setup-buildx-action@v2
 
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8
-          pip install -r backend/requirements.txt
-        working-directory: ./backend
-
-      - name: Lint backend code with Flake8
-        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        working-directory: ./backend
-
-      - name: Run backend tests
-        run: |
-          # Create a dummy .env for testing (or use GitHub secrets for real values)
-          cp .env.example .env
-          python manage.py test --settings=cms_project.settings.development
-        env: # Pass dummy env vars for CI tests
-          SECRET_KEY: ci_secret_key
-          DB_NAME: ci_test_db
-          DB_USER: ci_test_user
-          DB_PASSWORD: ci_test_password
-          DB_HOST: localhost # Or a test db service
-          DB_PORT: 5432
-        working-directory: ./backend
-
-  frontend-lint-test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
-        working-directory: ./frontend
-
-      - name: Lint frontend code
-        run: yarn eslint src/
-        continue-on-error: true # Allow build to pass even if linting fails, but report it
-        working-directory: ./frontend
-
-      - name: Run frontend tests
-        run: yarn test --watchAll=false
-        working-directory: ./frontend
-
-  build-and-push-docker-images:
-    needs: [backend-lint-test, frontend-lint-test]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' # Only push to registry on main branch merges
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push backend image
+      - name: Build Docker image for C++ app
+        id: docker_build_app
         uses: docker/build-push-action@v4
         with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: your_dockerhub_username/cms-backend:latest
-          build-args:
-            DJANGO_SETTINGS_MODULE=cms_project.settings.production
+          context: .
+          file: Dockerfile
+          push: false # Do not push to registry in CI, just build
+          tags: cms-cpp:latest
+          load: true # Load image into Docker daemon for testing
 
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: your_dockerhub_username/cms-frontend:latest
-          build-args:
-            REACT_APP_API_BASE_URL: https://api.yourdomain.com/api/v1 # Use production API URL
+      - name: Start services with Docker Compose (PostgreSQL + App)
+        run: docker-compose up -d postgres # Start only postgres first
+        working-directory: .
 
-```
+      - name: Wait for PostgreSQL to be ready
+        run: docker-compose exec -T postgres pg_isready -U cms_user -d cms_db -t 60
 
----
+      - name: Apply DB schema and seed data
+        run: |
+          docker-compose exec -T postgres psql -U cms_user -d cms_db -f /docker-entrypoint-initdb.d/10-schema.sql
+          docker-compose exec -T postgres psql -U cms_user -d cms_db -f /docker-entrypoint-initdb.d/20-seed.sql
+        working-directory: .
 
-### 5. Testing & Quality
+      - name: Start the C++ App container
+        run: docker-compose up -d app
+        working-directory: .
 
-#### Backend Tests (`backend/content/tests/`)
+      - name: Wait for C++ App to be ready
+        run: |
+          # Use curl to check if the app is listening on port 8080
+          # This assumes the healthcheck in docker-compose.yml for 'app' service works
+          # Or a simple loop with curl
+          for i in `seq 1 30`; do
+            docker-compose logs app | grep "HttpServer running on" && break
+            echo "Waiting for app to start..."
+            sleep 5
+          done
+          docker-compose ps
+          docker-compose logs app
 
-```python
+      - name: Run C++ Unit and Integration Tests
+        run: |
+          docker-compose exec app /bin/bash -c "cd /app/build && ./cms_test_runner"
+        working-directory: .
+
+      - name: Run API Integration Tests (using curl against the running app)
+        run: |
+          # Example API test: Register a user
+          curl -s -X POST -H "Content-Type: application/json" -d '{"username": "ci_test_user", "email": "ci_test@example.com", "password": "ci_test_password"}' http://localhost:8080/api/v1/auth/register | grep "success"
+          # Example API test: Login the user
+          LOGIN_RESPONSE=$(curl -s -X POST -H "Content-Type: application/json" -d '{"username": "ci_test_user", "password": "ci_test_password"}' http://localhost:8080/api/v1/auth/login)
+          echo "$LOGIN_RESPONSE" | grep "success"
+          JWT_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.data.token')
+          echo "JWT_TOKEN: $JWT_TOKEN"
+          [ -n "$JWT_TOKEN" ] || { echo "JWT token not found"; exit 1; }
+
+          # Example API test: Create content
+          curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $JWT_TOKEN" -d '{"title": "CI Test Article", "body": "This is an article created during CI.", "status": "published"}' http://localhost:8080/api/v1/content | grep "success"
+          # Example API test: Get all content (check for the one just created)
+          curl -s http://localhost:8080/api/v1/content | grep "CI Test Article"
+        env:
+          # jq is used for parsing JSON, ensure it's available or install it
+          # You can add: apt-get install -y jq
+          DOCKER_BUILDKIT: 1 # For buildx and multi-stage builds
+        working-directory: .
+
+      - name: Stop services
+        if: always()
+        run: docker-compose down -v
+        working-directory: .
+
+  # You can add a separate deployment job if needed
+  # deploy:
+  #   needs: build-and-test
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to production (example)
+  #       run: echo "Deploying to production..."
+  #       # Add steps for pushing Docker image, deploying to K8s/ECS, etc.

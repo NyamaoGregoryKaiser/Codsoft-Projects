@@ -1,91 +1,69 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: cms_db
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
     volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      # Mount config.json to allow easy modification without rebuilding image
+      - ./src/config.json:/app/config.json
+      # Mount static assets for frontend development (optional for production)
+      - ./static:/app/static
+    depends_on:
+      - postgres
+    environment:
+      # Override config.json values with environment variables if needed
+      # These are examples, check your config.json for actual keys
+      # DROGON_APP_PORT: 8080
+      # DROGON_DB_HOST: postgres
+      # DROGON_DB_USER: cms_user
+      # DROGON_DB_PASSWORD: cms_password
+      # DROGON_DB_DATABASE: cms_db
+      # JWT_SECRET: your_production_jwt_secret
+      # Note: Drogon reads from its own config mechanisms first.
+      # For secrets, it's better to manage them through Docker secrets or environment variables
+      # that your C++ code explicitly reads if not using Drogon's config.
+      # Our JwtManager and RateLimitMiddleware read from config.json, which is mounted.
+      # For production, these should be securely passed.
+      TZ: "UTC" # Set timezone inside container
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cms-network
+
+  postgres:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_USER: cms_user
+      POSTGRES_PASSWORD: cms_password
+      POSTGRES_DB: cms_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: "UTC" # Set timezone inside container
+    volumes:
+      - pgdata:/var/lib/postgresql/data/pgdata
+      # Mount initialization scripts
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cms_user -d cms_db"]
+      interval: 10s
       timeout: 5s
       retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: cms_redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: cms_backend
-    env_file:
-      - ./.env
-    environment:
-      # Explicitly set Django settings module for development for easier switching
-      DJANGO_SETTINGS_MODULE: cms_project.settings.development
-      # Pass DB and Redis variables from .env to backend service
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_HOST: db # Service name
-      DB_PORT: 5432
-      REDIS_URL: redis://redis:6379/1 # Service name
-      SECRET_KEY: ${SECRET_KEY}
-      DEBUG: ${DEBUG}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
-    volumes:
-      - ./backend:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/mediafiles
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: sh -c "python manage.py collectstatic --noinput && python manage.py migrate && python manage.py runserver 0.0.0.0:8000" # For development, Gunicorn in prod
-    # In production, this would be `gunicorn cms_project.wsgi:application --bind 0.0.0.0:8000`
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
-    container_name: cms_frontend
-    env_file:
-      - ./.env
-    ports:
-      - "3000:80" # Maps container port 80 (Nginx) to host port 3000
-    depends_on:
-      backend:
-        condition: service_started
+    networks:
+      - cms-network
 
 volumes:
-  postgres_data:
-  static_volume: # For Django static files
-  media_volume:  # For Django uploaded media files
+  pgdata:
 
-```
-
-**Note:** The `backend` service's `command` in `docker-compose.yml` is set for *development*. For production, it should use Gunicorn as specified in `backend/Dockerfile`'s `CMD` or `entrypoint.sh`. The `backend/entrypoint.sh` provided is more robust for production-like startup.
-
-#### CI/CD Pipeline Configuration (`.github/workflows/main.yml`)
-
-This example uses GitHub Actions.
-
-```yaml
+networks:
+  cms-network:
+    driver: bridge

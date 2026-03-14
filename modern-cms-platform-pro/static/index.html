@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C++ CMS Frontend</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <h1>C++ CMS</h1>
+        <nav>
+            <button id="show-home">Home</button>
+            <button id="show-login" class="auth-btn">Login</button>
+            <button id="show-register" class="auth-btn">Register</button>
+            <button id="show-dashboard" class="auth-btn" style="display:none;">Dashboard</button>
+            <button id="logout" class="auth-btn" style="display:none;">Logout</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="home-section">
+            <h2>Welcome to the C++ CMS!</h2>
+            <p>This is a basic frontend demonstrating the capabilities of the C++ backend.</p>
+            <h3>Public Content</h3>
+            <div id="public-content-list" class="content-list"></div>
+        </section>
+
+        <section id="login-section" style="display:none;">
+            <h2>Login</h2>
+            <form id="login-form">
+                <label for="login-username">Username or Email:</label>
+                <input type="text" id="login-username" required>
+                <label for="login-password">Password:</label>
+                <input type="password" id="login-password" required>
+                <button type="submit">Login</button>
+            </form>
+            <p id="login-message" class="message"></p>
+        </section>
+
+        <section id="register-section" style="display:none;">
+            <h2>Register</h2>
+            <form id="register-form">
+                <label for="register-username">Username:</label>
+                <input type="text" id="register-username" required>
+                <label for="register-email">Email:</label>
+                <input type="email" id="register-email" required>
+                <label for="register-password">Password:</label>
+                <input type="password" id="register-password" required>
+                <button type="submit">Register</button>
+            </form>
+            <p id="register-message" class="message"></p>
+        </section>
+
+        <section id="dashboard-section" style="display:none;">
+            <h2>Dashboard</h2>
+            <p>Welcome <span id="dashboard-username"></span>! Your role: <span id="dashboard-role"></span></p>
+
+            <h3>My Content</h3>
+            <div id="my-content-list" class="content-list"></div>
+
+            <h3>Create New Content</h3>
+            <form id="create-content-form">
+                <label for="new-content-title">Title:</label>
+                <input type="text" id="new-content-title" required>
+                <label for="new-content-body">Body:</label>
+                <textarea id="new-content-body" rows="5" required></textarea>
+                <label for="new-content-status">Status:</label>
+                <select id="new-content-status">
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                </select>
+                <button type="submit">Create Content</button>
+            </form>
+            <p id="create-content-message" class="message"></p>
+
+            <h3>Edit Content (<span id="editing-content-id"></span>)</h3>
+            <form id="edit-content-form" style="display:none;">
+                <input type="hidden" id="edit-content-id">
+                <label for="edit-content-title">Title:</label>
+                <input type="text" id="edit-content-title" required>
+                <label for="edit-content-body">Body:</label>
+                <textarea id="edit-content-body" rows="5" required></textarea>
+                <label for="edit-content-status">Status:</label>
+                <select id="edit-content-status">
+                    <option value="draft">Draft</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                </select>
+                <button type="submit">Update Content</button>
+                <button type="button" id="cancel-edit">Cancel</button>
+            </form>
+            <p id="edit-content-message" class="message"></p>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

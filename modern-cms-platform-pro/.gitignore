@@ -1,0 +1,40 @@
+# Build artifacts
+build/
+bin/
+lib/
+*.o
+*.so
+*.a
+*.gch
+
+# Executables
+cms-cpp
+test/cms_test_runner
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Dependency specific
+drogon_cmake_config.cmake
+
+# Test specific build directory
+test/build/
+
+# Docker related
+.dockerignore
+
+# Environment variables (if any)
+.env

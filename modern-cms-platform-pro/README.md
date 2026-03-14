@@ -1,171 +1,151 @@
-# Enterprise-Grade Content Management System (CMS)
+# Enterprise-Grade C++ Content Management System (CMS)
 
-This is a comprehensive, production-ready full-stack Content Management System built with Django (REST Framework) for the backend and React (Chakra UI) for the frontend. It includes features like user authentication, content management (posts, pages, media), categorization, testing, Dockerization, and CI/CD setup.
+This project provides a comprehensive, production-ready Content Management System built primarily with C++ for the backend, focusing on performance, scalability, and security. It features a robust RESTful API and a lightweight static frontend to demonstrate full-stack capabilities.
 
 ## Features
 
-**Backend (Django/DRF)**
-*   **User Management:** Custom User model, JWT-based authentication (login, register, refresh, logout), user profiles.
-*   **Content Management:**
-    *   **Posts & Pages:** CRUD operations, title, content (rich text ready), slug generation, status (draft, published, archived).
-    *   **Categories & Tags:** For content organization, CRUD operations.
-    *   **Media Management:** Upload, store, and retrieve image/file assets.
-    *   **Content Revisions:** Basic versioning to track changes and restore previous states.
-*   **API:** Full CRUD API endpoints with `djangorestframework`.
-*   **Permissions & Authorization:** Role-based access control (Admin, Staff/Editor, Authenticated User).
-*   **Error Handling:** Custom exception handler for consistent API responses.
-*   **Caching:** Redis integration for API response caching to improve performance.
-*   **Rate Limiting:** DRF's built-in throttling for API endpoints.
-*   **Logging:** Configurable logging with console and file output.
-*   **Database:** PostgreSQL for robust data storage.
-*   **API Documentation:** Integrated Swagger UI / OpenAPI Spec using `drf-spectacular`.
+*   **Core C++ Backend (Drogon Framework):**
+    *   **User Management:** Register, Login, User CRUD (admin only).
+    *   **Content Management:** Articles/Pages CRUD.
+    *   **API Endpoints:** Full CRUD operations for core resources.
+    *   **Business Logic:** Segregated service layer for complex operations.
+*   **Database Layer:**
+    *   PostgreSQL for persistent data storage.
+    *   Schema definitions and seed data.
+*   **Authentication & Authorization:**
+    *   JWT (JSON Web Tokens) based authentication.
+    *   Role-based authorization (basic admin/user distinction).
+*   **Middleware:**
+    *   **Logging:** Centralized request and error logging.
+    *   **Error Handling:** Global middleware for consistent error responses.
+    *   **Caching:** Simple in-memory caching for GET requests.
+    *   **Rate Limiting:** IP-based request limiting to prevent abuse.
+*   **Frontend:**
+    *   Lightweight HTML/CSS/JavaScript SPA to interact with the backend API.
+*   **Containerization:**
+    *   Docker and Docker Compose for easy setup and deployment.
+*   **Testing:**
+    *   Unit tests with Google Test for critical components.
+    *   Integration tests for service layers.
+    *   API tests (conceptual, to be executed via `curl`/Postman).
+*   **Documentation:**
+    *   Comprehensive README, API documentation, Architecture overview, Deployment guide.
+*   **Security:** Password hashing, JWTs, basic input validation.
 
-**Frontend (React/Chakra UI)**
-*   **Modern UI:** Built with React 18, utilizing Chakra UI for accessible and responsive components.
-*   **Authentication:** Integration with JWT backend for user login/logout.
-*   **Admin Dashboard:** A responsive admin panel for managing posts, pages, categories, tags, and media.
-*   **Content Forms:** Forms for creating and editing content with rich text editing capabilities (placeholder).
-*   **Public Views:** Basic public-facing pages for displaying posts and static pages.
-*   **Routing:** React Router DOM for client-side navigation.
-*   **State Management:** React Context API for authentication state.
-*   **API Integration:** `axios` for interacting with the backend API.
+## Prerequisites
 
-**Infrastructure**
-*   **Docker:** Containerization for all services (backend, frontend, database, redis).
-*   **Docker Compose:** Easy local development setup with all services orchestrated.
-*   **Environment Configuration:** `python-decouple` and `.env` files for managing sensitive configurations.
+*   Docker and Docker Compose
+*   A C++ compiler (GCC/Clang) supporting C++17 or later (for local development/building outside Docker)
+*   CMake (for local development/building outside Docker)
 
-**Quality & Development Practices**
-*   **Testing:** Unit and integration tests for backend APIs and models, basic frontend component tests.
-*   **CI/CD:** GitHub Actions workflow for linting, testing, and building Docker images.
+## Setup and Installation
 
-## Technologies Used
-
-*   **Backend:** Python 3.10+, Django 4.x, Django REST Framework, PostgreSQL, Redis
-*   **Frontend:** React 18, Chakra UI, JavaScript/ES6+
-*   **Containerization:** Docker, Docker Compose
-*   **API Documentation:** DRF Spectacular (Swagger/OpenAPI)
-*   **Authentication:** JWT (JSON Web Tokens)
-*   **Deployment (Conceptual):** Nginx, Gunicorn
-
-## Setup Instructions
-
-### Prerequisites
-
-*   Docker & Docker Compose
-*   Git
-
-### 1. Clone the Repository
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/your-cms-project.git
-cd your-cms-project
+git clone https://github.com/your-username/cms-cpp.git
+cd cms-cpp
 ```
 
-### 2. Environment Configuration
+### 2. Configure Environment Variables (Optional, for local build or specific Docker settings)
 
-Create `.env` files in the root directory from the examples:
+The `config.json` file in `src/` holds default configurations. For sensitive data like JWT secrets or production database credentials, it's recommended to use environment variables which Docker Compose can pick up.
+The `docker-compose.yml` uses environment variables defined directly in the file for demonstration. For production, consider using a `.env` file or Docker secrets.
+
+### 3. Build and Run with Docker Compose (Recommended)
+
+This is the easiest way to get the entire stack (PostgreSQL and C++ app) running.
 
 ```bash
-cp .env.example .env
-cp backend/.env.example backend/.env # Although docker-compose will handle most backend env
-cp frontend/.env.example frontend/.env
+docker-compose up --build -d
 ```
 
-**Edit `.env` (root directory):**
-*   Update `SECRET_KEY` with a strong, random string.
-*   Adjust `DB_NAME`, `DB_USER`, `DB_PASSWORD` if desired.
-*   Set `REACT_APP_API_BASE_URL` to `http://localhost:8000/api/v1` for local development.
-
-**Example `.env` (root directory, for `docker-compose.yml`):**
-```
-# Django Settings
-SECRET_KEY=your_super_secret_key_at_least_50_chars
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Database (PostgreSQL)
-DB_NAME=cms_dev_db
-DB_USER=cms_dev_user
-DB_PASSWORD=cms_dev_password
-
-# Frontend Settings
-REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
-REACT_APP_SITE_NAME=My Awesome CMS
-```
-
-### 3. Build and Run with Docker Compose
-
-From the project root directory:
-
-```bash
-docker-compose build
-docker-compose up -d
-```
+*   `--build`: Builds the C++ application Docker image.
+*   `-d`: Runs containers in detached mode.
 
 This will:
-*   Build the `backend` and `frontend` Docker images.
-*   Start `PostgreSQL`, `Redis`, `backend`, and `frontend` services.
-*   Apply Django migrations and collect static files (in `backend` service's `entrypoint.sh`).
+1.  Build the `cms-cpp` Docker image.
+2.  Start a PostgreSQL container.
+3.  Execute `db/schema.sql` and `db/seed.sql` inside the PostgreSQL container (handled by `docker-entrypoint-initdb.d`).
+4.  Start the `cms-cpp` application container.
 
-Wait for all services to start. You can check their status with `docker-compose ps`.
-The `backend` will be running on `http://localhost:8000` and `frontend` on `http://localhost:3000`.
+The application will be accessible at `http://localhost:8080`.
 
-### 4. Initial Setup (Backend)
+### 4. Access the Frontend
 
-Once the backend service is running:
+Open your web browser and navigate to `http://localhost:8080`. You will see the basic CMS frontend.
 
-**Create a Superuser (for Django Admin and initial content creation):**
+### 5. Stop the Application
+
 ```bash
-docker-compose exec backend python manage.py createsuperuser
-```
-Follow the prompts to create an admin user (e.g., email: `admin@example.com`, password: `adminpassword`).
-
-**Seed Sample Data:**
-```bash
-docker-compose exec backend python manage.py seed --posts 15 --pages 5 --categories 5 --tags 10 --media 5
-```
-This command will populate the database with some sample posts, pages, categories, tags, and media items for testing. It will also ensure the `admin@example.com` user exists.
-
-### 5. Access the Applications
-
-*   **Frontend:** Open your browser to `http://localhost:3000`
-    *   You can log in to the admin panel at `http://localhost:3000/login` using the superuser credentials (`admin@example.com`/`adminpassword`).
-*   **Backend API:** Access the API endpoints at `http://localhost:8000/api/v1/`
-*   **API Documentation (Swagger UI):** `http://localhost:8000/api/schema/swagger-ui/`
-*   **Django Admin:** `http://localhost:8000/admin/`
-
-## Running Tests
-
-### Backend Tests
-
-From the project root:
-```bash
-docker-compose exec backend python manage.py test
+docker-compose down
 ```
 
-### Frontend Tests
+## Local Development (Without Docker Compose)
 
-From the project root:
+This section is for developers who want to build and run the C++ backend directly on their machine.
+
+### 1. Install Drogon and its Dependencies
+
+Follow the instructions on the [Drogon GitHub page](https://github.com/drogonframework/drogon) to install Drogon. You will also need PostgreSQL client libraries.
+
+### 2. Set up PostgreSQL Database
+
 ```bash
-docker-compose exec frontend yarn test --watchAll=false
+# Example: Create a PostgreSQL container manually
+docker run --name cms-postgres -e POSTGRES_USER=cms_user -e POSTGRES_PASSWORD=cms_password -e POSTGRES_DB=cms_db -p 5432:5432 -d postgres:13
+
+# Wait for PostgreSQL to start, then connect and run schema/seed scripts
+# You might need to install `psql` client locally
+psql -h localhost -p 5432 -U cms_user -d cms_db -f db/schema.sql
+psql -h localhost -p 5432 -U cms_user -d cms_db -f db/seed.sql
 ```
 
-## Further Development
+Ensure your `src/config.json` or environment variables are set to connect to this database.
 
-*   **Rich Text Editor:** Replace the placeholder `Textarea` in `RichTextEditor.js` with a proper rich text editor library (e.g., `react-quill`, `draft-js`, `ckeditor5-react`).
-*   **Media Gallery:** Enhance `MediaManagementPage` with image previews, search, filtering, and pagination.
-*   **User Roles & Permissions:** Implement more granular user roles (e.g., "Editor" who can publish but not manage users).
-*   **SEO Fields:** Add meta title, meta description fields to Post/Page models and serializers.
-*   **Frontend Authentication:** Persist user session more robustly, handle token expiration and refresh token failures gracefully.
-*   **Internationalization (i18n):** Support multiple languages for content and UI.
-*   **Deployment:** Implement a full production deployment setup (e.g., AWS, GCP, DigitalOcean) using Nginx for static file serving and reverse proxy, Gunicorn for the Django app, and dedicated database/redis instances.
+### 3. Build the C++ Backend
+
+```bash
+cd cms-cpp/src
+mkdir build
+cd build
+cmake ..
+make
+```
+
+### 4. Run the C++ Backend
+
+```bash
+./cms-cpp
+```
+
+The application will now be running locally, typically on `http://127.0.0.1:8080` (or as configured in `config.json`).
+
+## Testing
+
+### Running C++ Tests
+
+```bash
+cd cms-cpp/test/build # Assuming you've built the tests
+cmake ..
+make
+./cms_test_runner
+```
+
+### API Testing
+
+Refer to `API.md` for example `curl` commands to test the endpoints. You can use tools like Postman or Insomnia for more structured API testing.
+
+## Documentation
+
+*   **API Documentation:** [`API.md`](./API.md) - Details all available REST API endpoints.
+*   **Architecture Documentation:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) - Overview of the system design and components.
+*   **Deployment Guide:** [`DEPLOYMENT.md`](./DEPLOYMENT.md) - Instructions for deploying to production environments.
+
+## Contribution
+
+Feel free to fork the repository, open issues, and submit pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the `LICENSE` file for details.
-```
-
-#### `architecture.md`
-
-```markdown
+This project is licensed under the MIT License. See the `LICENSE` file for details. (Note: A LICENSE file is not provided in this output, but should be added in a real project).
