@@ -1,0 +1,128 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Start Docker services for testing (PostgreSQL & Redis)
+        run: docker-compose up -d db redis
+        working-directory: .
+
+      - name: Wait for DB & Redis to be healthy
+        run: |
+          docker-compose ps
+          docker-compose logs db redis
+          chmod +x ./scripts/wait-for-services.sh
+          ./scripts/wait-for-services.sh db 5432
+          ./scripts/wait-for-services.sh redis 6379
+        working-directory: .
+
+      - name: Run backend tests
+        run: npm test
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: cms_test_user # Use test specific DB user/name
+          DB_PASSWORD: cms_test_password
+          DB_NAME: cms_test_db
+          JWT_SECRET: test_jwt_secret
+          REDIS_URL: redis://localhost:6379
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false
+        working-directory: ./frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: ./frontend
+
+  deploy:
+    name: Deploy to Production
+    needs: [build-and-test-backend, build-and-test-frontend] # Ensure tests pass before deploying
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only deploy main branch to production
+    environment:
+      name: production
+      url: https://your-cms-domain.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Example deployment steps (replace with your actual deployment method)
+      # This could be pushing to a Docker registry and then deploying to a Kubernetes cluster,
+      # an EC2 instance, a managed PaaS like Heroku/Render, etc.
+
+      - name: Login to Docker Hub (or other registry)
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker images
+        run: |
+          docker-compose build
+          docker tag cms-backend:latest your-docker-registry/cms-backend:${{ github.sha }}
+          docker tag cms-frontend:latest your-docker-registry/cms-frontend:${{ github.sha }}
+          docker push your-docker-registry/cms-backend:${{ github.sha }}
+          docker push your-docker-registry/cms-frontend:${{ github.sha }}
+
+      - name: Deploy to Server (e.g., using SSH and Docker Compose)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /path/to/your/cms/on/server
+            git pull origin main
+            # Update .env file on server if needed (careful with secrets)
+            # Pull new images and restart services
+            docker-compose pull
+            docker-compose up -d --build --force-recreate backend frontend nginx
+            docker system prune -f # Clean up old images/volumes
+
+      - name: Post-deployment checks (optional)
+        run: curl -sSf https://your-cms-domain.com/api/health
+```

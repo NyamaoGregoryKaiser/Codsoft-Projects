@@ -1,0 +1,79 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-cms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cms_password}
+      POSTGRES_DB: ${DB_NAME:-cms_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cms_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cms_user} -d ${DB_NAME:-cms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - cms_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is ready before starting backend
+      redis:
+        condition: service_healthy # Ensure Redis is ready
+    command: sh -c "npm run db:migrate && npm run db:seed && npm start" # Run migrations and seeds on startup
+                                                                   # NOTE: In production, migrations/seeds
+                                                                   # should be managed carefully, usually not on every start.
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: always
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx default)
+    depends_on:
+      - backend # Frontend needs backend to be reachable, but no strict health check for build
+
+  # Optional: Nginx proxy for both frontend and backend APIs
+  # This sets up a single entry point for the entire application
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443" # For HTTPS
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  cms_db_data:
+  cms_redis_data:
+```

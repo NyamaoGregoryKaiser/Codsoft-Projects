@@ -1,0 +1,29 @@
+```json
+{
+  "contentTypes": [
+    {
+      "id": "c1f7b8a0-e2d1-4e7f-b8c3-1d9e2a5f7d1b",
+      "name": "Blog Post",
+      "slug": "blog-post",
+      "description": "A standard blog post",
+      "fields": [
+        {"name": "title", "label": "Title", "type": "string", "required": true},
+        {"name": "body", "label": "Body Content", "type": "text", "required": true},
+        {"name": "tags", "label": "Tags", "type": "json", "required": false}
+      ]
+    },
+    {
+      "id": "b2c1d0f5-a3e4-4c6d-9b8a-2e1f3a5b7c9d",
+      "name": "Product Page",
+      "slug": "product-page",
+      "description": "Details for a product",
+      "fields": [
+        {"name": "productName", "label": "Product Name", "type": "string", "required": true},
+        {"name": "description", "label": "Description", "type": "text", "required": true},
+        {"name": "price", "label": "Price", "type": "number", "required": true},
+        {"name": "currency", "label": "Currency", "type": "string", "required": true, "defaultValue": "USD"}
+      ]
+    }
+  ]
+}
+```
