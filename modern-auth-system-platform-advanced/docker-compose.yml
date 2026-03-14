@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-authuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-authpassword}
+      POSTGRES_DB: ${DB_NAME:-authdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./scripts/db_migrations:/docker-entrypoint-initdb.d # For initial migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authuser -d authdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # C++ Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: auth-backend
+    restart: unless-stopped
+    ports:
+      - "9080:9080" # Map host port 9080 to container port 9080
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-authuser}
+      DB_PASSWORD: ${DB_PASSWORD:-authpassword}
+      DB_NAME: ${DB_NAME:-authdb}
+      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_for_access_tokens_12345}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your_super_secret_jwt_key_for_refresh_tokens_67890}
+      JWT_ACCESS_TOKEN_EXPIRATION_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:-15}
+      JWT_REFRESH_TOKEN_EXPIRATION_MINUTES: ${JWT_REFRESH_TOKEN_EXPIRATION_MINUTES:-1440}
+      HTTP_PORT: ${HTTP_PORT:-9080}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB to be healthy
+    # For development, mount source code to enable live-reloading or quicker rebuilds
+    # volumes:
+    #   - ./backend/src:/app/src
+    #   - ./backend/CMakeLists.txt:/app/CMakeLists.txt
+    #   - ./backend/vcpkg.json:/app/vcpkg.json
+
+  # React/Next.js Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: auth-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000" # Map host port 3000 to container port 3000
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:9080} # Point to backend service
+    depends_on:
+      backend:
+        condition: service_started # Frontend needs backend to be up
+    # For development, mount source code
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/next.config.js:/app/next.config.js
+      - ./frontend/.env.frontend.example:/app/.env.frontend # Use example for local dev
+
+volumes:
+  db_data: # Persistent volume for PostgreSQL data
+```
+
+### `backend/Dockerfile.backend`
+```dockerfile

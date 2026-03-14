@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "authentication-backend",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "pistache",
+    "pqxx",
+    "jwt-cpp",
+    "cpp-bcrypt",
+    "spdlog",
+    "nlohmann-json",
+    "gtest",
+    "gmock"
+  ]
+}

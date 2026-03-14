@@ -1,0 +1,61 @@
+# Stage 1: Build the C++ application
+FROM mcr.microsoft.com/devcontainers/cpp:debian AS builder
+
+WORKDIR /app
+
+# Install vcpkg (if not already present in the base image or container)
+# This assumes vcpkg is not pre-installed or needs to be updated.
+# If using a devcontainer image that already has vcpkg set up, this part can be optimized.
+ARG VCPKG_INSTALL_PATH=/opt/vcpkg
+ENV VCPKG_ROOT=$VCPKG_INSTALL_PATH
+ENV PATH=$PATH:$VCPKG_ROOT
+
+# Install build essential and git for vcpkg
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    curl \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone vcpkg if not existing
+RUN if [ ! -d "$VCPKG_ROOT" ]; then \
+    git clone https://github.com/microsoft/vcpkg.git $VCPKG_ROOT && \
+    $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics; \
+    fi
+
+# Copy vcpkg manifest and install dependencies
+COPY vcpkg.json .
+RUN $VCPKG_ROOT/vcpkg install --triplet x64-linux
+
+# Copy source code
+COPY . .
+
+# Build the application
+# Use VCPKG_TOOLCHAIN_FILE to integrate vcpkg with CMake
+RUN cmake -B build -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+RUN cmake --build build --config Release
+
+# Stage 2: Create a minimal runtime image
+FROM debian:stable-slim
+
+WORKDIR /app
+
+# Install runtime dependencies (e.g., libpq-dev for PostgreSQL client)
+# This list might need adjustment based on Pistache/JWT-CPP's dynamic dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libsasl2-2 \
+    libssl3 \
+    libcurl4 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the built executable from the builder stage
+COPY --from=builder /app/build/auth_server .
+COPY --from=builder /app/.env.backend.example ./.env.backend # Copy example env for runtime
+
+# Expose the port the application listens on
+EXPOSE 9080
+
+# Command to run the application
+CMD ["./auth_server"]
