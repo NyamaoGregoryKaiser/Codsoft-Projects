@@ -1,0 +1,129 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Load cached Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+        working-directory: ./backend
+
+      - name: Lint backend code (flake8)
+        run: |
+          pip install flake8
+          flake8 . --max-line-length=120
+        working-directory: ./backend
+
+      - name: Run backend tests
+        env:
+          # Use an in-memory SQLite database for testing, or a test PostgreSQL container
+          TEST_ENV: True
+          SECRET_KEY: test_secret_key
+        run: python manage.py test apps --noinput
+        working-directory: ./backend
+
+      - name: Calculate backend test coverage
+        run: |
+          pip install coverage
+          coverage run --source='.' manage.py test apps --noinput
+          coverage report -m
+          # Optional: coverage xml -o coverage.xml (for SonarQube, Codecov)
+        working-directory: ./backend
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Load cached Node.js dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false # Run tests once without watch mode
+        working-directory: ./frontend
+
+      - name: Lint frontend code (ESLint)
+        run: npm run lint # Assuming you have a 'lint' script in package.json
+        working-directory: ./frontend
+
+  # Optional: Deployment job (example for main branch)
+  # deploy:
+  #   needs: [backend-ci, frontend-ci]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Build and push backend Docker image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: ./backend
+  #         push: true
+  #         tags: yourdockerhub/cms-backend:latest
+  #     - name: Build and push frontend Docker image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: ./frontend
+  #         push: true
+  #         tags: yourdockerhub/cms-frontend:latest
+  #     # Add steps for deploying to a cloud provider (e.g., AWS ECS, Kubernetes, DigitalOcean Droplet)
+  #     # using SSH, kubectl, or AWS CLI commands.
+  #     - name: Deploy to Server (SSH example)
+  #       uses: appleboy/ssh-action@v0.1.6
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_KEY }}
+  #         script: |
+  #           cd /path/to/your/app
+  #           docker-compose pull
+  #           docker-compose up -d --build
+  #           docker image prune -f
+```

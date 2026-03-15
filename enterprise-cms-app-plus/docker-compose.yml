@@ -1,0 +1,77 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5432:5432" # Expose for local debugging/management if needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379" # Expose for local debugging/management if needed
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app/backend # Mount code for live reloading in dev
+      - media_data:/app/backend/media # Persist media uploads
+      - static_data:/app/backend/staticfiles # Persist collected static files
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    # In production, this would be:
+    # command: gunicorn cms_project.wsgi:application --bind 0.0.0.0:8000
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      # In development, you might mount the frontend source code for live reloading:
+      # - ./frontend:/app/frontend
+      # For production build served by Nginx, volumes are usually not needed here
+      # unless you have dynamic client-side assets. The build is copied into Nginx image.
+      - frontend_build_data:/usr/share/nginx/html # Persist the build if not baking into image directly
+    ports:
+      - "3000:80" # Expose frontend on port 3000, Nginx serves on 80 inside container
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - backend # Frontend needs backend to be up for API access (during runtime for built app)
+    # The default command from Dockerfile will run Nginx
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  static_data:
+  frontend_build_data: # For frontend Nginx container if you want to update build without rebuilding image
+```
