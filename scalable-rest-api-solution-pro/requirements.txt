@@ -1,0 +1,7 @@
+```
+# For local development/testing scripts (e.g., API tests, helper scripts)
+# requests library for making HTTP requests
+requests==2.31.0
+# python-dotenv for loading .env files
+python-dotenv==1.0.0
+```

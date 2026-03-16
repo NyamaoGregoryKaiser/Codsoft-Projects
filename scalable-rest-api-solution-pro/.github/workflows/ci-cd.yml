@@ -1,0 +1,171 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up environment variables
+      run: |
+        echo "JWT_SECRET=ci_secret_test_key" >> $GITHUB_ENV
+        echo "JWT_ISSUER=ci-test" >> $GITHUB_ENV
+        echo "JWT_EXPIRY_MINUTES=5" >> $GITHUB_ENV
+        echo "RATE_LIMIT_MAX_REQUESTS=10" >> $GITHUB_ENV
+        echo "RATE_LIMIT_TIME_WINDOW_SECONDS=5" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Install dependencies (Pistache, SOCI, spdlog, nlohmann/json, jwt-cpp, gtest)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential cmake git pkg-config \
+          libssl-dev \
+          libspdlog-dev \
+          libnlohmann-json-dev \
+          libpistache-dev \
+          libsoci-dev \
+          libsoci-sqlite3-dev \
+          libjwt-dev # This usually provides libjwt, not jwt-cpp directly
+        
+        # Install jwt-cpp from source as libjwt-dev is for libjwt (different library)
+        # This mirrors the Dockerfile.app builder stage
+        git clone https://github.com/Thalhammer/jwt-cpp.git /tmp/jwt-cpp
+        cd /tmp/jwt-cpp
+        mkdir build && cd build
+        cmake .. -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=/usr/local
+        sudo make install
+        sudo ldconfig # Update shared library cache
+
+    - name: Create build directory
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{runner.workspace}}/build
+      run: cmake ..
+
+    - name: Build C++ Application
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Release
+
+    - name: Run Unit and Integration Tests
+      working-directory: ${{runner.workspace}}/build
+      run: ./run_tests
+
+    - name: Setup Python for API tests
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run API Tests
+      # Assuming a Python script `tests/api_tests.py` exists
+      # For this comprehensive response, API tests are demonstrated conceptually via curl/python.
+      # A simple placeholder for CI/CD:
+      run: |
+        echo "Running API tests..."
+        # Start the API server in the background for API tests
+        # Use an ephemeral SQLite DB for testing
+        mkdir -p .db_ci
+        DB_PATH=".db_ci/test.db" ./database/init_db.sh
+        DB_PATH=".db_ci/test.db" JWT_SECRET="${{ env.JWT_SECRET }}" JWT_ISSUER="${{ env.JWT_ISSUER }}" SERVER_PORT=9081 ./build/ProjectManagementAPI &
+        API_PID=$!
+        sleep 5 # Give server time to start
+
+        # Example API test (replace with your actual python script or more curl commands)
+        python -c "
+import requests, os, time
+from dotenv import load_dotenv
+load_dotenv()
+API_BASE_URL = 'http://localhost:9081/api'
+headers = {'Content-Type': 'application/json'}
+
+try:
+    print('Testing /api/auth/register')
+    res = requests.post(f'{API_BASE_URL}/auth/register', json={'username': 'ciuser', 'email': 'ci@example.com', 'password': 'password'}, headers=headers)
+    res.raise_for_status()
+    print(f'Register OK: {res.json()}')
+
+    print('Testing /api/auth/login')
+    res = requests.post(f'{API_BASE_URL}/auth/login', json={'email': 'ci@example.com', 'password': 'password'}, headers=headers)
+    res.raise_for_status()
+    token = res.json()['token']
+    print(f'Login OK: Token obtained')
+    headers['Authorization'] = f'Bearer {token}'
+
+    print('Testing /api/projects (create)')
+    res = requests.post(f'{API_BASE_URL}/projects', json={'name': 'CI Project', 'description': 'Project for CI testing'}, headers=headers)
+    res.raise_for_status()
+    project_id = res.json()['id']
+    print(f'Create Project OK: ID {project_id}')
+
+    print('Testing /api/projects (get all)')
+    res = requests.get(f'{API_BASE_URL}/projects', headers=headers)
+    res.raise_for_status()
+    print(f'Get Projects OK: {res.json()}')
+    assert len(res.json()) >= 1
+
+    print('Testing /api/tasks (create)')
+    res = requests.post(f'{API_BASE_URL}/tasks', json={
+        'title': 'CI Task', 'description': 'Task for CI testing',
+        'project_id': project_id, 'assigned_user_id': 1
+    }, headers=headers)
+    res.raise_for_status()
+    task_id = res.json()['id']
+    print(f'Create Task OK: ID {task_id}')
+
+    print('All API tests passed!')
+
+except requests.exceptions.RequestException as e:
+    print(f'API Test Failed: {e}')
+    if e.response:
+        print(f'Response content: {e.response.text}')
+    exit(1)
+finally:
+    os.kill($API_PID, 15) # Terminate the API server
+    print('API server stopped.')
+"
+
+  # Optional: Dockerize the application and push to registry
+  # deploy:
+  #   needs: build-and-test
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v3
+  #   - name: Docker Login
+  #     uses: docker/login-action@v2
+  #     with:
+  #       username: ${{ secrets.DOCKER_USERNAME }}
+  #       password: ${{ secrets.DOCKER_PASSWORD }}
+  #   - name: Build and push Docker image
+  #     uses: docker/build-push-action@v3
+  #     with:
+  #       context: .
+  #       file: ./docker/Dockerfile.app
+  #       push: true
+  #       tags: your-dockerhub-username/project-management-api:latest
+  #   - name: Deploy to Server (e.g., SSH into server and run docker-compose pull/up)
+  #     run: |
+  #       echo "Deploying to production server..."
+  #       # Example: ssh user@your-server "cd /path/to/app && docker-compose pull && docker-compose up -d"
+  #       # Requires SSH key setup in GitHub secrets
+  #       echo "Deployment step skipped for this example, add your deployment logic here."
+```

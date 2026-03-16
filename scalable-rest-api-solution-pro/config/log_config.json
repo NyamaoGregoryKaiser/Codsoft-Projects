@@ -1,0 +1,12 @@
+```json
+{
+  "global_log_level": "info",
+  "enable_console_logging": true,
+  "console_log_level": "info",
+  "enable_file_logging": true,
+  "file_path": "logs/application.log",
+  "file_log_level": "debug",
+  "max_file_size_mb": 5,
+  "max_files": 3
+}
+```

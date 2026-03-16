@@ -1,0 +1,21 @@
+```json
+{
+  "name": "project-management-client",
+  "version": "1.0.0",
+  "description": "A very basic HTML/JS client for the C++ API.",
+  "main": "client/script.js",
+  "scripts": {
+    "start-client": "open client/index.html",
+    "test": "echo \"No client tests specified yet\" && exit 0"
+  },
+  "keywords": [
+    "client",
+    "html",
+    "javascript"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
+```
