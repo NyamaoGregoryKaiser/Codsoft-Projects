@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-cmsdb}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cms_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_DATABASE:-cmsdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_DATABASE: ${DB_DATABASE:-cmsdb}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkeythatshouldbechangedinproduction}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-15} # minutes
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100} # requests per window
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs # Persist logs
+    command: ["sh", "-c", "npm run migrate:run && node dist/server.js"]
+    # For development:
+    # command: ["npm", "run", "dev"]
+    # volumes:
+    #   - ./backend:/app
+    #   - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80 (where Nginx serves React)
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api/v1 # This is for frontend to talk to backend from browser
+    depends_on:
+      - backend
+
+volumes:
+  cms_db_data:
+```
+
+#### `backend/Dockerfile`
+```dockerfile
