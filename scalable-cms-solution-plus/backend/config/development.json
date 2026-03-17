@@ -1,0 +1,9 @@
+{
+    "env": "development",
+    "log_level": 0,
+    "database": {
+        "host": "localhost"
+    },
+    "redis_host": "localhost"
+}
+```

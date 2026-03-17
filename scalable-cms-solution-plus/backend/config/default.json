@@ -1,0 +1,33 @@
+{
+    "app_name": "CMSSystem",
+    "env": "development",
+    "http_host": "0.0.0.0",
+    "http_port": 8080,
+    "thread_num": 4,
+    "frontend_origin": "http://localhost:3000",
+    "log_path": "logs/cms_backend.log",
+    "log_level": 2,  // 0:trace, 1:debug, 2:info, 3:warn, 4:error, 5:critical
+    "jwt_secret": "super_secret_jwt_key_that_should_be_long_and_random_in_production",
+    "jwt_access_token_expiry_minutes": 60,
+    "jwt_refresh_token_expiry_days": 7,
+    "database": {
+        "client_name": "default",
+        "type": "postgresql",
+        "host": "db",
+        "port": 5432,
+        "user": "cmsuser",
+        "password": "cms_password",
+        "dbname": "cms_db",
+        "connections_num": 8
+    },
+    "redis_host": "redis",
+    "redis_port": 6379,
+    "redis_db": 0,
+    "rate_limit": {
+        "enabled": true,
+        "max_requests": 100,
+        "window_seconds": 60
+    },
+    "password_hash_salt_rounds": 10
+}
+```

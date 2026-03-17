@@ -1,0 +1,183 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  build_and_test_backend:
+    runs-on: ubuntu-22.04 # Use a more recent Ubuntu runner
+    container:
+      image: ubuntu:22.04
+      options: --privileged # Some build tools/dependencies might need this, or use specific dev image
+
+    steps:
+    - name: Set up build environment
+      run: |
+        apt-get update && apt-get install -y \
+        build-essential \
+        cmake \
+        git \
+        libjsoncpp-dev \
+        libpq-dev \
+        libssl-dev \
+        uuid-dev \
+        libhiredis-dev \
+        libbcrypt-dev \
+        pkg-config \
+        libgtest-dev # For Google Test
+        # Install and configure Google Test
+        cd /usr/src/gtest
+        cmake .
+        make
+        cp lib/*.a /usr/lib
+        ln -s /usr/lib/libgtest.a /usr/local/lib/libgtest.a
+        ln -s /usr/lib/libgtest_main.a /usr/local/lib/libgtest_main.a
+        rm -rf /var/lib/apt/lists/*
+        
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure CMake
+      run: |
+        mkdir -p backend/build
+        cd backend/build
+        cmake ..
+
+    - name: Build Backend
+      run: cmake --build backend/build -j$(nproc)
+
+    - name: Run Backend Tests
+      run: |
+        cd backend/build
+        # Before running integration tests, we need a test DB/Redis
+        # For CI, we'll quickly launch them via Docker Compose
+        docker-compose -f ../docker/docker-compose.yml up -d db redis
+        ./wait-for-it.sh db:5432 -t 30
+        ./wait-for-it.sh redis:6379 -t 30
+
+        # Run unit tests
+        ctest --test-dir tests/unit -V
+        # Run integration tests (requires Drogon server running)
+        # This is tricky for integration tests within the same container.
+        # A better approach is to spin up the backend container, then run tests from another.
+        # For simplicity, we'll mock the integration test with a basic check
+        # For true integration, you'd execute tests from a separate container/process
+        # For now, let's just make sure the executable runs and try a basic HTTP call if possible
+        # Or, we can launch the drogons server temporarily within the test
+        # For proper CI, the integration test needs to be run against a live API endpoint.
+        # We can start the `CMSSystem` app in the background for a short while, then run `tests/integration_tests`.
+        
+        # Start backend for integration tests
+        cd /app/backend/build # Go to build dir for config files
+        /app/backend/build/CMSSystem & # Run in background
+        sleep 5 # Give it time to start
+        
+        # Now run integration tests
+        cd tests/integration
+        ./integration_tests # This would need to target localhost:8080
+
+        # Cleanup test containers
+        docker-compose -f ../../docker/docker-compose.yml down
+        
+    - name: Code Coverage (Optional)
+      # You would integrate lcov/gcov here if enabled in CMake
+      # run: lcov --capture --directory backend/build --output-file coverage.info
+      # run: lcov --list coverage.info
+      # uses: codecov/codecov-action@v3
+
+  build_and_test_frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18' # Or desired LTS version
+
+    - name: Install dependencies
+      run: npm install
+      working-directory: ./frontend
+
+    - name: Run Frontend Tests (e.g., Jest, React Testing Library)
+      # This is a placeholder. A real React app would have specific test scripts.
+      run: npm test -- --coverage --passWithNoTests
+      working-directory: ./frontend
+      env:
+        CI: true # Required for some CI environments with Jest
+
+    - name: Build Frontend
+      run: npm run build
+      working-directory: ./frontend
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build_and_test_backend, build_and_test_frontend] # Ensure tests pass before deployment
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Deploy only on push to main
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and Push Backend Docker Image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        file: ./backend/docker/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/cms-backend:latest
+        platforms: linux/amd64
+
+    - name: Build and Push Frontend Docker Image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        file: ./frontend/Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/cms-frontend:latest
+        platforms: linux/amd64
+
+    - name: Deploy to Production Server via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd ~/cms-system # Assuming you clone the repo to home directory on server
+          git pull origin main # Pull latest changes to docker-compose.yml etc.
+          # Export production environment variables from GitHub Secrets
+          export DB_USER=${{ secrets.PROD_DB_USER }}
+          export DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }}
+          export DB_NAME=${{ secrets.PROD_DB_NAME }}
+          export REDIS_HOST=${{ secrets.PROD_REDIS_HOST }}
+          export REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
+          export REDIS_DB=${{ secrets.PROD_REDIS_DB }}
+          export HTTP_PORT=${{ secrets.PROD_HTTP_PORT }}
+          export FRONTEND_ORIGIN=${{ secrets.PROD_FRONTEND_ORIGIN }}
+          export JWT_SECRET=${{ secrets.PROD_JWT_SECRET }}
+
+          # Pull latest images and restart services
+          docker-compose -f backend/docker/docker-compose.yml pull
+          docker-compose -f backend/docker/docker-compose.yml up -d --remove-orphans
+          docker-compose -f backend/docker/docker-compose.yml ps
+          docker image prune -f # Clean up old docker images
+```

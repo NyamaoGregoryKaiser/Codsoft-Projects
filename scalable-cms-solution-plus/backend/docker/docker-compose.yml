@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: cms_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-cmsuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cms_password}
+      POSTGRES_DB: ${DB_NAME:-cms_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d # Run migration scripts on first start
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cmsuser} -d ${DB_NAME:-cms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    container_name: cms_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend # Path to your backend Dockerfile
+      dockerfile: docker/Dockerfile
+    container_name: cms_backend
+    environment:
+      # Pass environment variables defined in .env or provide defaults
+      HTTP_PORT: ${HTTP_PORT:-8080}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_that_should_be_long_and_random_in_production}
+      # Database connection for Drogon config.json, will be loaded from AppConfig
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-cmsuser}
+      DB_PASSWORD: ${DB_PASSWORD:-cms_password}
+      DB_NAME: ${DB_NAME:-cms_db}
+      # Redis connection for Drogon config.json
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+    volumes:
+      - ./logs:/app/logs # Persistent logs
+      - ../backend/config:/app/config:ro # Mount config directory to allow changes without rebuilding
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure # Ensures the backend restarts if it crashes
+
+  frontend:
+    build:
+      context: ../frontend # Path to your frontend Dockerfile
+    container_name: cms_frontend
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:8080/api/v1 # This might change in production
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80 (where Nginx/frontend serves)
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+```
