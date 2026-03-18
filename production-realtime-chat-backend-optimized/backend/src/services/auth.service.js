@@ -1,0 +1,55 @@
+```javascript
+const httpStatus = require('http-status');
+const tokenService = require('./token.service');
+const userService = require('./user.service');
+const ApiError = require('../utils/ApiError');
+
+/**
+ * Login with username and password
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<User>}
+ */
+const loginUserWithEmailAndPassword = async (email, password) => {
+  const user = await userService.getUserByEmail(email);
+  if (!user || !(await user.isPasswordMatch(password))) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+  }
+  return user;
+};
+
+/**
+ * Register a new user
+ * @param {Object} userBody
+ * @returns {Promise<User>}
+ */
+const registerUser = async (userBody) => {
+  return userService.createUser(userBody);
+};
+
+/**
+ * Refresh auth tokens
+ * @param {string} refreshToken
+ * @returns {Promise<Object>}
+ */
+const refreshAuth = async (refreshToken) => {
+  try {
+    const refreshTokenDoc = await tokenService.verifyToken(refreshToken, 'refresh');
+    const user = await userService.getUserById(refreshTokenDoc.user);
+    if (!user) {
+      throw new Error();
+    }
+    await refreshTokenDoc.destroy(); // Invalidate old refresh token
+    const tokens = await tokenService.generateAuthTokens(user);
+    return { user, tokens };
+  } catch (error) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate');
+  }
+};
+
+module.exports = {
+  loginUserWithEmailAndPassword,
+  registerUser,
+  refreshAuth,
+};
+```

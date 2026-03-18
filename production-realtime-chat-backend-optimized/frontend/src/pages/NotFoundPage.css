@@ -1,0 +1,39 @@
+```css
+.not-found-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 70px); /* Adjust based on navbar height */
+  text-align: center;
+  color: #34495e;
+}
+
+.not-found-container h1 {
+  font-size: 8em;
+  margin: 0;
+  color: #e74c3c;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+}
+
+.not-found-container p {
+  font-size: 1.5em;
+  margin-top: 10px;
+  margin-bottom: 30px;
+}
+
+.not-found-container .home-link {
+  background-color: #007bff;
+  color: white;
+  padding: 12px 25px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 1.2em;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.not-found-container .home-link:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+}
+```

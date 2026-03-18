@@ -1,0 +1,2023 @@
+---
+
+### 2. Database Layer
+
+The database layer is handled by **PostgreSQL** with **Sequelize ORM**.
+
+*   **Schema Definitions:** Defined in `backend/src/models/` (e.g., `user.model.js`, `chatroom.model.js`, `message.model.js`). These define tables, columns, data types, validations, and relationships.
+*   **Migration Scripts:** Located in `backend/src/migrations/`. These files are generated using `sequelize-cli` and manage database schema changes.
+    *   `npx sequelize-cli init` (for initial setup)
+    *   `npx sequelize-cli model:generate --name User --attributes username:string,email:string,password:string,role:enum` (example)
+    *   `npx sequelize-cli migration:generate --name create-users-table` (manual creation for detailed migrations)
+    *   `npm run migrate` executes migrations.
+    *   `npm run migrate:undo` reverts last migration.
+*   **Seed Data:** Located in `backend/src/seeders/`. These files insert initial data into the database.
+    *   `npx sequelize-cli seed:generate --name initial-data`
+    *   `npm run seed` executes seeders.
+    *   `npm run seed:undo` reverts seeders.
+*   **Query Optimization:**
+    *   **Indexes:** Added to foreign keys (`chatRoomId`, `userId` in `messages`) and frequently queried columns (`createdAt` in `messages`, `email`, `username` in `users`, `name` in `chat_rooms`) within the model definitions and migration files.
+    *   **Relationships:** Defined in `backend/src/models/index.js` for eager loading (`include`) to reduce N+1 queries.
+    *   **Pagination:** Implemented in `userService.queryUsers` and `chatService.getRoomMessages` using `limit` and `offset`.
+
+**Sequelize CLI Configuration (`backend/config/config.json` - *This file is needed for sequelize-cli*)**:
+
+```json
+{
+  "development": {
+    "username": "chatuser",
+    "password": "chatpassword",
+    "database": "chatdb",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "chatuser",
+    "password": "chatpassword",
+    "database": "chatdb_test",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres",
+    "logging": false
+  },
+  "production": {
+    "username": "chatuser",
+    "password": "chatpassword",
+    "database": "chatdb",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres"
+  }
+}
+```
+
+---
+
+### 3. Configuration & Setup
+
+#### `docker-compose.yml`
+
+This file orchestrates the backend, PostgreSQL database, and Redis cache.
+
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chat_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - chat_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} # Require password in production
+    volumes:
+      - chat_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "INFO"] # if using password, add -a ${REDIS_PASSWORD}
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chat_backend
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: 5000
+      FRONTEND_URL: ${FRONTEND_URL}
+      DB_DIALECT: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION_MINUTES: ${JWT_ACCESS_EXPIRATION_MINUTES}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Avoid overwriting node_modules inside container
+    # command: bash -c "npm install && npm run migrate && npm run seed && npm run dev" # For dev with automatic migrations/seeds
+    command: bash -c "npm install && npm run migrate && npm start" # For production, run migrations and start
+    restart: always
+
+  # Frontend service can be served statically or via another container
+  # For local development, typically run 'npm start' in frontend directory
+  # For production, build and serve with Nginx or a simple HTTP server
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chat_frontend
+    ports:
+      - "3000:3000" # Or 80 for production serve
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/v1 # This is internal for docker or external if host network used.
+      REACT_APP_SOCKET_URL: http://localhost:5000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm start # For dev
+    # command: npm run build && serve -s build -l 3000 # For production
+    depends_on:
+      - backend
+
+volumes:
+  chat_db_data:
+  chat_redis_data:
+```
+
+#### `backend/Dockerfile`
+
+```dockerfile
+# Use a Node.js 18 image as base
+FROM node:18-alpine
+
+# Set the working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json (if available)
+# to leverage Docker cache
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application code
+COPY . .
+
+# Expose the port the app runs on
+EXPOSE 5000
+
+# Run migrations and start the application
+# This is typically done during build or entrypoint for CI/CD
+# For production, migrations should be handled carefully.
+# CMD ["npm", "run", "migrate", "&&", "npm", "start"]
+# Let docker-compose override this for dev/prod flexibility
+CMD ["npm", "start"]
+```
+
+#### `backend/.dockerignore`
+```
+node_modules
+npm-debug.log
+.env
+Dockerfile
+.git
+.gitignore
+README.md
+```
+
+#### `frontend/Dockerfile`
+```dockerfile
+# For production build and serve
+# Stage 1: Build the React app
+FROM node:18-alpine as builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# Stage 2: Serve the app with Nginx or a lightweight server (e.g., serve)
+FROM alpine:latest
+WORKDIR /app
+
+# Install 'serve' globally for serving static files
+RUN npm install -g serve
+
+# Copy the built React app from the builder stage
+COPY --from=builder /app/build ./build
+
+# Expose port 3000 (or 80 for typical web server)
+EXPOSE 3000
+
+# Command to run the React app using serve
+CMD ["serve", "-s", "build", "-l", "3000"]
+```
+*Note: For `frontend/Dockerfile` in dev, you might just run `npm start` directly within the container, but for a production-ready setup, a multi-stage build and serving static files is standard.*
+
+#### `CI/CD pipeline configuration` (`.github/workflows/ci-cd.yml`)
+
+This is an example using GitHub Actions for both backend and frontend.
+
+```yaml
+name: Chat App CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Run Backend Tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+        env:
+          NODE_ENV: test
+          # Provide dummy env vars for tests, or use a test specific .env
+          DB_DIALECT: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: chatdb_test
+          JWT_SECRET: testsecret
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Archive Backend Test Report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: backend-test-report
+          path: backend/coverage/lcov.info
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false # --watchAll=false for CI
+        working-directory: ./frontend
+        env:
+          # Provide dummy env vars for tests
+          REACT_APP_API_BASE_URL: http://localhost:5000/v1
+          REACT_APP_SOCKET_URL: http://localhost:5000
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./frontend
+        env:
+          REACT_APP_API_BASE_URL: http://localhost:5000/v1
+          REACT_APP_SOCKET_URL: http://localhost:5000
+
+      - name: Archive Frontend Build
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Backend Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: your-dockerhub-username/chat-app-backend:latest
+          build-args: |
+            NODE_ENV=production
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and Push Frontend Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: your-dockerhub-username/chat-app-frontend:latest
+          build-args: |
+            REACT_APP_API_BASE_URL=${{ secrets.PROD_API_BASE_URL }}
+            REACT_APP_SOCKET_URL=${{ secrets.PROD_SOCKET_URL }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /path/to/your/chat-app-project # Your project directory on the server
+            # Pull latest code or just ensure docker-compose.yml is updated
+            # For this example, we're building and pushing images, so just need to pull images and restart
+            docker-compose pull
+            docker-compose up -d --remove-orphans
+            docker image prune -f # Clean up old images
+
+```
+
+---
+
+### 4. Testing & Quality
+
+#### Backend Tests (Jest, Supertest)
+
+**`backend/package.json` scripts:**
+```json
+"test": "jest --detectOpenHandles --forceExit",
+"test:coverage": "jest --detectOpenHandles --forceExit --coverage"
+```
+**`backend/jest.config.js`**:
+```javascript
+module.exports = {
+  testEnvironment: 'node',
+  testMatch: [
+    '**/tests/unit/**/*.test.js',
+    '**/tests/integration/**/*.test.js'
+  ],
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/app.js', // Exclude app entry point
+    '!src/server.js', // Exclude server entry point
+    '!src/config/*.js', // Exclude config files
+    '!src/routes/**/*.js', // Exclude routes (covered by integration tests)
+    '!src/models/index.js', // Exclude model index
+    '!src/migrations/**/*.js', // Exclude migrations
+    '!src/seeders/**/*.js' // Exclude seeders
+  ],
+  coverageReporters: ['text', 'lcov'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setupTestDB.js'], // Setup test database
+};
+```
+**`backend/tests/setupTestDB.js`**
+```javascript
+const sequelize = require('../src/config/sequelize');
+const logger = require('../src/config/logger');
+const { execSync } = require('child_process');
+
+beforeAll(async () => {
+  // Ensure the test database exists and migrate it
+  try {
+    // Drop all tables, then recreate and migrate.
+    // This is a destructive operation, only for test environments.
+    // Adjust DB_NAME in .env.test to a dedicated test DB name.
+    logger.info('Resetting and migrating test database...');
+    execSync('npx sequelize-cli db:drop --env test', { stdio: 'inherit' });
+    execSync('npx sequelize-cli db:create --env test', { stdio: 'inherit' });
+    execSync('npx sequelize-cli db:migrate --env test', { stdio: 'inherit' });
+    execSync('npx sequelize-cli db:seed:all --env test', { stdio: 'inherit' });
+  } catch (error) {
+    logger.error('Failed to setup test database:', error);
+    process.exit(1);
+  }
+});
+
+afterAll(async () => {
+  // Disconnect from database
+  await sequelize.close();
+  logger.info('Test database connection closed.');
+});
+
+// Restore database state between tests if needed
+// beforeEach(async () => {
+//   // Optionally clear tables or re-seed for each test block
+//   // await sequelize.sync({ force: true }); // DANGEROUS! Clears all data.
+// });
+```
+
+**`backend/tests/unit/services/user.service.test.js` (Example Unit Test)**
+```javascript
+const httpStatus = require('http-status');
+const userService = require('../../../src/services/user.service');
+const { User } = require('../../../src/models');
+const ApiError = require('../../../src/utils/ApiError');
+const setupTestDB = require('../../setupTestDB');
+
+setupTestDB();
+
+describe('User Service', () => {
+  describe('createUser', () => {
+    test('should return a user if email and username are not taken', async () => {
+      const newUser = {
+        username: 'testuser1',
+        email: 'test1@example.com',
+        password: 'password123',
+        role: 'user',
+      };
+      const user = await userService.createUser(newUser);
+      expect(user).toBeDefined();
+      expect(user.username).toBe(newUser.username);
+      expect(user.email).toBe(newUser.email);
+      expect(await user.isPasswordMatch(newUser.password)).toBe(true);
+      expect(user.role).toBe(newUser.role);
+    });
+
+    test('should throw error if email is already taken', async () => {
+      const existingUser = {
+        username: 'existing',
+        email: 'existing@example.com',
+        password: 'password123',
+      };
+      await userService.createUser(existingUser); // Create first user
+
+      const newUser = {
+        username: 'newuser',
+        email: 'existing@example.com',
+        password: 'anotherpassword',
+      };
+      await expect(userService.createUser(newUser)).rejects.toThrow(
+        new ApiError(httpStatus.BAD_REQUEST, 'Email already taken')
+      );
+    });
+
+    test('should throw error if username is already taken', async () => {
+      const existingUser = {
+        username: 'another_existing',
+        email: 'another_existing@example.com',
+        password: 'password123',
+      };
+      await userService.createUser(existingUser);
+
+      const newUser = {
+        username: 'another_existing',
+        email: 'new_email@example.com',
+        password: 'anotherpassword',
+      };
+      await expect(userService.createUser(newUser)).rejects.toThrow(
+        new ApiError(httpStatus.BAD_REQUEST, 'Username already taken')
+      );
+    });
+  });
+
+  // Add more tests for getUserById, getUserByEmail, updateUserById, deleteUserById, queryUsers
+  // ... (e.g., test valid/invalid IDs, different roles, pagination, etc.)
+});
+```
+
+**`backend/tests/integration/auth.test.js` (Example Integration Test)**
+```javascript
+const request = require('supertest');
+const httpStatus = require('http-status');
+const app = require('../../src/app');
+const setupTestDB = require('../setupTestDB');
+const { User } = require('../../src/models');
+const { userOne, adminUser, insertUsers } = require('../fixtures/user.fixture'); // Fixture data
+const { userOneAccessToken, adminAccessToken } = require('../fixtures/token.fixture');
+
+setupTestDB();
+
+describe('Auth routes', () => {
+  describe('POST /v1/auth/register', () => {
+    test('should return 201 and user info if registration data is valid', async () => {
+      const newUser = {
+        username: 'testuser',
+        email: 'testuser@example.com',
+        password: 'password123',
+      };
+      const res = await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(httpStatus.CREATED);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.user).not.toHaveProperty('password');
+      expect(res.body.data.user.email).toBe(newUser.email);
+      expect(res.body.data.tokens).toBeDefined();
+      expect(res.body.data.tokens.access).toBeDefined();
+      expect(res.body.data.tokens.refresh).toBeDefined();
+
+      const dbUser = await User.findByPk(res.body.data.user.id);
+      expect(dbUser).toBeDefined();
+      expect(dbUser.email).toBe(newUser.email);
+      expect(await dbUser.isPasswordMatch(newUser.password)).toBe(true);
+    });
+
+    test('should return 400 if email is already taken', async () => {
+      await insertUsers([userOne]); // UserOne email is test@example.com
+      const newUser = {
+        username: 'anotheruser',
+        email: userOne.email,
+        password: 'password123',
+      };
+      await request(app)
+        .post('/v1/auth/register')
+        .send(newUser)
+        .expect(httpStatus.BAD_REQUEST);
+    });
+  });
+
+  describe('POST /v1/auth/login', () => {
+    test('should return 200 and tokens if login data is valid', async () => {
+      await insertUsers([userOne]);
+      const res = await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: userOne.password })
+        .expect(httpStatus.OK);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.user).not.toHaveProperty('password');
+      expect(res.body.data.user.email).toBe(userOne.email);
+      expect(res.body.data.tokens).toBeDefined();
+      expect(res.body.data.tokens.access).toBeDefined();
+      expect(res.body.data.tokens.refresh).toBeDefined();
+    });
+
+    test('should return 401 if email is unknown', async () => {
+      await insertUsers([userOne]);
+      await request(app)
+        .post('/v1/auth/login')
+        .send({ email: 'unknown@example.com', password: 'password123' })
+        .expect(httpStatus.UNAUTHORIZED);
+    });
+
+    test('should return 401 if password is wrong', async () => {
+      await insertUsers([userOne]);
+      await request(app)
+        .post('/v1/auth/login')
+        .send({ email: userOne.email, password: 'wrongpassword' })
+        .expect(httpStatus.UNAUTHORIZED);
+    });
+  });
+
+  // Add tests for logout, refresh-tokens
+});
+```
+**`backend/tests/fixtures/user.fixture.js`**
+```javascript
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+const { User } = require('../../src/models');
+
+const userOne = {
+  id: uuidv4(),
+  username: 'userone',
+  email: 'userone@example.com',
+  password: 'password123',
+  role: 'user',
+};
+
+const adminUser = {
+  id: uuidv4(),
+  username: 'adminone',
+  email: 'adminone@example.com',
+  password: 'password123',
+  role: 'admin',
+};
+
+const insertUsers = async (users) => {
+  const usersWithHashedPasswords = await Promise.all(
+    users.map(async (user) => {
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+      return { ...user, password: hashedPassword };
+    })
+  );
+  await User.bulkCreate(usersWithHashedPasswords);
+};
+
+module.exports = {
+  userOne,
+  adminUser,
+  insertUsers,
+};
+```
+**`backend/tests/fixtures/token.fixture.js`**
+```javascript
+const moment = require('moment');
+const config = require('../../src/config/config');
+const { tokenService } = require('../../src/services');
+const { userOne, adminUser } = require('./user.fixture');
+
+const userOneAccessToken = tokenService.generateToken(
+  userOne.id,
+  moment().add(config.jwt.accessExpirationMinutes, 'minutes'),
+  'access'
+);
+const adminAccessToken = tokenService.generateToken(
+  adminUser.id,
+  moment().add(config.jwt.accessExpirationMinutes, 'minutes'),
+  'access'
+);
+
+module.exports = {
+  userOneAccessToken,
+  adminAccessToken,
+};
+```
+
+#### Frontend Tests (Jest, React Testing Library)
+
+**`frontend/package.json` scripts:**
+```json
+"test": "react-scripts test --coverage --watchAll=false"
+```
+**`frontend/src/components/Navbar.test.js` (Example Unit Test)**
+```javascript
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { BrowserRouter as Router } from 'react-router-dom';
+import Navbar from './Navbar';
+import { AuthContext } from '../contexts/AuthContext'; // Directly import context for mocking
+
+// Mock the AuthContext values
+const mockAuthContextValue = {
+  isAuthenticated: false,
+  user: null,
+  loading: false,
+  login: jest.fn(),
+  register: jest.fn(),
+  logout: jest.fn(),
+};
+
+const renderWithRouter = (ui, { providerProps, ...renderOptions } = {}) => {
+  return render(
+    <AuthContext.Provider value={providerProps || mockAuthContextValue}>
+      <Router>{ui}</Router>
+    </AuthContext.Provider>,
+    renderOptions
+  );
+};
+
+describe('Navbar', () => {
+  test('renders login and register links when not authenticated', () => {
+    renderWithRouter(<Navbar />);
+    expect(screen.getByText('Login')).toBeInTheDocument();
+    expect(screen.getByText('Register')).toBeInTheDocument();
+    expect(screen.queryByText('Logout')).not.toBeInTheDocument();
+  });
+
+  test('renders welcome message, dashboard and logout button when authenticated', () => {
+    const authenticatedContext = {
+      ...mockAuthContextValue,
+      isAuthenticated: true,
+      user: { username: 'TestUser' },
+    };
+    renderWithRouter(<Navbar />, { providerProps: authenticatedContext });
+
+    expect(screen.getByText('Welcome, TestUser')).toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Logout')).toBeInTheDocument();
+    expect(screen.queryByText('Login')).not.toBeInTheDocument();
+    expect(screen.queryByText('Register')).not.toBeInTheDocument();
+  });
+
+  test('calls logout when logout button is clicked', () => {
+    const authenticatedContext = {
+      ...mockAuthContextValue,
+      isAuthenticated: true,
+      user: { username: 'TestUser' },
+    };
+    renderWithRouter(<Navbar />, { providerProps: authenticatedContext });
+
+    fireEvent.click(screen.getByText('Logout'));
+    expect(authenticatedContext.logout).toHaveBeenCalledTimes(1);
+  });
+
+  test('Navbar brand links to home (dashboard)', () => {
+    renderWithRouter(<Navbar />);
+    const brandLink = screen.getByText('Realtime Chat');
+    expect(brandLink).toHaveAttribute('href', '/');
+  });
+});
+```
+
+#### API Tests (Postman/Insomnia)
+While direct code for API tests (like Postman collections) cannot be generated, the integration tests demonstrate the approach. For manual API testing or automated API testing outside the codebase, tools like Postman, Insomnia, or a dedicated API testing framework (e.g., Newman for Postman collections, or using `fetch` or `axios` in a separate script) would be used.
+
+**Example API Endpoints to Test:**
+
+*   `POST /v1/auth/register` (success, email taken, invalid password)
+*   `POST /v1/auth/login` (success, incorrect credentials)
+*   `POST /v1/auth/refresh-tokens` (success, invalid token)
+*   `GET /v1/users` (unauthorized, authorized as user, authorized as admin)
+*   `POST /v1/chat` (create room with auth)
+*   `GET /v1/chat` (list rooms with auth)
+*   `GET /v1/chat/:roomId` (get specific room, check private access)
+*   `GET /v1/chat/:roomId/messages` (get messages, check access)
+*   `POST /v1/chat/:roomId/join` (join room)
+*   WebSocket events: `joinRoom`, `sendMessage`, `leaveRoom` (with JWT in handshake)
+
+#### Performance Tests
+Performance testing (load, stress, soak tests) is crucial for real-time applications.
+*   **Tools:**
+    *   **k6:** JavaScript-based load testing tool. Excellent for API and WebSocket testing.
+    *   **JMeter:** Powerful, GUI-based tool for various types of load tests.
+    *   **Locust:** Python-based, code-driven load testing tool.
+*   **Metrics to monitor:**
+    *   **Backend:** Response times (P95, P99), Error rates, CPU/Memory utilization, Database connection pool usage, Query performance.
+    *   **Socket.IO:** Connection establishment rate, Message latency, Concurrent connections.
+*   **Strategy:**
+    1.  **Baseline Test:** Test with expected normal load.
+    2.  **Load Test:** Gradually increase users/requests to see how the system behaves under anticipated peak load.
+    3.  **Stress Test:** Push beyond peak load to find breaking points.
+    4.  **Soak Test:** Run a moderate load over a long period (hours/days) to detect memory leaks or resource exhaustion.
+    5.  **Target concurrent users:** Simulate thousands of concurrent users sending messages in various rooms.
+    6.  **Socket.IO Specific:** Test connection handshake with JWT, message broadcasting efficiency to many clients, and latency from sender to all receivers in a room.
+
+**Example k6 script snippet (concept for WebSocket):**
+```javascript
+// This is a conceptual example, actual implementation requires more detail for K6
+import ws from 'k6/ws';
+import { check } from 'k6';
+
+export default function () {
+  const url = 'ws://localhost:5000/socket.io/?EIO=4&transport=websocket'; // Adjust if using specific path
+  const params = {
+    headers: { 'Upgrade': 'websocket', 'Connection': 'Upgrade' },
+  };
+
+  // Assume you get a JWT token from a prior HTTP login request
+  const accessToken = 'YOUR_JWT_TOKEN_HERE';
+
+  ws.connect(url, params, function (socket) {
+    socket.on('open', function () {
+      console.log('Connected');
+      // Perform handshake (simulate client connecting)
+      socket.send(JSON.stringify({
+        'sid': '', // empty sid on initial connect
+        'upgrades': [],
+        'pingInterval': 25000,
+        'pingTimeout': 5000,
+      }));
+
+      socket.send(`40/chat,{"token":"${accessToken}"}`); // Connect with auth token (adjust format as per Socket.IO v4)
+
+      // Join a room after successful connection and auth
+      socket.setTimeout(function () {
+        socket.send(`42/chat,["joinRoom", "ROOM_ID_HERE", {"userId":"USER_ID","username":"USERNAME"}]`);
+      }, 1000);
+
+      // Send messages
+      socket.setInterval(function () {
+        socket.send(`42/chat,["sendMessage", {"roomId":"ROOM_ID_HERE","content":"Hello from k6!"}]`);
+      }, 5000); // Send message every 5 seconds
+    });
+
+    socket.on('message', function (data) {
+      console.log(`Message received: ${data}`);
+      check(data, {
+        'message received': (d) => d.includes('"message"'),
+      });
+    });
+
+    socket.on('close', function () {
+      console.log('Disconnected');
+    });
+
+    socket.on('error', function (e) {
+      console.log('Error: ', e.error());
+    });
+  });
+}
+```
+
+---
+
+### 5. Documentation
+
+#### `README.md` (Root directory)
+
+```markdown
+# Realtime Chat Application
+
+A comprehensive, production-ready full-stack real-time chat application built with Node.js (Express, Socket.IO) and React.
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Technologies Used](#technologies-used)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Environment Variables](#environment-variables)
+  - [Local Setup with Docker Compose](#local-setup-with-docker-compose)
+  - [Manual Setup (Without Docker)](#manual-setup-without-docker)
+- [API Documentation](#api-documentation)
+- [Socket.IO Events](#socketio-events)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [CI/CD](#cicd)
+- [Future Enhancements](#future-enhancements)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
+
+-   **User Management**: Register, login, user profiles.
+-   **Authentication & Authorization**: JWT-based authentication, role-based access control (user, admin).
+-   **Chat Rooms**: Create, join, leave public and private chat rooms.
+-   **Real-time Messaging**: Instant message delivery using WebSockets (Socket.IO).
+-   **Online Presence**: Display users currently active in a chat room.
+-   **Data Persistence**: PostgreSQL database for users, rooms, and messages.
+-   **Robustness**: Centralized error handling, request logging, rate limiting, data validation.
+-   **Scalability**: Redis integration for Socket.IO adapter (horizontal scaling) and caching.
+-   **Security**: Helmet, XSS-clean, HPP for API security.
+-   **Modern UI**: React frontend with a clean, responsive design.
+
+## Architecture
+
+The application follows a client-server architecture:
+
+-   **Frontend (Client)**: A React application that provides the user interface for chat interactions, authentication, and room management. It communicates with the backend via REST API for initial data and authentication, and via WebSockets for real-time chat.
+-   **Backend (Server)**: A Node.js (Express) application that exposes REST APIs for CRUD operations (user management, room creation/joining) and manages real-time communication using Socket.IO.
+-   **Database**: PostgreSQL is used as the primary data store for persistent data (users, chat rooms, messages).
+-   **Cache/Message Broker**: Redis serves as a cache for rate limiting and as a pub/sub mechanism for the Socket.IO adapter, enabling horizontal scaling of the chat servers.
+
+[See detailed Architecture Documentation](docs/architecture.md)
+
+## Technologies Used
+
+**Backend:**
+-   Node.js (Express.js)
+-   Socket.IO
+-   PostgreSQL (Sequelize ORM)
+-   Redis
+-   JWT (JSON Web Tokens)
+-   Bcrypt.js (password hashing)
+-   Winston (logging)
+-   Joi (validation)
+-   Helmet, XSS-clean, HPP (security)
+-   Express-rate-limit
+
+**Frontend:**
+-   React.js
+-   React Router DOM
+-   Axios (HTTP client)
+-   Socket.IO Client
+-   Moment.js (date formatting)
+
+**Development & Deployment:**
+-   Docker, Docker Compose
+-   Jest, Supertest, React Testing Library (Testing)
+-   ESLint, Prettier (Code Quality)
+-   GitHub Actions (CI/CD)
+
+## Getting Started
+
+### Prerequisites
+
+-   Git
+-   Node.js (v18+) & npm (or yarn)
+-   Docker & Docker Compose (recommended)
+-   PostgreSQL client (optional, for direct DB access)
+-   Redis client (optional, for direct Redis access)
+
+### Environment Variables
+
+Create `.env` files in both `backend/` and `frontend/` directories, based on the `.env.example` files provided in each.
+
+**`backend/.env`:**
+```dotenv
+# Application
+NODE_ENV=development
+PORT=5000
+FRONTEND_URL=http://localhost:3000 # Must match frontend URL
+
+# Database
+DB_DIALECT=postgres
+DB_HOST=db # 'localhost' if not using Docker Compose, 'db' if using Docker Compose
+DB_PORT=5432
+DB_USER=chatuser
+DB_PASSWORD=chatpassword
+DB_NAME=chatdb
+
+# JWT
+JWT_SECRET=supersecretjwtkey # CHANGE THIS IN PRODUCTION
+JWT_ACCESS_EXPIRATION_MINUTES=30
+JWT_REFRESH_EXPIRATION_DAYS=7
+
+# Redis
+REDIS_HOST=redis # 'localhost' if not using Docker Compose, 'redis' if using Docker Compose
+REDIS_PORT=6379
+REDIS_PASSWORD= # Leave empty for local dev, SET FOR PRODUCTION
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=60000 # 1 minute
+RATE_LIMIT_MAX_REQUESTS=100
+```
+
+**`frontend/.env`:**
+```dotenv
+REACT_APP_API_BASE_URL=http://localhost:5000/v1
+REACT_APP_SOCKET_URL=http://localhost:5000
+```
+*Note: If running frontend/backend without Docker Compose, ensure `DB_HOST` and `REDIS_HOST` in backend's `.env` are `localhost`.*
+
+### Local Setup with Docker Compose (Recommended)
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/chat-app.git
+    cd chat-app
+    ```
+
+2.  **Create `.env` files:**
+    Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env`. Fill in values.
+
+3.  **Build and run services:**
+    ```bash
+    docker-compose up --build -d
+    ```
+    This will:
+    -   Build Docker images for backend and frontend.
+    -   Start PostgreSQL, Redis, backend, and frontend containers.
+    -   The backend container will automatically run database migrations and seeders on startup.
+
+4.  **Access the application:**
+    -   Frontend: `http://localhost:3000`
+    -   Backend API: `http://localhost:5000/v1`
+
+### Manual Setup (Without Docker)
+
+**1. Backend Setup:**
+    ```bash
+    cd backend
+    npm install
+    # Set up PostgreSQL and Redis manually
+    # Ensure backend/.env points to localhost for DB_HOST and REDIS_HOST
+    # Run migrations and seeders
+    npx sequelize-cli db:create # Ensure your DB user has permission
+    npx sequelize-cli db:migrate
+    npx sequelize-cli db:seed:all
+    npm run dev # or npm start
+    ```
+
+**2. Frontend Setup:**
+    ```bash
+    cd frontend
+    npm install
+    # Ensure frontend/.env points to http://localhost:5000 for backend API/Socket
+    npm start
+    ```
+
+## API Documentation
+
+The REST API endpoints are documented using JSDoc comments in the controllers and services. For a formal API spec, we recommend using OpenAPI (Swagger).
+
+[See detailed API Documentation](docs/api.md)
+
+## Socket.IO Events
+
+The real-time communication layer utilizes Socket.IO with the following main events:
+
+-   `connect`: (Client-side) Emitted on successful connection.
+-   `disconnect`: (Client-side) Emitted on disconnection.
+-   `connect_error`: (Client-side) Emitted when connection fails, includes authentication errors.
+-   `joinRoom`: (Client -> Server) Client requests to join a room.
+    -   Payload: `(roomId: string, callback: function)`
+    -   Callback response: `{ status: 'ok', messages: [], room: {} }` or `{ status: 'error', message: string }`
+-   `leaveRoom`: (Client -> Server) Client requests to leave a room.
+    -   Payload: `(roomId: string, callback: function)`
+    -   Callback response: `{ status: 'ok' }` or `{ status: 'error', message: string }`
+-   `sendMessage`: (Client -> Server) Client sends a message to a room.
+    -   Payload: `({ roomId: string, content: string }, callback: function)`
+    -   Callback response: `{ status: 'ok' }` or `{ status: 'error', message: string }`
+-   `message`: (Server -> Client) Server broadcasts a new message to all clients in a room.
+    -   Payload: `(message: object)`
+-   `userJoined`: (Server -> Client) Server broadcasts when a user joins a room.
+    -   Payload: `({ userId: string, username: string, roomId: string })`
+-   `userLeft`: (Server -> Client) Server broadcasts when a user leaves a room.
+    -   Payload: `({ userId: string, username: string, roomId: string })`
+-   `roomUsers`: (Server -> Client) Server broadcasts the updated list of users in a room.
+    -   Payload: `(users: Array<{ userId: string, username: string }> )`
+
+## Testing
+
+Tests are implemented using Jest and Supertest (for backend API/integration tests) and React Testing Library (for frontend unit/component tests).
+
+**Backend Tests:**
+-   **Unit Tests**: `backend/tests/unit/`
+-   **Integration Tests**: `backend/tests/integration/`
+-   **Coverage**: Aim for 80%+ coverage.
+
+To run backend tests:
+```bash
+cd backend
+npm test
+npm run test:coverage # To see coverage report
+```
+
+**Frontend Tests:**
+-   **Unit/Component Tests**: `frontend/src/**/*.test.js`
+
+To run frontend tests:
+```bash
+cd frontend
+npm test
+# npm test -- --coverage --watchAll=false # To get coverage report and exit
+```
+
+**API Tests:**
+API endpoints can be tested manually using tools like Postman or Insomnia, or through automated scripts using frameworks like k6 (for performance) or custom scripts with `axios`. The integration tests (`backend/tests/integration/`) serve as a programmatic API test suite.
+
+**Performance Tests:**
+Tools like k6, JMeter, or Locust can be used to simulate high loads for HTTP APIs and WebSockets.
+Key metrics to monitor include: response times (p95, p99), error rates, server resource utilization (CPU, memory), and message latency.
+
+## Deployment
+
+The application is designed to be deployed using Docker. The `docker-compose.yml` provides a blueprint for running all services together. For production deployment, you would typically:
+
+1.  **Build production images**: `docker-compose -f docker-compose.prod.yml build` (using a separate prod compose file with optimized images and configurations).
+2.  **Push images to a container registry**: (e.g., Docker Hub, AWS ECR).
+3.  **Provision a server**: (e.g., EC2, DigitalOcean Droplet, GCP Compute Engine).
+4.  **Install Docker and Docker Compose** on the server.
+5.  **Configure environment variables** securely on the server (e.g., using `.env` files, Docker secrets, or Kubernetes secrets).
+6.  **Pull images and run containers**: `docker-compose -f docker-compose.prod.yml up -d`.
+7.  **Set up a reverse proxy**: (e.g., Nginx) to handle SSL/TLS, load balancing, and serve the frontend statically.
+
+[See detailed Deployment Guide](docs/deployment.md)
+
+## CI/CD
+
+A basic CI/CD pipeline is configured using GitHub Actions (`.github/workflows/ci-cd.yml`).
+This pipeline automates:
+
+-   **Continuous Integration (CI)**:
+    -   On `push` to `main` or `pull_request` to `main`:
+        -   Checkout code.
+        -   Set up Node.js environment.
+        -   Install dependencies for backend and frontend.
+        -   Run unit and integration tests for both backend and frontend.
+        -   Generate code coverage reports.
+        -   Build the frontend for production.
+-   **Continuous Deployment (CD)**:
+    -   On successful CI run and `push` to `main`:
+        -   Build and push Docker images for both backend and frontend to Docker Hub (or other registry).
+        -   Deploy to a remote server via SSH, pulling the latest images and restarting services using `docker-compose`.
+        (Requires `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `SSH_HOST`, `SSH_USERNAME`, `SSH_KEY`, `PROD_API_BASE_URL`, `PROD_SOCKET_URL` as GitHub Secrets).
+
+## Future Enhancements
+
+-   **Private Messaging (DM)**: One-on-one chat functionality.
+-   **User Profiles & Avatars**: More detailed user profiles and profile picture support.
+-   **Message History & Search**: Infinite scroll for messages, search functionality.
+-   **Push Notifications**: Notify users of new messages when offline or in other apps.
+-   **File Sharing**: Ability to upload and share files in chat rooms.
+-   **Emoji Support**: Rich emoji picker.
+-   **Read Receipts / Typing Indicators**: Show when messages are read or users are typing.
+-   **Admin Panel**: Web interface for managing users and chat rooms.
+-   **More Robust Caching**: Utilize Redis for caching recent messages, user presence, etc.
+-   **Scalability**: Implement horizontal scaling for Socket.IO servers with Redis adapter.
+
+## Contributing
+
+Contributions are welcome! Please feel free to open issues or submit pull requests.
+
+## License
+
+This project is licensed under the MIT License.
+```
+
+#### `docs/architecture.md`
+
+```markdown
+# Architecture Documentation: Realtime Chat Application
+
+This document outlines the architectural design of the Realtime Chat Application, focusing on its components, their interactions, and the underlying technologies.
+
+## 1. High-Level Overview
+
+The system employs a microservice-like architecture, separating concerns into distinct layers that communicate through well-defined interfaces. It leverages real-time communication protocols for an interactive user experience.
+
+![Architecture Diagram Placeholder]
+(A diagram would typically go here. It would show Frontend, Backend (API + Socket.IO), PostgreSQL, Redis, and how they connect.)
+
+**Key Components:**
+-   **Frontend:** User interface built with React.
+-   **Backend:** API server (Express) and Real-time server (Socket.IO) built with Node.js.
+-   **Database:** PostgreSQL for persistent data storage.
+-   **Cache/Message Broker:** Redis for caching, rate limiting, and Socket.IO adapter.
+
+## 2. Component Breakdown
+
+### 2.1. Frontend (React Application)
+
+-   **Technology Stack**: React, React Router DOM, Axios, Socket.IO Client.
+-   **Responsibility**:
+    -   User Interface (UI) and User Experience (UX) presentation.
+    -   Handling user interactions (login, registration, creating/joining rooms, sending messages).
+    -   Communicating with the Backend API for initial data fetching and CRUD operations (e.g., getting chat rooms).
+    -   Establishing and maintaining WebSocket connections with the Backend's Socket.IO server for real-time message exchange and presence updates.
+    -   Local state management (React Context API) for authentication and socket connection status.
+-   **Key Modules**:
+    -   `pages/`: Top-level views (Login, Register, Dashboard, ChatRoom).
+    -   `components/`: Reusable UI elements (Navbar, forms, message displays).
+    -   `contexts/`: Global state management for `AuthContext` and `SocketContext`.
+    -   `api/`: Axios instance for HTTP requests with interceptors for JWT management.
+    -   `services/`: Socket.IO client setup and event handling.
+
+### 2.2. Backend (Node.js Application)
+
+-   **Technology Stack**: Node.js, Express.js, Socket.IO, Sequelize (ORM), Winston, Joi.
+-   **Responsibility**:
+    -   **REST API Layer**: Exposes HTTP endpoints for:
+        -   User authentication (register, login, logout, refresh tokens).
+        -   User management (CRUD operations, typically for admin).
+        -   Chat room management (create, list, get details, join/leave).
+        -   Fetching historical messages for a room.
+    -   **Real-time Communication Layer (Socket.IO)**:
+        -   Handles WebSocket connections from clients.
+        -   Authenticates WebSocket connections using JWT.
+        -   Manages real-time room joining/leaving.
+        -   Receives and broadcasts messages to relevant chat rooms.
+        -   Tracks user presence within rooms.
+        -   Integrates with Redis for horizontal scaling.
+    -   **Business Logic Layer**: Services that encapsulate core business rules and orchestrate data operations.
+    -   **Data Access Layer**: Interacts with the PostgreSQL database via Sequelize.
+    -   **Security**: Implements JWT verification, rate limiting, input sanitization, and basic HTTP security headers.
+    -   **Observability**: Logging (Winston) and error handling middleware.
+-   **Key Modules**:
+    -   `config/`: Environment variables, database, Redis, JWT, logging configurations.
+    -   `models/`: Sequelize ORM models defining database schemas and relationships.
+    -   `migrations/`, `seeders/`: Database schema evolution and initial data.
+    -   `services/`: Business logic (e.g., `userService`, `authService`, `chatService`).
+    -   `controllers/`: Handle incoming HTTP requests, interact with services, and send responses.
+    -   `routes/`: Define API endpoints and map to controllers.
+    -   `middleware/`: Authentication, error handling, rate limiting, logging.
+    -   `sockets/`: Socket.IO event handlers and authentication.
+    -   `utils/`: Helper functions (APIError, catchAsync, pick, ApiResponse).
+
+### 2.3. Database (PostgreSQL)
+
+-   **Technology Stack**: PostgreSQL, Sequelize (ORM).
+-   **Responsibility**:
+    -   Persistent storage for all application data.
+    -   **Tables**:
+        -   `users`: Stores user credentials, roles, etc.
+        -   `chat_rooms`: Stores information about chat rooms (name, description, privacy).
+        -   `messages`: Stores chat messages, linked to `users` and `chat_rooms`.
+        -   `UserChatRooms`: A join table for the many-to-many relationship between `users` and `chat_rooms`.
+-   **Data Model Considerations**:
+    -   UUIDs for primary keys to simplify distributed system design and prevent enumeration attacks.
+    -   Indexes on foreign keys and frequently queried columns (`createdAt` for messages) for performance.
+    -   Cascading deletes for relationships where appropriate (e.g., messages deleted when a room is deleted).
+    -   Password hashing (`bcryptjs`) for security.
+
+### 2.4. Cache & Message Broker (Redis)
+
+-   **Technology Stack**: Redis.
+-   **Responsibility**:
+    -   **Socket.IO Adapter**: Enables horizontal scaling of Socket.IO servers. When multiple backend instances are running, Redis acts as a message broker, allowing messages emitted from one server to be broadcast to clients connected to any other server.
+    -   **Rate Limiting**: Used by `express-rate-limit` to store request counts per IP/user, preventing abuse.
+    -   **Potential Caching**: Can be extended to cache frequently accessed data (e.g., online user lists, recent messages) to reduce database load.
+
+## 3. Communication Flows
+
+### 3.1. User Authentication & Authorization
+
+1.  **Client (React)** sends `POST /v1/auth/register` or `POST /v1/auth/login` to Backend.
+2.  **Backend (Express)**
+    -   Validates input (Joi).
+    -   Authenticates user against PostgreSQL (via `userService` and `authService`).
+    -   Generates JWT Access and Refresh tokens (`tokenService`).
+    -   Responds with user data and tokens.
+3.  **Client (React)** stores tokens (e.g., in `localStorage`) and user data.
+4.  **Subsequent HTTP Requests**: Client includes Access Token in `Authorization: Bearer <token>` header.
+5.  **Backend (Express) Middleware**: `auth.js` middleware verifies JWT on protected routes.
+6.  **Socket.IO Connection**: Client includes Access Token in `socket.io` handshake `auth` object.
+7.  **Backend (Socket.IO Middleware)**: Verifies JWT during connection establishment.
+
+### 3.2. Real-time Chat Messaging
+
+1.  **Client (React)** joins a chat room by calling `socket.emit('joinRoom', roomId, callback)`.
+2.  **Backend (Socket.IO)**
+    -   Verifies user's access to the room (e.g., for private rooms).
+    -   Adds socket to the Socket.IO room (managed internally by Socket.IO, horizontally scaled by Redis adapter).
+    -   Fetches recent messages from PostgreSQL (`chatService`) and sends them to the client via the callback.
+    -   Broadcasts `userJoined` event to other clients in the room.
+    -   Broadcasts updated `roomUsers` list.
+3.  **Client (React)** displays room details and messages.
+4.  **Client (React)** sends a message by calling `socket.emit('sendMessage', { roomId, content }, callback)`.
+5.  **Backend (Socket.IO)**
+    -   Validates message content.
+    -   Saves message to PostgreSQL (`chatService`).
+    -   Broadcasts the new message (`message` event) to all clients in that `roomId` (via Redis adapter if multiple servers).
+6.  **Clients (React)** receive `message` event and update their UI.
+
+## 4. Scalability Considerations
+
+-   **Horizontal Scaling for Backend APIs**: Multiple Express instances can run behind a load balancer. Each instance is stateless for HTTP requests.
+-   **Horizontal Scaling for Socket.IO**: The Redis Adapter for Socket.IO allows multiple Socket.IO server instances to share state (e.g., connected clients in rooms) and broadcast messages across instances. This is crucial for scaling real-time functionality.
+-   **Database Scaling**: PostgreSQL can be scaled vertically (more powerful server) or horizontally (read replicas, sharding) as needed.
+-   **Redis Scalability**: Redis can be run in a cluster for high availability and throughput.
+-   **Frontend Scaling**: Frontend is a static build, served by a CDN or web server (like Nginx) for optimal performance and scalability.
+
+## 5. Security Measures
+
+-   **Authentication**: JWT for secure token-based authentication.
+-   **Authorization**: Role-based access control (admin vs. user) for API endpoints.
+-   **Password Hashing**: `bcryptjs` for secure storage of user passwords.
+-   **Input Validation**: `Joi` schema validation on the backend to prevent invalid data and common injection attacks.
+-   **XSS Protection**: `xss-clean` middleware.
+-   **HTTP Parameter Pollution**: `hpp` middleware.
+-   **Security Headers**: `helmet` middleware for various HTTP header protections.
+-   **Rate Limiting**: `express-rate-limit` to prevent brute-force attacks and abuse.
+-   **CORS**: Configured to allow only trusted origins.
+-   **Error Handling**: Centralized error handling (`ApiError`, `errorConverter`, `errorHandler`) to avoid leaking sensitive information in production.
+
+This architecture provides a solid foundation for a robust, scalable, and secure real-time chat application.
+```
+
+#### `docs/api.md`
+
+```markdown
+# API Documentation: Realtime Chat Application
+
+This document provides a comprehensive overview of the REST API endpoints for the Realtime Chat Application.
+
+**Base URL**: `/v1` (e.g., `http://localhost:5000/v1`)
+
+---
+
+## 1. Authentication Endpoints (`/auth`)
+
+These endpoints handle user registration, login, logout, and token refreshing.
+
+### `POST /v1/auth/register`
+
+Registers a new user.
+
+-   **Description**: Creates a new user account with the provided username, email, and password.
+-   **Request Body**:
+    ```json
+    {
+      "username": "string",
+      "email": "string (email format)",
+      "password": "string (min 6 characters)"
+    }
+    ```
+-   **Responses**:
+    -   `201 Created`:
+        ```json
+        {
+          "code": 201,
+          "message": "User registered successfully",
+          "data": {
+            "user": {
+              "id": "uuid",
+              "username": "string",
+              "email": "string",
+              "role": "user",
+              "createdAt": "datetime",
+              "updatedAt": "datetime"
+            },
+            "tokens": {
+              "access": {
+                "token": "string",
+                "expires": "datetime"
+              },
+              "refresh": {
+                "token": "string",
+                "expires": "datetime"
+              }
+            }
+          }
+        }
+        ```
+    -   `400 Bad Request`: If email or username is already taken, or invalid input.
+        ```json
+        {
+          "code": 400,
+          "message": "Email already taken"
+        }
+        ```
+
+### `POST /v1/auth/login`
+
+Logs in an existing user.
+
+-   **Description**: Authenticates a user with email and password, returning JWT tokens.
+-   **Request Body**:
+    ```json
+    {
+      "email": "string (email format)",
+      "password": "string"
+    }
+    ```
+-   **Responses**:
+    -   `200 OK`: (Same as 201 register success, with user and tokens)
+    -   `401 Unauthorized`: If incorrect email or password.
+
+### `POST /v1/auth/logout`
+
+Logs out a user.
+
+-   **Description**: Invalidates the provided refresh token (if stored server-side), effectively logging out the user from the current session.
+-   **Request Body**:
+    ```json
+    {
+      "refreshToken": "string"
+    }
+    ```
+-   **Responses**:
+    -   `204 No Content`: Logout successful.
+    -   `401 Unauthorized`: If refresh token is invalid or missing.
+
+### `POST /v1/auth/refresh-tokens`
+
+Refreshes access and refresh tokens.
+
+-   **Description**: Exchanges an expired access token for a new pair of access and refresh tokens using a valid refresh token.
+-   **Request Body**:
+    ```json
+    {
+      "refreshToken": "string"
+    }
+    ```
+-   **Responses**:
+    -   `200 OK`: (Same as 201 register success, with user and new tokens)
+    -   `401 Unauthorized`: If refresh token is invalid or expired.
+
+---
+
+## 2. User Endpoints (`/users`)
+
+These endpoints manage user accounts. Access is often restricted to authenticated users or administrators.
+
+### `POST /v1/users`
+
+Create a new user.
+
+-   **Description**: Creates a new user. Restricted to `admin` role.
+-   **Authorization**: Required (Admin Access Token).
+-   **Request Body**:
+    ```json
+    {
+      "username": "string",
+      "email": "string (email format)",
+      "password": "string (min 6 characters)",
+      "role": "user | admin"
+    }
+    ```
+-   **Responses**:
+    -   `201 Created`: User created successfully.
+    -   `400 Bad Request`: Invalid input or existing email/username.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have `admin` role.
+
+### `GET /v1/users`
+
+Get all users.
+
+-   **Description**: Retrieves a list of all users, with optional filtering and pagination. Restricted to `admin` role.
+-   **Authorization**: Required (Admin Access Token).
+-   **Query Parameters**:
+    -   `username` (string, optional): Filter by username.
+    -   `email` (string, optional): Filter by email.
+    -   `role` (string, optional): Filter by role (`user` or `admin`).
+    -   `sortBy` (string, optional): Sort order (e.g., `createdAt:desc`, `username:asc`).
+    -   `limit` (number, default: 10): Maximum number of results per page.
+    -   `page` (number, default: 1): Current page number.
+-   **Responses**:
+    -   `200 OK`:
+        ```json
+        {
+          "code": 200,
+          "message": "Users retrieved",
+          "data": {
+            "results": [
+              { "id": "uuid", "username": "string", "email": "string", "role": "string", ... }
+            ],
+            "page": 1,
+            "limit": 10,
+            "totalPages": 5,
+            "totalResults": 42
+          }
+        }
+        ```
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have `admin` role.
+
+### `GET /v1/users/:userId`
+
+Get a single user by ID.
+
+-   **Description**: Retrieves a specific user's details. Authenticated users can retrieve their own profile; `admin` can retrieve any user's profile.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `userId` (UUID): The ID of the user to retrieve.
+-   **Responses**:
+    -   `200 OK`: User data.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User tries to access another user's profile without `admin` role.
+    -   `404 Not Found`: User not found.
+
+### `PATCH /v1/users/:userId`
+
+Update a user by ID.
+
+-   **Description**: Updates specific fields of a user's profile. Authenticated users can update their own profile; `admin` can update any user's profile.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `userId` (UUID): The ID of the user to update.
+-   **Request Body**:
+    ```json
+    {
+      "username": "string (optional)",
+      "email": "string (email format, optional)",
+      "password": "string (min 6 characters, optional)",
+      "role": "user | admin (optional, admin-only for changing roles)"
+    }
+    ```
+-   **Responses**:
+    -   `200 OK`: User updated successfully.
+    -   `400 Bad Request`: Invalid input or email/username already taken.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User tries to update another user's profile or change role without `admin` role.
+    -   `404 Not Found`: User not found.
+
+### `DELETE /v1/users/:userId`
+
+Delete a user by ID.
+
+-   **Description**: Deletes a user account. Restricted to `admin` role.
+-   **Authorization**: Required (Admin Access Token).
+-   **Path Parameters**:
+    -   `userId` (UUID): The ID of the user to delete.
+-   **Responses**:
+    -   `204 No Content`: User deleted successfully.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have `admin` role.
+    -   `404 Not Found`: User not found.
+
+---
+
+## 3. Chat Endpoints (`/chat`)
+
+These endpoints manage chat rooms.
+
+### `POST /v1/chat`
+
+Create a new chat room.
+
+-   **Description**: Creates a new chat room and automatically adds the creator as a member.
+-   **Authorization**: Required (Access Token).
+-   **Request Body**:
+    ```json
+    {
+      "name": "string (unique, min 3, max 50)",
+      "description": "string (optional, max 255)",
+      "isPrivate": "boolean (default: false)"
+    }
+    ```
+-   **Responses**:
+    -   `201 Created`: Chat room created successfully.
+    -   `400 Bad Request`: Invalid input or room name already exists.
+    -   `401 Unauthorized`: No token provided.
+
+### `GET /v1/chat`
+
+Get all chat rooms.
+
+-   **Description**: Retrieves a list of all chat rooms, including public and private rooms (for which the user is a member or if they are admin).
+-   **Authorization**: Required (Access Token).
+-   **Responses**:
+    -   `200 OK`:
+        ```json
+        {
+          "code": 200,
+          "message": "Chat rooms retrieved",
+          "data": [
+            {
+              "id": "uuid",
+              "name": "string",
+              "description": "string",
+              "isPrivate": "boolean",
+              "createdAt": "datetime",
+              "updatedAt": "datetime",
+              "users": [ { "id": "uuid", "username": "string" } ] // Members in the room
+            }
+          ]
+        }
+        ```
+    -   `401 Unauthorized`: No token provided.
+
+### `GET /v1/chat/:roomId`
+
+Get a single chat room by ID.
+
+-   **Description**: Retrieves details for a specific chat room. Access to private rooms is restricted to members or administrators.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `roomId` (UUID): The ID of the chat room.
+-   **Responses**:
+    -   `200 OK`: Chat room data.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have access to a private room.
+    -   `404 Not Found`: Chat room not found.
+
+### `DELETE /v1/chat/:roomId`
+
+Delete a chat room by ID.
+
+-   **Description**: Deletes a specific chat room and all its messages. Restricted to `admin` role.
+-   **Authorization**: Required (Admin Access Token).
+-   **Path Parameters**:
+    -   `roomId` (UUID): The ID of the chat room to delete.
+-   **Responses**:
+    -   `204 No Content`: Chat room deleted successfully.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have `admin` role.
+    -   `404 Not Found`: Chat room not found.
+
+### `GET /v1/chat/:roomId/messages`
+
+Get messages for a chat room.
+
+-   **Description**: Retrieves a paginated list of messages for a specific chat room. Access to private rooms is restricted to members or administrators.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `roomId` (UUID): The ID of the chat room.
+-   **Query Parameters**:
+    -   `limit` (number, default: 50): Maximum number of messages to retrieve.
+    -   `offset` (number, default: 0): Offset for pagination.
+-   **Responses**:
+    -   `200 OK`: List of messages.
+        ```json
+        {
+          "code": 200,
+          "message": "Messages retrieved",
+          "data": [
+            {
+              "id": "uuid",
+              "chatRoomId": "uuid",
+              "userId": "uuid",
+              "content": "string",
+              "createdAt": "datetime",
+              "updatedAt": "datetime",
+              "sender": { "id": "uuid", "username": "string" }
+            }
+          ]
+        }
+        ```
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User does not have access to a private room.
+    -   `404 Not Found`: Chat room not found.
+
+### `POST /v1/chat/:roomId/join`
+
+Join a chat room.
+
+-   **Description**: Adds the authenticated user as a member of the specified chat room. If the room is private, the user must be invited or be an admin.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `roomId` (UUID): The ID of the chat room to join.
+-   **Responses**:
+    -   `200 OK`: Joined chat room successfully.
+    -   `401 Unauthorized`: No token provided.
+    -   `403 Forbidden`: User not authorized to join a private room.
+    -   `404 Not Found`: Chat room not found.
+
+### `POST /v1/chat/:roomId/leave`
+
+Leave a chat room.
+
+-   **Description**: Removes the authenticated user from the specified chat room.
+-   **Authorization**: Required (Access Token).
+-   **Path Parameters**:
+    -   `roomId` (UUID): The ID of the chat room to leave.
+-   **Responses**:
+    -   `204 No Content`: Left chat room successfully.
+    -   `401 Unauthorized`: No token provided.
+    -   `404 Not Found`: Chat room or user not found as member.
+
+---
+
+This API documentation adheres to the common REST principles and includes details on authentication, authorization, request/response formats, and error codes.
+```
+
+#### `docs/deployment.md`
+
+```markdown
+# Deployment Guide: Realtime Chat Application
+
+This guide outlines the steps to deploy the Realtime Chat Application using Docker and Docker Compose, targeting a Linux server environment.
+
+## 1. Production Setup Overview
+
+The application is deployed as a set of Docker containers orchestrated by Docker Compose.
+
+-   **Backend**: Node.js application (Express, Socket.IO)
+-   **Frontend**: React application (built as static files, served by a lightweight server like `serve` or Nginx)
+-   **Database**: PostgreSQL
+-   **Cache/Message Broker**: Redis
+
+### Production-ready Docker Compose (`docker-compose.prod.yml`)
+
+For production, you would typically use a slightly different `docker-compose.yml` that:
+-   Uses pre-built images from a registry (e.g., Docker Hub).
+-   Omits development-specific volumes (like code syncing).
+-   Configures persistent storage for database and Redis.
+-   May include a reverse proxy (e.g., Nginx) for SSL termination, load balancing, and serving the static frontend.
+
+**Example `docker-compose.prod.yml` (Hypothetical, assuming images are pushed to Docker Hub)**:
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chat_db_prod
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - chat_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis_prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - chat_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "--raw", "INFO"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  backend:
+    image: your-dockerhub-username/chat-app-backend:latest # Use your actual image
+    container_name: chat_backend_prod
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      FRONTEND_URL: ${FRONTEND_URL} # Must match the domain where frontend is served
+      DB_DIALECT: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET} # **IMPORTANT: USE A STRONG, UNIQUE SECRET**
+      JWT_ACCESS_EXPIRATION_MINUTES: 30
+      JWT_REFRESH_EXPIRATION_DAYS: 7
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD} # **IMPORTANT: SET A REDIS PASSWORD**
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 100
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: bash -c "npm run migrate && npm start" # Run migrations, then start
+    restart: always
+
+  frontend:
+    image: your-dockerhub-username/chat-app-frontend:latest # Use your actual image
+    container_name: chat_frontend_prod
+    # Frontend will be served via Nginx, not directly exposed for prod
+    # ports:
+    #   - "3000:3000"
+    environment:
+      # These env vars are baked into the React build, usually during CI/CD build step.
+      # They are for the React app's JS bundle to know where to find the backend API/Socket.
+      REACT_APP_API_BASE_URL: ${PROD_API_BASE_URL} # E.g., https://api.yourchat.com/v1
+      REACT_APP_SOCKET_URL: ${PROD_SOCKET_URL} # E.g., wss://api.yourchat.com
+    depends_on:
+      - backend
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    container_name: chat_nginx_prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/nginx/ssl:ro # For SSL certificates
+      - ./certbot/www:/var/www/certbot:ro # For Let's Encrypt challenges
+    depends_on:
+      - frontend
+      - backend
+    restart: always
+
+volumes:
+  chat_db_data:
+  chat_redis_data:
+
+# Network configuration if needed
+# networks:
+#   default:
+#     name: chat_network
+```
+
+## 2. Server Preparation
+
+1.  **Provision a Linux Server**: Choose a cloud provider (AWS EC2, DigitalOcean Droplet, GCP Compute Engine, etc.) and create a virtual machine.
+    -   Recommended OS: Ubuntu 20.04+ or Debian.
+    -   Recommended specs: At least 2GB RAM, 2vCPUs for a small deployment.
+2.  **SSH into your server**.
+3.  **Update system packages**:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    ```
+4.  **Install Docker**:
+    ```bash
+    sudo apt install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -y
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    sudo apt update
+    sudo apt install docker-ce docker-ce-cli containerd.io -y
+    sudo usermod -aG docker ${USER} # Add your user to the docker group
+    newgrp docker # Apply group changes without logging out
+    ```
+5.  **Install Docker Compose**:
+    ```bash
+    sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    sudo chmod +x /usr/local/bin/docker-compose
+    docker-compose --version
+    ```
+6.  **Install Nginx and Certbot (for SSL/TLS)**: (If using the Nginx reverse proxy)
+    ```bash
+    sudo apt install nginx certbot python3-certbot-nginx -y
+    ```
+
+## 3. Application Deployment Steps
+
+### Step A: Clone the Project and Configure Environment Variables
+
+1.  **Clone your project repository** to the server:
+    ```bash
+    git clone https://github.com/your-username/chat-app.git
+    cd chat-app
+    ```
+2.  **Create `.env` file for production**:
+    Create a `.env` file in the root of your `chat-app` directory (next to `docker-compose.prod.yml`). Populate it with **production-grade secrets and configurations**.
+    -   `JWT_SECRET`: A very strong, long, random string.
+    -   `REDIS_PASSWORD`: A strong password for Redis.
+    -   `DB_PASSWORD`: A strong password for PostgreSQL.
+    -   `FRONTEND_URL`: The public URL where your frontend will be accessible (e.g., `https://yourchat.com`).
+    -   `PROD_API_BASE_URL`: The public base URL for your backend API (e.g., `https://api.yourchat.com/v1`).
+    -   `PROD_SOCKET_URL`: The public WebSocket URL (e.g., `wss://api.yourchat.com`).
+
+    **Example `.env` (server-side):**
+    ```dotenv
+    # --- Database ---
+    DB_USER=prod_chatuser
+    DB_PASSWORD=YOUR_STRONG_DB_PASSWORD
+    DB_NAME=prod_chatdb
+
+    # --- Redis ---
+    REDIS_PASSWORD=YOUR_STRONG_REDIS_PASSWORD
+
+    # --- JWT ---
+    JWT_SECRET=VERY_LONG_AND_COMPLEX_JWT_SECRET_STRING_HERE
+    JWT_ACCESS_EXPIRATION_MINUTES=30
+    JWT_REFRESH_EXPIRATION_DAYS=7
+
+    # --- Application URLs ---
+    FRONTEND_URL=https://yourchat.com
+    PROD_API_BASE_URL=https://api.yourchat.com/v1
+    PROD_SOCKET_URL=wss://api.yourchat.com
+
+    # --- Docker Image Tags (Optional, if not using 'latest') ---
+    BACKEND_IMAGE=your-dockerhub-username/chat-app-backend:v1.0.0
+    FRONTEND_IMAGE=your-dockerhub-username/chat-app-frontend:v1.0.0
+    ```
+
+### Step B: Setup Nginx Reverse Proxy (if applicable)
+
+If you're using Nginx as a reverse proxy, you'll need an `nginx.conf` file at the root of your project:
+
+**`nginx.conf` (Example for production):**
+```nginx
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout  65;
+
+    # Frontend configuration (your main domain)
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name yourchat.com www.yourchat.com; # Replace with your domain
+
+        # Redirect HTTP to HTTPS
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name yourchat.com www.yourchat.com; # Replace with your domain
+
+        # SSL Configuration
+        ssl_certificate /etc/nginx/ssl/live/yourchat.com/fullchain.pem; # Managed by Certbot
+        ssl_certificate_key /etc/nginx/ssl/live/yourchat.com/privkey.pem; # Managed by Certbot
+        include /etc/nginx/ssl/options-ssl-nginx.conf; # Custom SSL options (e.g., from Certbot)
+        ssl_dhparam /etc/nginx/ssl/dhparam.pem; # Generated by Certbot
+
+        # Serve frontend static files from the 'frontend' service container
+        location / {
+            proxy_pass http://frontend:3000; # Points to the frontend service in Docker Compose
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+
+    # Backend API and Socket.IO configuration (e.g., api.yourchat.com)
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name api.yourchat.com; # Replace with your API subdomain
+
+        # Redirect HTTP to HTTPS
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name api.yourchat.com; # Replace with your API subdomain
+
+        # SSL Configuration (same as frontend or separate)
+        ssl_certificate /etc/nginx/ssl/live/api.yourchat.com/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/live/api.yourchat.com/privkey.pem;
+        include /etc/nginx/ssl/options-ssl-nginx.conf;
+        ssl_dhparam /etc/nginx/ssl/dhparam.pem;
+
+        # Proxy to backend API
+        location /v1/ {
+            proxy_pass http://backend:5000/v1/; # Points to the backend service in Docker Compose
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+        }
+
+        # Proxy to Socket.IO for real-time communication
+        location / { # Socket.IO usually connects at root or /socket.io
+            proxy_pass http://backend:5000; # Points to the backend service in Docker Compose
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $websocket_upgrade;
+            proxy_set_header Connection "Upgrade";
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+*Note: This Nginx configuration assumes `frontend` and `backend` are service names within the Docker Compose network.*
+
+### Step C: Obtain SSL Certificates (if using Nginx)
+
+Use Certbot to automatically obtain and renew Let's Encrypt SSL certificates.
+
+1.  **Stop Nginx** temporarily to free up port 80 for Certbot's challenge:
+    ```bash
+    sudo service nginx stop
+    ```
+2.  **Request certificates**:
+    ```bash
+    sudo certbot certonly --standalone -d yourchat.com -d www.yourchat.com -d api.yourchat.com
+    ```
+    Follow the prompts. This will create a directory structure like `/etc/letsencrypt/live/yourchat.com/` with your certificate files.
+3.  **Create dummy SSL options and dhparam** (if not already done by Certbot):
+    ```bash
+    sudo openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
+    sudo nano /etc/nginx/ssl/options-ssl-nginx.conf
+    ```
+    (Paste common strong SSL options into `options-ssl-nginx.conf`)
+4.  **Restart Nginx** to load the new configuration and certificates (if Nginx is managed by the host system). If Nginx is in Docker, it will pick them up when the container starts.
+
+### Step D: Build and Deploy
+
+1.  **Build Docker images (if not already pushed by CI/CD)**:
+    -   If you have your CI/CD pushing images to Docker Hub, you can skip `docker-compose build`.
+    -   If not, build the images locally:
+        ```bash
+        docker-compose -f docker-compose.prod.yml build
+        ```
+2.  **Pull images (if using CI/CD)**:
+    ```bash
+    docker-compose -f docker-compose.prod.yml pull
+    ```
+3.  **Run migrations and start services**:
+    ```bash
+    docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+    ```
+    -   `--remove-orphans` will remove containers that are no longer defined in the Compose file.
+    -   `-d` runs containers in detached mode.
+
+4.  **Verify status**:
+    ```bash
+    docker-compose -f docker-compose.prod.yml ps
+    docker-compose -f docker-compose.prod.yml logs -f
+    ```
+    Check logs for any errors.
+
+## 4. Post-Deployment
+
+1.  **Test the application**: Access your `yourchat.com` and `api.yourchat.com` domains in your browser.
+2.  **Monitor logs**: Regularly check container logs for errors.
+3.  **Set up health checks**: Ensure your monitoring system checks the health endpoints of your services.
+4.  **Automate certificate renewal**: Certbot includes a cron job for automatic renewal.
+5.  **Backup database**: Implement a robust strategy for backing up your PostgreSQL data volume.
+
+## 5. Rollback Strategy
+
+In case of issues with a new deployment:
+1.  **Revert to previous image tag**: Update `docker-compose.prod.yml` to use a previous, known-good image tag for the problematic service.
+2.  **Redeploy**: `docker-compose -f docker-compose.prod.yml up -d` to pull and run the old image.
+3.  **Database Rollback**: If database migrations caused issues, you might need to run `npx sequelize-cli db:migrate:undo` from within the backend container (temporarily, and with caution) or restore from a backup. This should be done carefully and only if necessary.
+
+---
+This guide provides a solid foundation for deploying your Realtime Chat Application to a production environment. Always remember to use strong passwords, secrets, and secure configurations in production.
+```
+
+---
+The total line count would easily exceed 2000+ lines with all these files and their content. I've aimed for a comprehensive, production-ready blueprint.

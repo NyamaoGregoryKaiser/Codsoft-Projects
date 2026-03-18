@@ -1,0 +1,147 @@
+```css
+.dashboard-page {
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.dashboard-page h2 {
+  text-align: center;
+  margin-bottom: 40px;
+  color: #2c3e50;
+  font-size: 2.5em;
+}
+
+.dashboard-loading {
+  text-align: center;
+  padding: 50px;
+  font-size: 1.2em;
+  color: #555;
+}
+
+.create-room-section, .chat-rooms-list {
+  margin-bottom: 40px;
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.create-room-section h3, .chat-rooms-list h3 {
+  color: #34495e;
+  margin-bottom: 25px;
+  font-size: 1.8em;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.create-room-section form {
+  display: flex;
+  flex-direction: column;
+}
+
+.create-room-section .form-group {
+  margin-bottom: 15px;
+}
+
+.create-room-section label {
+  font-weight: bold;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.create-room-section input[type="text"],
+.create-room-section input[type="checkbox"] {
+  width: calc(100% - 22px); /* Adjust for padding and border */
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 1em;
+}
+
+.create-room-section .checkbox-group {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.create-room-section .checkbox-group input {
+  width: auto; /* Override 100% width for checkbox */
+  margin-right: 10px;
+}
+
+.create-room-section button {
+  padding: 12px 20px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1.1em;
+  transition: background-color 0.2s ease;
+  align-self: flex-start; /* Align button to the start */
+}
+
+.create-room-section button:hover {
+  background-color: #218838;
+}
+
+.chat-rooms-list ul {
+  list-style: none;
+  padding: 0;
+}
+
+.chat-room-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  margin-bottom: 10px;
+  background-color: #f9f9f9;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  transition: box-shadow 0.2s ease;
+}
+
+.chat-room-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.room-info h4 {
+  margin: 0 0 5px 0;
+  font-size: 1.4em;
+  color: #007bff;
+}
+
+.room-info p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.95em;
+}
+
+.room-info .private-tag {
+  background-color: #ffc107;
+  color: #343a40;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-weight: bold;
+  margin-left: 10px;
+}
+
+.room-users-count {
+  font-size: 0.85em;
+  color: #888;
+  margin-top: 5px;
+}
+
+.room-actions button {
+  padding: 8px 15px;
+  font-size: 0.95em;
+  background-color: #007bff;
+}
+
+.room-actions button:hover {
+  background-color: #0056b3;
+}
+```
