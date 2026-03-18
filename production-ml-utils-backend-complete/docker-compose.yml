@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ml_utilities_backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/data:/app/data # Mount data directory for SQLite DB persistence
+    env_file:
+      - ./backend/.env # Load environment variables for the backend
+    depends_on:
+      - db # Although SQLite is file-based, this can represent other databases like PostgreSQL
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ml_utilities_frontend
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80 (Nginx)
+    volumes:
+      - ./frontend/src:/app/src # Optional: for live reload during development (bind mount source)
+      - ./frontend/public:/app/public
+      - ./frontend/nginx:/etc/nginx/conf.d # Mount custom nginx config
+    depends_on:
+      - backend
+
+  # A dummy service to represent the database for docker-compose dependencies.
+  # For SQLite, the database file is inside the backend container's volume.
+  # If you were using PostgreSQL/MySQL, this would be a full database service.
+  db:
+    image: busybox/sqlite # Using a tiny image to represent a logical DB service
+    container_name: ml_utilities_db_placeholder
+    volumes:
+      - ./backend/data:/data # Ensure the data directory exists and is shared if needed
+
+volumes:
+  ml_util_db_data: # Define a named volume for the database if you want Docker to manage it
+```

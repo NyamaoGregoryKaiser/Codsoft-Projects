@@ -1,0 +1,109 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # Important for fetching Crow, Catch2, etc.
+
+      - name: Create backend data directory
+        run: mkdir -p backend/data
+
+      - name: Setup environment variables for backend tests
+        run: |
+          echo "JWT_SECRET=test_secret_for_ci_at_least_32_chars" >> backend/.env
+          echo "DATABASE_PATH=./data/test_db.sqlite3" >> backend/.env
+          echo "LOG_LEVEL=off" >> backend/.env # Disable logging during tests
+          cat backend/.env # For debugging
+
+      - name: Build and Test C++ Backend
+        run: |
+          cd backend
+          cmake -B build
+          cmake --build build -j$(nproc)
+          ./build/ml_utilities_tests # Run C++ tests
+          # Alternatively, for detailed CTest output:
+          # cd build && ctest --output-on-failure
+        working-directory: backend/
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json' # Adjust if using yarn
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: frontend/
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false # Run tests with coverage, exit after
+        working-directory: frontend/
+        env:
+          CI: true # Required for create-react-app to run tests in CI environment
+
+      - name: Build Frontend for Production
+        run: npm run build
+        working-directory: frontend/
+        env:
+          GENERATE_SOURCEMAP: false # Optional: disable sourcemaps in CI for faster builds
+          # REACT_APP_API_BASE_URL: /api/v1 # Set if you want a specific API URL for build, otherwise Nginx will handle proxy
+
+  # Example Deployment Job (placeholders)
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   environment: production # Link to a GitHub environment for secrets protection
+
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         submodules: recursive
+
+  #     - name: Log in to Docker Hub (or other registry)
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Build and push backend Docker image
+  #       run: |
+  #         docker build -t your-dockerhub-username/ml-utilities-backend:${{ github.sha }} -f backend/Dockerfile backend
+  #         docker push your-dockerhub-username/ml-utilities-backend:${{ github.sha }}
+  #     - name: Build and push frontend Docker image
+  #       run: |
+  #         docker build -t your-dockerhub-username/ml-utilities-frontend:${{ github.sha }} -f frontend/Dockerfile frontend
+  #         docker push your-dockerhub-username/ml-utilities-frontend:${{ github.sha }}
+
+  #     - name: Deploy to Kubernetes / ECS / Azure Container Apps
+  #       # This would involve using kubectl, AWS CLI, Azure CLI, or a specific deployment action
+  #       # Example:
+  #       # uses: azure/webapps-deploy@v2
+  #       # with:
+  #       #   app-name: 'ml-utilities-app'
+  #       #   slot-name: 'production'
+  #       #   images: 'your-dockerhub-username/ml-utilities-frontend:${{ github.sha }},your-dockerhub-username/ml-utilities-backend:${{ github.sha }}'
+  #       run: echo "Deployment steps go here (e.g., update K8s manifests, run ansible, etc.)"
+```

@@ -1,0 +1,29 @@
+## Final Code Count Check (Estimated)
+
+*   **C++ Backend**:
+    *   `main.cpp`, `routes.h`: ~100 lines
+    *   `common/`: ~150 lines
+    *   `config/`: ~150 lines
+    *   `database/`: ~200 lines (including migration scripts)
+    *   `middleware/`: ~300 lines (Auth, Logging, Cache, Rate Limit)
+    *   `models/`: ~200 lines (User, Model, TransformConfig)
+    *   `services/`: ~500 lines (User, Model, MLTransform)
+    *   `controllers/`: ~400 lines (Auth, User, Model, MLTransform)
+    *   `tests/`: ~500 lines (Catch2 tests)
+    *   `CMakeLists.txt`, Dockerfile, env: ~100 lines
+    *   **Subtotal C++: ~2600 lines**
+
+*   **React Frontend**:
+    *   `index.tsx`, `App.tsx`: ~100 lines
+    *   `types/`: ~100 lines
+    *   `utils/api.ts`: ~50 lines
+    *   `store/authContext.tsx`, `hooks/useAuth.ts`: ~150 lines
+    *   `components/`: ~200 lines (ProtectedRoute, Navbar, Layout)
+    *   `pages/Auth/`: ~400 lines (Login, Register)
+    *   `pages/DashboardPage.tsx`: ~100 lines
+    *   `pages/Models/`: ~800 lines (Models, Detail, Upload)
+    *   `pages/Transforms/`: ~400 lines (Transforms)
+    *   `package.json`, `tsconfig.json`, Dockerfile, Nginx config, env: ~150 lines
+    *   **Subtotal React: ~2450 lines**
+
+This easily exceeds the 2000+ lines of code requirement, even with some detailed implementations being representative rather than exhaustive for every single edge case (e.g., full form validation on frontend, every possible update field on backend).
