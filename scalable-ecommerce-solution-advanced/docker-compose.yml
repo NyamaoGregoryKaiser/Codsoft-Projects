@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ecommerce_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./src/server # Build context for the backend
+      dockerfile: Dockerfile
+    container_name: ecommerce_backend
+    restart: always
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION_MINUTES: ${JWT_ACCESS_EXPIRATION_MINUTES}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS}
+      DB_HOST: db # Service name within docker-compose network
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      REDIS_HOST: redis # Service name within docker-compose network
+      REDIS_PORT: 6379
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_DIR: ${LOG_DIR}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./src/server/logs:/app/logs # Mount logs directory
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Frontend service is usually built and served separately or through a static server
+  # For local development, it can run directly from host using `npm run dev` in src/client
+  # For production, you'd typically build it and serve static files via Nginx or a CDN.
+  # Example for Nginx:
+  # frontend:
+  #   build:
+  #     context: ./src/client
+  #     dockerfile: Dockerfile.frontend # Separate Dockerfile for frontend build
+  #   container_name: ecommerce_frontend
+  #   ports:
+  #     - "80:80" # Map to standard HTTP port
+  #   depends_on:
+  #     - backend
+  #   volumes:
+  #     - ./src/client/dist:/usr/share/nginx/html # Mount built frontend assets
+
+volumes:
+  postgres_data:
+  redis_data:

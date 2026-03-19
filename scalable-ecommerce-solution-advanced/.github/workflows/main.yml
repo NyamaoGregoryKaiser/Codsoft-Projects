@@ -1,0 +1,111 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/server # Set working directory for backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './src/server/package-lock.json'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Run backend tests
+        env:
+          # Provide mock environment variables for tests
+          JWT_SECRET: test_secret
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: testuser
+          DB_PASSWORD: testpassword
+          DB_DATABASE: testdb
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: npm test -- --coverage
+        # For actual database tests, you'd need to spin up a test database
+        # with services like `services` in GitHub Actions workflow, e.g.:
+        # services:
+        #   postgres:
+        #     image: postgres:15-alpine
+        #     env:
+        #       POSTGRES_USER: testuser
+        #       POSTGRES_PASSWORD: testpassword
+        #       POSTGRES_DB: testdb
+        #     ports: ['5432:5432']
+        #     options: >-
+        #       --health-cmd pg_isready
+        #       --health-interval 10s
+        #       --health-timeout 5s
+        #       --health-retries 5
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./src/client # Set working directory for frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './src/client/package-lock.json'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        run: npm test
+
+  # Example Deployment Job (simplified for illustration)
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main' # Deploy only from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Build and Push Docker Images
+  #       uses: docker/build-push-action@v3
+  #       with:
+  #         context: .
+  #         push: true
+  #         tags: your-docker-repo/ecommerce-backend:latest
+  #         file: ./src/server/Dockerfile
+  #     - name: Deploy to Cloud Provider (e.g., AWS EKS, GCP GKE, Azure AKS)
+  #       run: |
+  #         echo "Deploying to production environment..."
+  #         # Add kubectl commands, AWS CLI commands, etc.
+  #         # e.g., kubectl apply -f kubernetes/backend-deployment.yaml
+  #         #         kubectl apply -f kubernetes/frontend-deployment.yaml
+  #         echo "Deployment complete."
+```
