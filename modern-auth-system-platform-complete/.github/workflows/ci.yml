@@ -1,0 +1,84 @@
+name: Spring Boot CI/CD
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Build with Maven and Run Tests
+      run: mvn -B package --file pom.xml
+
+    - name: Upload JaCoCo Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: jacoco-report
+        path: target/site/jacoco/
+
+    - name: Build Docker image
+      run: docker build -t auth-system:latest .
+
+    - name: Login to Docker Hub (optional, for pushing image)
+      # Uncomment and configure if you want to push to Docker Hub
+      # uses: docker/login-action@v3
+      # with:
+      #   username: ${{ secrets.DOCKER_USERNAME }}
+      #   password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Tag and push Docker image (optional)
+      # Uncomment if you logged into Docker Hub
+      # run: |
+      #   docker tag auth-system:latest ${{ secrets.DOCKER_USERNAME }}/auth-system:latest
+      #   docker push ${{ secrets.DOCKER_USERNAME }}/auth-system:latest
+
+  # Example Deployment Job (Conceptual - requires external infrastructure)
+  # deploy-dev:
+  #   needs: build-and-test
+  #   runs-on: ubuntu-latest
+  #   environment: development
+  #   if: github.ref == 'refs/heads/develop'
+  #   steps:
+  #   - name: Deploy to Development Server
+  #     uses: appleboy/ssh-action@master
+  #     with:
+  #       host: ${{ secrets.DEV_SSH_HOST }}
+  #       username: ${{ secrets.DEV_SSH_USER }}
+  #       key: ${{ secrets.DEV_SSH_KEY }}
+  #       script: |
+  #         cd /path/to/your/app
+  #         docker-compose pull auth-system # Assuming image pushed to a registry
+  #         docker-compose up -d --remove-orphans
+  #         # Or using direct Docker commands
+  #         # docker stop auth_app && docker rm auth_app
+  #         # docker run -d --name auth_app -p 8080:8080 -e JWT_SECRET=${{ secrets.JWT_SECRET }} auth-system:latest
+  #
+  # deploy-prod:
+  #   needs: build-and-test
+  #   runs-on: ubuntu-latest
+  #   environment: production
+  #   if: github.ref == 'refs/heads/main'
+  #   # Requires manual approval for production deployments
+  #   # environment:
+  #   #   name: production
+  #   #   url: https://your-prod-app.com
+  #   steps:
+  #   - name: Deploy to Production Server
+  #     run: echo "Deployment to Production triggered"
+  #     # Add production deployment steps here (e.g., Kubernetes deployment, EC2 auto-scaling group update)
+  #     # Similar SSH action or more sophisticated cloud-native deployment
+```

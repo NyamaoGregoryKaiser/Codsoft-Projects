@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: auth_db
+    environment:
+      POSTGRES_DB: authdb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d authdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_app
+    ports:
+      - "8080:8080"
+    environment:
+      # These environment variables override the defaults in application.yml
+      # They are picked up by the Dockerfile's ENTRYPOINT command
+      DB_HOST: db # Service name within docker-compose network
+      DB_PORT: 5432
+      DB_NAME: authdb
+      DB_USERNAME: user
+      DB_PASSWORD: password
+      JWT_SECRET: your_super_secret_key_for_jwt_which_is_at_least_256_bit_long_and_very_secure # REPLACE THIS WITH A STRONG, UNIQUE SECRET!
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is ready before starting the app
+    # If you need to map local files for development (e.g., config changes without rebuilding)
+    # volumes:
+    #   - ./src/main/resources/application.yml:/app/BOOT-INF/classes/application.yml
+    #   - ./target/auth-system-0.0.1-SNAPSHOT.jar:/app/app.jar # Useful for faster local testing after mvn package
+    restart: unless-stopped
+
+volumes:
+  auth_db_data:
+```
+
+**`Frontend (Basic HTML/JS)`**
+This basic frontend serves as a quick demonstration of interacting with the backend APIs. It handles user registration, login, displaying the current user's profile, and accessing the admin panel (if authenticated as admin).
+
+**`src/main/resources/static/index.html`**
+```html

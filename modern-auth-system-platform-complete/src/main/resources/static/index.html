@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication System</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #0056b3; }
+        form { margin-bottom: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; }
+        form div { margin-bottom: 10px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: calc(100% - 22px); padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        .message { margin-top: 15px; padding: 10px; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        .profile-info, .admin-panel { border: 1px dashed #007bff; padding: 15px; margin-top: 20px; border-radius: 5px; }
+        .hidden { display: none; }
+        ul { list-style: none; padding: 0; }
+        li { margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authentication System Demo</h1>
+
+        <div id="auth-section">
+            <h2>Register</h2>
+            <form id="register-form">
+                <div>
+                    <label for="reg-username">Username:</label>
+                    <input type="text" id="reg-username" name="username" required>
+                </div>
+                <div>
+                    <label for="reg-email">Email:</label>
+                    <input type="email" id="reg-email" name="email" required>
+                </div>
+                <div>
+                    <label for="reg-password">Password:</label>
+                    <input type="password" id="reg-password" name="password" required>
+                </div>
+                <button type="submit">Register</button>
+            </form>
+
+            <h2>Login</h2>
+            <form id="login-form">
+                <div>
+                    <label for="login-username">Username:</label>
+                    <input type="text" id="login-username" name="username" required>
+                </div>
+                <div>
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" name="password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+
+        <div id="user-section" class="hidden">
+            <h2>Welcome, <span id="current-username"></span>!</h2>
+            <button id="logout-btn">Logout</button>
+
+            <div class="profile-info">
+                <h3>Your Profile</h3>
+                <p><strong>ID:</strong> <span id="profile-id"></span></p>
+                <p><strong>Username:</strong> <span id="profile-username"></span></p>
+                <p><strong>Email:</strong> <span id="profile-email"></span></p>
+                <p><strong>Roles:</strong> <span id="profile-roles"></span></p>
+            </div>
+
+            <form id="update-profile-form" style="margin-top: 20px;">
+                <h3>Update Profile</h3>
+                <div>
+                    <label for="update-email">New Email (optional):</label>
+                    <input type="email" id="update-email" name="email">
+                </div>
+                <div>
+                    <label for="update-password">New Password (optional):</label>
+                    <input type="password" id="update-password" name="password">
+                </div>
+                <button type="submit">Update Profile</button>
+            </form>
+
+            <div id="admin-panel" class="admin-panel hidden">
+                <h3>Admin Panel</h3>
+                <p>Only visible to ADMIN role.</p>
+                <button id="fetch-users-btn">Fetch All Users</button>
+                <ul id="user-list"></ul>
+            </div>
+        </div>
+
+        <div id="message-area" class="message hidden"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+```
+
+**`src/main/resources/static/app.js`**
+```javascript
