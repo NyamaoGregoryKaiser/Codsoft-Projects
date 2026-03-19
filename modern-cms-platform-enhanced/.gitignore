@@ -1,0 +1,20 @@
+```
+# Node
+node_modules
+.env
+.DS_Store
+npm-debug.log
+yarn-error.log
+
+# Logs
+logs/
+
+# Uploaded files
+backend/uploads/*
+
+# Jest coverage reports
+coverage/
+
+# Frontend build output
+frontend/build/
+```

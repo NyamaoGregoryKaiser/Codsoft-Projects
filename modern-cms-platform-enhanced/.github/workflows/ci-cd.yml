@@ -1,0 +1,167 @@
+```yaml
+name: CI/CD Pipeline for CMS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  # ------------------------------------
+  # 1. Backend CI: Build, Lint, Test
+  # ------------------------------------
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint Backend
+      run: npm run lint
+
+    - name: Set up Test Database (PostgreSQL)
+      # This uses a service container for PostgreSQL
+      # You need to configure this service correctly in the workflow
+      # Or mock the DB in tests if purely unit
+      run: |
+        docker run --name test_db -e POSTGRES_USER=cmsuser -e POSTGRES_PASSWORD=cmspassword -e POSTGRES_DB=cms_test_db -p 5433:5432 -d postgres:13
+        sleep 10 # Give PostgreSQL time to start
+
+    - name: Run Backend Migrations & Seeders
+      # These need to point to the test database
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5433
+        DB_USER: cmsuser
+        DB_PASSWORD: cmspassword
+        DB_NAME: cms_test_db
+        JWT_SECRET: test_secret
+      run: |
+        npx sequelize-cli db:migrate
+        npx sequelize-cli db:seed:all
+
+    - name: Run Backend Tests
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5433
+        DB_USER: cmsuser
+        DB_PASSWORD: cmspassword
+        DB_NAME: cms_test_db
+        JWT_SECRET: test_secret
+        REDIS_HOST: localhost # Mocked in integration tests
+        REDIS_PORT: 6379
+      run: npm test
+
+    - name: Clean up Test Database
+      if: always()
+      run: docker stop test_db && docker rm test_db
+
+  # ------------------------------------
+  # 2. Frontend CI: Build, Lint, Test
+  # ------------------------------------
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Lint Frontend
+      # Example: if you had an eslint config for frontend
+      # run: npm run lint
+      run: echo "No dedicated frontend lint script defined, skipping."
+
+    - name: Run Frontend Tests
+      run: npm test -- --coverage --watchAll=false # Run tests once and exit
+
+    - name: Build Frontend
+      run: npm run build
+
+  # ------------------------------------
+  # 3. CD: Deploy (Example for main branch)
+  # ------------------------------------
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci] # Ensure CI passes before deployment
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Backend Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        push: true
+        tags: your-dockerhub-username/cms-backend:latest
+
+    - name: Build and push Frontend Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        push: true
+        tags: your-dockerhub-username/cms-frontend:latest
+
+    - name: Deploy to Server (Example: SSH and Docker Compose Pull/Restart)
+      # This step would typically involve SSHing into your server
+      # and running commands to pull the new images and restart services.
+      # This is a conceptual example and needs actual server configuration.
+      uses: appleboy/ssh-action@v0.1.6
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /path/to/your/cms-deployment
+          docker-compose pull
+          docker-compose up -d --remove-orphans
+          # Run database migrations explicitly on production server
+          # docker-compose exec backend npx sequelize-cli db:migrate
+          # Consider rolling restarts for zero-downtime deployments
+          echo "Deployment complete on ${{ secrets.SSH_HOST }}"
+```
