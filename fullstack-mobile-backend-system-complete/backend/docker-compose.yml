@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: task_db
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: task_backend
+    ports:
+      - "3000:3000"
+    environment:
+      # Use same DB credentials as defined for the 'db' service
+      DATABASE_URL: postgresql://user:password@db:5432/mydb
+      PORT: 3000
+      JWT_SECRET: your_secret_key_here_at_least_32_characters # Replace with a strong secret
+      JWT_EXPIRATION_TIME: 1h
+      LOG_LEVEL: info
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 100
+      CACHE_TTL: 300
+    depends_on:
+      db:
+        condition: service_healthy
+    # Command to run migrations and seed data after the container starts
+    # This is suitable for development/initial setup. For production,
+    # consider more robust migration strategies (e.g., separate job, init script).
+    command: sh -c "npx prisma migrate deploy && npm run prisma:seed && npm start"
+    volumes:
+      - ./prisma:/app/prisma # Mount prisma directory for migrations/seed access
+
+volumes:
+  db_data:

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "es2021",
+    "module": "commonjs",
+    "lib": ["es2021"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@config/*": ["config/*"],
+      "@middleware/*": ["middleware/*"],
+      "@modules/*": ["modules/*"],
+      "@utils/*": ["utils/*"],
+      "@types/*": ["types/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "prisma/seed.ts", "tests/**/*.ts", "jest.config.ts", "jest.unit.config.ts", "jest.integration.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
