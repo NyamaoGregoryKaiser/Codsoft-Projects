@@ -1,0 +1,129 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Compose for DB
+        run: docker compose -f docker-compose.yml up -d db
+
+      - name: Wait for DB to be ready
+        run: |
+          docker compose exec db pg_isready -h db -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+          until docker compose exec db pg_isready -h db -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_DB: perfmon_db
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg
+          /opt/vcpkg/bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=/opt/vcpkg" >> $GITHUB_ENV
+          echo "PATH=$PATH:/opt/vcpkg" >> $GITHUB_ENV
+
+      - name: Install C++ dependencies
+        run: vcpkg install cpp-httplib nlohmann-json pqxx spdlog boost-system boost-date-time --triplet=x64-linux
+
+      - name: Configure CMake
+        run: cmake -Bbackend/build -Sbackend -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build C++ Backend
+        run: cmake --build backend/build
+
+      - name: Set Backend Environment Variables for Tests
+        run: |
+          echo "DB_HOST=localhost" >> $GITHUB_ENV
+          echo "DB_PORT=5432" >> $GITHUB_ENV
+          echo "POSTGRES_USER=${POSTGRES_USER}" >> $GITHUB_ENV
+          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> $GITHUB_ENV
+          echo "POSTGRES_DB=${POSTGRES_DB}" >> $GITHUB_ENV
+          echo "JWT_SECRET=test_secret" >> $GITHUB_ENV
+          echo "CACHE_TTL_SECONDS=1" >> $GITHUB_ENV
+          echo "RATE_LIMIT_ENABLED=false" >> $GITHUB_ENV
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: perfmon_db
+
+      - name: Run C++ Unit Tests
+        run: backend/build/run_unit_tests
+
+      - name: Run C++ Integration Tests
+        run: backend/build/run_integration_tests
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          VITE_APP_API_BASE_URL: /api # Matches Nginx proxy setup
+
+  docker-push:
+    needs: [build-and-test-backend, build-frontend]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Backend Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: yourusername/perfmon-backend:latest # Replace yourusername
+
+      - name: Build and Push Frontend Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: yourusername/perfmon-frontend:latest # Replace yourusername
+          build-args: |
+            REACT_APP_API_BASE_URL=/api
+
+      - name: Build and Push Nginx (if custom config is complex)
+        # For this project, a standard nginx image is used, but if you have custom build steps
+        # for nginx config or other static files, you might build a custom nginx image here.
+        # Currently, the nginx service uses the official image and mounts the config.
+        run: echo "Nginx is using standard image and mounted config."
+
+```
