@@ -1,0 +1,138 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Lint Backend
+        run: npm run lint
+        working-directory: ./backend
+
+      - name: Set up PostgreSQL for tests
+        uses: Harmonize-Inc/setup-postgres-action@v1.0.0
+        with:
+          postgres-version: '15'
+          host: localhost
+          database: test_db
+          username: postgres
+          password: password
+
+      - name: Generate Prisma client & Run Migrations (Test DB)
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db?schema=public
+
+      - name: Run Backend Tests
+        run: npm test
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db?schema=public
+          JWT_SECRET: test_jwt_secret
+          JWT_EXPIRES_IN: 1h
+          REFRESH_TOKEN_SECRET: test_refresh_secret
+          REFRESH_TOKEN_EXPIRES_IN: 7d
+          RATE_LIMIT_WINDOW_MS: 100
+          RATE_LIMIT_MAX_REQUESTS: 10
+          LOG_LEVEL: error # Reduce log noise for tests
+          CACHE_TTL_SECONDS: 1
+          SLOW_QUERY_THRESHOLD_MS: 100
+
+      - name: Upload Backend Test Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage-report
+          path: ./backend/coverage/
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Lint Frontend
+        run: npm run lint
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false
+        working-directory: ./frontend
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./frontend
+        env:
+          REACT_APP_API_URL: http://localhost:5000/api # Placeholder URL, build should succeed
+
+      - name: Upload Frontend Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: ./frontend/build/
+
+  deploy-to-render: # Example deployment to Render.com (requires manual setup of Render services)
+    name: Deploy to Render
+    needs: [build-and-test-backend, build-and-test-frontend]
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Trigger Render Deploy (Backend)
+        run: curl -X POST -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" ${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_BACKEND_DEPLOY_HOOK: ${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}
+
+      - name: Trigger Render Deploy (Frontend)
+        run: curl -X POST -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_FRONTEND_DEPLOY_HOOK: ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+      - name: Deployment Triggered
+        run: echo "Deployment to Render triggered successfully for Backend and Frontend."
+
+```
+
+---
+
+### 4. Testing & Quality
+
+#### `backend/jest.unit.config.js`
+```javascript

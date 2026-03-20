@@ -1,0 +1,10 @@
+node_modules
+.env
+.git
+.gitignore
+npm-debug.log
+build
+```
+
+#### `.env.example` (Global for docker-compose)
+```ini

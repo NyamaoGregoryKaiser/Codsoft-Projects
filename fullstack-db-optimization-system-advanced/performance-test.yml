@@ -1,0 +1,85 @@
+config:
+  target: "http://localhost:5000/api"
+  phases:
+    - duration: 60 # Duration of the test in seconds
+      arrivalRate: 10 # Number of virtual users to start per second
+      name: "Warmup"
+    - duration: 120
+      arrivalRate: 20
+      rampTo: 50 # Ramp up to 50 VUs/sec
+      name: "Load Test"
+    - duration: 60
+      arrivalRate: 10 # Maintain 10 VUs/sec
+      name: "Soak Test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+  plugins:
+    expect: {} # Enable expect plugin for assertions
+
+scenarios:
+  - name: "User Login and Data Fetch"
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+      - post: # Login Admin User (once per virtual user)
+          url: "/auth/login"
+          json:
+            username: "admin"
+            password: "adminpassword"
+          capture:
+            json: "$.data.token"
+            as: "authToken"
+          expect:
+            - statusCode: 200
+
+      - loop: # Simulate repeated data fetching by logged-in users
+          - get:
+              url: "/queries/a1b2c3d4-e5f6-7890-1234-567890abcdef" # Replace with actual or dynamic DbInstance ID
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+              expect:
+                - statusCode: 200
+                - json: "$.success"
+                  equals: true
+          - get:
+              url: "/indexes/a1b2c3d4-e5f6-7890-1234-567890abcdef"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+              expect:
+                - statusCode: 200
+          - get:
+              url: "/schemas/a1b2c3d4-e5f6-7890-1234-567890abcdef"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+              expect:
+                - statusCode: 200
+          - get:
+              url: "/metrics/a1b2c3d4-e5f6-7890-1234-567890abcdef/latest"
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+              expect:
+                - statusCode: 200
+          - get:
+              url: "/metrics/a1b2c3d4-e5f6-7890-1234-567890abcdef/history?startDate={{ $datetime iso8601 offset="-1 day" }}" # Get last 24h history
+              headers:
+                Authorization: "Bearer {{ authToken }}"
+              expect:
+                - statusCode: 200
+          - think: 5 # Think time between requests in seconds
+        count: 5 # Each VU will loop 5 times through the data fetching
+```
+**To run performance test:**
+1.  Ensure Docker Compose is running (`docker-compose up --build`).
+2.  Install Artillery: `npm install -g artillery`
+3.  Execute: `artillery run performance-test.yml`
+
+---
+
+### 5. Documentation
+
+#### `README.md`
+```markdown

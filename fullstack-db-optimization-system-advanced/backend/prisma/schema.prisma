@@ -1,0 +1,125 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id        String    @id @default(uuid())
+  username  String    @unique
+  password  String
+  role      String    @default("user") // e.g., "admin", "user"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Represents a monitored database instance (or the system's own DB)
+model DbInstance {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  type        String           @default("PostgreSQL") // e.g., "PostgreSQL", "MySQL"
+  host        String
+  port        Int
+  database    String
+  username    String
+  password    String?          // In a real system, this should be highly secured/encrypted
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  monitoredQueries MonitoredQuery[]
+  indexSuggestions IndexSuggestion[]
+  schemaIssues     SchemaIssue[]
+  metricSnapshots  MetricSnapshot[]
+}
+
+// Stores identified slow queries
+model MonitoredQuery {
+  id                String             @id @default(uuid())
+  dbInstanceId      String
+  queryText         String
+  durationMs        Int
+  occurredAt        DateTime
+  params            Json?              // e.g., query parameters if captured
+  executionPlanText String?            // Raw EXPLAIN output
+  hash              String?            @unique // Hash of queryText for aggregation
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  dbInstance        DbInstance         @relation(fields: [dbInstanceId], references: [id])
+  queryExplanation  QueryExplanation[]
+}
+
+// Stores detailed query execution plans
+model QueryExplanation {
+  id               String       @id @default(uuid())
+  monitoredQueryId String
+  planType         String       // e.g., "Seq Scan", "Index Scan"
+  cost             Float
+  rows             Int
+  actualTime       Float?
+  loops            Int?
+  nodeName         String?
+  detail           Json?        // Full JSON of EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  monitoredQuery MonitoredQuery @relation(fields: [monitoredQueryId], references: [id])
+}
+
+// Stores index recommendations
+model IndexSuggestion {
+  id           String     @id @default(uuid())
+  dbInstanceId String
+  tableName    String
+  columns      String[]   // e.g., ["column_a", "column_b"]
+  condition    String?    // e.g., "WHERE status = 'active'" for partial indexes
+  reason       String     // Why this index is suggested (e.g., "Frequent WHERE clause on X")
+  queryIds     String[]   // IDs of MonitoredQueries that would benefit
+  status       String     @default("pending") // e.g., "pending", "applied", "dismissed"
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  dbInstance   DbInstance @relation(fields: [dbInstanceId], references: [id])
+}
+
+// Stores identified schema issues
+model SchemaIssue {
+  id           String     @id @default(uuid())
+  dbInstanceId String
+  issueType    String     // e.g., "MissingForeignKey", "SuboptimalDataType", "MissingIndex"
+  description  String     // Detailed description of the issue
+  objectName   String?    // Table or column name
+  severity     String     @default("medium") // e.g., "low", "medium", "high"
+  status       String     @default("open") // e.g., "open", "resolved", "ignored"
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  dbInstance   DbInstance @relation(fields: [dbInstanceId], references: [id])
+}
+
+// Stores periodic database performance metrics
+model MetricSnapshot {
+  id           String     @id @default(uuid())
+  dbInstanceId String
+  timestamp    DateTime
+  cpuUsage     Float?     // % CPU
+  memoryUsage  Float?     // MB
+  ioOperations Int?       // Total I/O operations
+  activeConnections Int?
+  idleConnections Int?
+  transactionsPerSec Float?
+  blockReads   Int?       // Number of block reads
+  blockHits    Int?       // Number of block hits
+  networkTrafficInMB Float?
+  networkTrafficOutMB Float?
+  createdAt    DateTime   @default(now())
+
+  dbInstance   DbInstance @relation(fields: [dbInstanceId], references: [id])
+}

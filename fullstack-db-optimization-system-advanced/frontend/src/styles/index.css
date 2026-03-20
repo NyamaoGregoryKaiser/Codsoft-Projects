@@ -1,0 +1,18 @@
+/* This file will import tailwind.css */
+@import './tailwind.css';
+
+/* Any global custom styles go here */
+body {
+  font-family: 'Inter', sans-serif;
+  @apply bg-light text-dark;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+```
+
+#### `frontend/src/styles/tailwind.css`
+```css
