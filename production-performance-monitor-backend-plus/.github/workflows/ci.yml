@@ -1,0 +1,177 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-lint-test:
+    name: Backend Lint & Test
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: horizon_test_db
+          POSTGRES_USER: horizon_user
+          POSTGRES_PASSWORD: horizon_password
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U horizon_user -d horizon_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Wait for DB and Redis to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            nc -z localhost 5432 && break
+            echo "Waiting for DB...($i)"
+            sleep 1
+          done
+          echo "Waiting for Redis..."
+          for i in $(seq 1 30); do
+            nc -z localhost 6379 && break
+            echo "Waiting for Redis...($i)"
+            sleep 1
+          done
+
+      - name: Set environment variables for backend tests
+        run: |
+          echo "DATABASE_URL=postgresql://horizon_user:horizon_password@localhost:5432/horizon_test_db" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379/0" >> $GITHUB_ENV
+          echo "SECRET_KEY=super-secret-key-for-ci-cd" >> $GITHUB_ENV
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=1" >> $GITHUB_ENV
+          echo "REFRESH_TOKEN_EXPIRE_MINUTES=1" >> $GITHUB_ENV
+          echo "FASTAPI_ENV=test" >> $GITHUB_ENV
+
+      - name: Run backend lint (Ruff)
+        run: ruff check backend/
+
+      - name: Run backend tests with coverage
+        run: |
+          cd backend
+          alembic upgrade head # Apply migrations to the test DB
+          pytest --cov=app --cov-report=xml tests/
+        env:
+          PYTHONPATH: "${{ github.workspace }}/backend"
+
+      - name: Upload backend coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./backend/coverage.xml
+          # token: ${{ secrets.CODECOV_TOKEN }} # Uncomment if using private repos or needing explicit token
+
+  frontend-lint-test:
+    name: Frontend Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend
+
+      - name: Run frontend lint
+        run: npm run lint --prefix frontend
+
+      - name: Run frontend tests
+        run: npm test --prefix frontend
+
+  # build-docker-images:
+  #   name: Build & Push Docker Images
+  #   if: github.ref == 'refs/heads/main' # Only push on main branch
+  #   needs: [backend-lint-test, frontend-lint-test]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Build and push backend image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./backend
+  #         file: ./backend/Dockerfile
+  #         push: true
+  #         tags: your-dockerhub-username/horizon-monitor-backend:latest
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+
+  #     - name: Build and push frontend image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./frontend
+  #         file: ./frontend/Dockerfile
+  #         push: true
+  #         tags: your-dockerhub-username/horizon-monitor-frontend:latest
+  #         cache-from: type=gha
+  #         cache-to: type=gha,mode=max
+```
+
+This workflow:
+*   Checks out the code.
+*   Sets up Python for the backend and Node.js for the frontend.
+*   Installs dependencies.
+*   Lints code using Ruff (Python) and ESLint (Next.js).
+*   Runs Pytest for backend tests and Jest for frontend tests.
+*   Applies Alembic migrations for backend tests to a dedicated test database.
+*   (Optional, commented out) Builds and pushes Docker images to Docker Hub upon merge to `main`. You'd need to configure `secrets.DOCKER_USERNAME` and `secrets.DOCKER_PASSWORD` in your GitHub repository settings.
+
+## 8. Additional Features
+
+This project incorporates several enterprise-grade features:
+
+*   **Authentication/Authorization:**
+    *   JWT-based access tokens for secure session management.
+    *   HTTP-only cookies for refresh tokens to enhance security against XSS attacks.
+    *   Role-based authorization (`is_admin`) to restrict access to sensitive endpoints.
+    *   Integrated into `AuthService` and FastAPI dependencies.
+*   **Logging:**
+    *   Structured logging using `Loguru` in the backend (`app/core/logging_config.py`). This makes logs easier to parse and analyze in centralized logging systems.
+    *   Logs are output to `stderr` by default for Docker compatibility.
+*   **Error Handling:**
+    *   Custom exception classes (`UnauthorizedException`, `ForbiddenException`, `NotFoundException`) in `app/core/exceptions.py`.
+    *   Global FastAPI exception handlers in `app/main.py` to ensure consistent JSON error responses across the API.
+*   **Caching Layer:**
+    *   Redis is integrated as a caching mechanism (`app/services/metric_data_service.py`).
+    *   Used to cache frequently accessed data, such as the latest metric data points or aggregated metric data for recent time ranges, reducing database load and improving response times.
+*   **Rate Limiting:**
+    *   Implemented using `FastAPILimiter` with Redis (`app/core/rate_limit.py`).
+    *   Protects API endpoints from abuse and brute-force attacks by limiting the number of requests a user (or IP address/API key) can make within a given timeframe.
+    *   Custom rate limits are defined for
