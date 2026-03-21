@@ -1,109 +1,78 @@
-```yaml
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   db:
-    image: postgres:13
-    container_name: ecommerce-db
+    image: postgres:15-alpine
+    restart: always
     environment:
       POSTGRES_DB: ecommerce_db
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5432:5432" # Expose for local development/tools
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U user -d ecommerce_db"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - app-network
 
-  # Redis Cache (Optional, for caching layer)
   redis:
-    image: redis:6-alpine
-    container_name: ecommerce-redis
+    image: redis:7-alpine
+    restart: always
     ports:
-      - "6379:6379"
-    networks:
-      - app-network
+      - "6379:6379" # Expose for local development/tools
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # Backend Application
   backend:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    container_name: ecommerce-backend
-    ports:
-      - "5000:5000"
+    build: ./backend
+    restart: always
     environment:
       NODE_ENV: development
       PORT: 5000
-      DATABASE_URL: postgresql://user:password@db:5432/ecommerce_db?schema=public
-      JWT_SECRET: your_jwt_secret_key_here_for_production_should_be_long_and_random
-      JWT_EXPIRES_IN: 1d
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      # Add other environment variables from .env.example here
-    volumes:
-      - ./server:/app  # Mount host directory for live reload in dev
-      - /app/node_modules # Keep node_modules inside container
+      DATABASE_URL: "postgresql://user:password@db:5432/ecommerce_db"
+      REDIS_URL: "redis://redis:6379"
+      JWT_SECRET: supersecretjwtkey # Use a strong secret in production
+      BCRYPT_SALT_ROUNDS: 10
+      CORS_ORIGIN: "http://localhost:3000" # Match frontend port
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: adminpassword # Change this in production
+      RUN_SEEDS: "true" # Set to "true" ONLY for initial development setup, then "false"
+    ports:
+      - "5000:5000" # Expose backend API
     depends_on:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
-    networks:
-      - app-network
-    # In development, you might want to use nodemon for live reloading
-    # command: npm run dev
+        condition: service_healthy
+    volumes:
+      - ./backend:/app # Mount for hot-reloading in development
+      - /app/node_modules # Exclude node_modules from host mount
+    command: ["npm", "run", "dev"] # Use nodemon for development
 
-  # Frontend Application (development setup)
   frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile.dev # Custom Dockerfile for frontend dev
-    container_name: ecommerce-frontend
-    ports:
-      - "3000:3000"
+    build: ./frontend
+    restart: always
     environment:
-      # These variables need to be exposed during build phase for React
-      # REACT_APP_API_BASE_URL: http://localhost:5000/api
-      # For Docker Compose, you might refer to the service name
-      REACT_APP_API_BASE_URL: http://backend:5000/api
-    volumes:
-      - ./client:/app
-      - /app/node_modules
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    # command: npm start # React scripts start automatically
-
-  # Nginx Reverse Proxy (for production or unified access in dev)
-  nginx:
-    image: nginx:stable-alpine
-    container_name: ecommerce-nginx
+      NODE_ENV: development
+      REACT_APP_API_BASE_URL: "http://localhost:5000/api/v1"
     ports:
-      - "80:80"
-      - "443:443" # For HTTPS
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./client/build:/usr/share/nginx/html # Serve frontend build artifacts
-      # - /path/to/certs:/etc/nginx/certs # For HTTPS in production
+      - "3000:3000" # Expose frontend React app
     depends_on:
-      - backend
-      - frontend # In production, depends on frontend build
-    networks:
-      - app-network
+      backend:
+        condition: service_started
+    volumes:
+      - ./frontend:/app # Mount for hot-reloading in development
+      - /app/node_modules # Exclude node_modules from host mount
+    command: ["npm", "start"] # Use react-scripts start for development
 
 volumes:
-  postgres_data:
-
-networks:
-  app-network:
-    driver: bridge
-```
+  pgdata:
+  redisdata:

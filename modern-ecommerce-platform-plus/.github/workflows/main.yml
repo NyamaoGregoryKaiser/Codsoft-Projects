@@ -1,0 +1,103 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://user:password@localhost:5432/ecommerce_test_db # Use test DB for CI
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      BCRYPT_SALT_ROUNDS: 4 # Faster for tests
+      ADMIN_EMAIL: ci-admin@example.com
+      ADMIN_PASSWORD: ci-admin-password
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start PostgreSQL
+        run: |
+          docker run --name pg_test -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=ecommerce_test_db -p 5432:5432 -d postgres:15-alpine
+          # Wait for PostgreSQL to be ready
+          sleep 10 # Simple wait, replace with a more robust health check in production
+      - name: Run Knex migrations
+        run: npm run migrate:latest
+
+      - name: Run unit and integration tests
+        run: npm test
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --watchAll=false # Run tests without watch mode
+
+      - name: Build React app
+        run: npm run build
+
+  # Example CD step (Conceptual - requires deployment environment details)
+  # backend-cd:
+  #   name: Backend CD
+  #   needs: backend-ci
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to Server (e.g., Docker Swarm, Kubernetes, EC2)
+  #       run: |
+  #         echo "Simulating backend deployment to production..."
+  #         # Add commands for logging into Docker registry, building/pushing images,
+  #         # and deploying to your production environment here.
+  #         # e.g., docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+  #         # e.g., docker build -t your-repo/backend:${{ github.sha }} ./backend
+  #         # e.g., docker push your-repo/backend:${{ github.sha }}
+  #         # e.g., ssh user@your-server "docker service update --image your-repo/backend:${{ github.sha }} my-backend-service"
+
+  # frontend-cd:
+  #   name: Frontend CD
+  #   needs: frontend-ci
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to Hosting (e.g., Netlify, Vercel, S3+CloudFront)
+  #       run: |
+  #         echo "Simulating frontend deployment to production..."
+  #         # Add commands for deploying static assets,
+  #         # e.g., aws s3 sync ./frontend/build s3://your-frontend-bucket --delete
+  #         # e.g., aws cloudfront create-invalidation --distribution-id YOUR_CLOUDFRONT_ID --paths "/*"
