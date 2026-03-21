@@ -1,0 +1,135 @@
+visuflow/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── backend/
+│   ├── alembic/
+│   │   ├── versions/
+│   │   │   └── <initial_migration_hash>_initial.py
+│   │   └── env.py
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── v1/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── charts.py
+│   │   │   │   ├── dashboards.py
+│   │   │   │   ├── datasources.py
+│   │   │   │   └── users.py
+│   │   │   └── __init__.py
+│   │   ├── core/
+│   │   │   ├── caching.py
+│   │   │   ├── config.py
+│   │   │   ├── logger.py
+│   │   │   ├── middlewares.py
+│   │   │   ├── rate_limiter.py
+│   │   │   └── security.py
+│   │   ├── crud/
+│   │   │   ├── base.py
+│   │   │   ├── charts.py
+│   │   │   ├── dashboards.py
+│   │   │   ├── datasources.py
+│   │   │   └── users.py
+│   │   ├── db/
+│   │   │   ├── base.py
+│   │   │   ├── init_db.py
+│   │   │   └── session.py
+│   │   ├── models/
+│   │   │   ├── chart.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── datasource.py
+│   │   │   └── user.py
+│   │   ├── schemas/
+│   │   │   ├── chart.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── datasource.py
+│   │   │   ├── msg.py
+│   │   │   ├── token.py
+│   │   │   └── user.py
+│   │   ├── services/
+│   │   │   └── data_processor.py
+│   │   ├── tests/
+│   │   │   ├── api/
+│   │   │   │   ├── test_auth.py
+│   │   │   │   └── test_users.py
+│   │   │   ├── conftest.py
+│   │   │   ├── integration/
+│   │   │   │   └── test_crud.py
+│   │   │   └── unit/
+│   │   │       ├── test_config.py
+│   │   │       └── test_security.py
+│   │   └── main.py
+│   ├── scripts/
+│   │   └── seed_db.py
+│   ├── .dockerignore
+│   ├── alembic.ini
+│   ├── Dockerfile
+│   └── requirements.txt
+├── docs/
+│   ├── api.md
+│   ├── architecture.md
+│   └── deployment.md
+├── frontend/
+│   ├── public/
+│   │   └── vite.svg
+│   ├── src/
+│   │   ├── api/
+│   │   │   ├── auth.ts
+│   │   │   ├── charts.ts
+│   │   │   ├── dashboards.ts
+│   │   │   ├── datasources.ts
+│   │   │   └── index.ts
+│   │   ├── assets/
+│   │   │   └── react.svg
+│   │   ├── components/
+│   │   │   ├── auth/
+│   │   │   │   ├── LoginForm.tsx
+│   │   │   │   └── RegisterForm.tsx
+│   │   │   ├── charts/
+│   │   │   │   ├── ChartBuilder.tsx
+│   │   │   │   └── ChartRenderer.tsx
+│   │   │   ├── common/
+│   │   │   │   ├── LoadingSpinner.tsx
+│   │   │   │   └── NotFound.tsx
+│   │   │   ├── dashboards/
+│   │   │   │   ├── DashboardCard.tsx
+│   │   │   │   └── DashboardLayout.tsx
+│   │   │   ├── datasources/
+│   │   │   │   ├── DatasourceForm.tsx
+│   │   │   │   └── DatasourceList.tsx
+│   │   │   └── layout/
+│   │   │       ├── Header.tsx
+│   │   │       └── Layout.tsx
+│   │   ├── hooks/
+│   │   │   └── useAuth.ts
+│   │   ├── pages/
+│   │   │   ├── ChartBuilderPage.tsx
+│   │   │   ├── DashboardDetailPage.tsx
+│   │   │   ├── DashboardListPage.tsx
+│   │   │   ├── DatasourcePage.tsx
+│   │   │   ├── HomePage.tsx
+│   │   │   └── LoginPage.tsx
+│   │   ├── services/
+│   │   │   ├── authService.ts
+│   │   │   └── dataVizService.ts
+│   │   ├── store/
+│   │   │   ├── authSlice.ts
+│   │   │   ├── chartSlice.ts
+│   │   │   ├── dashboardSlice.ts
+│   │   │   ├── datasourceSlice.ts
+│   │   │   └── index.ts
+│   │   ├── styles/
+│   │   │   └── index.css
+│   │   ├── types/
+│   │   │   ├── api.ts
+│   │   │   └── models.ts
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── router.tsx
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite-env.d.ts
+├── .env.example
+├── .gitignore
+└── docker-compose.yml
