@@ -1,0 +1,127 @@
+```yaml
+name: ML-Toolbox CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry (or pip if not using poetry)
+        run: |
+          pip install poetry
+          cd backend
+          poetry config virtualenvs.create false --local
+          poetry install --no-root
+
+      - name: Run Backend Tests
+        run: |
+          cd backend
+          # Create dummy .env for tests
+          cp .env.example .env
+          # For testing, we usually use an in-memory SQLite or a test-specific DB
+          # For simplicity, we'll run tests assuming a local postgres is available or mocked.
+          # In a real CI, you'd spin up a test DB or mock DB dependencies.
+          # Here, we'll run pytest without a running DB for unit tests, or mock DB.
+          # For integration tests, you'd need a postgres container.
+          # For now, running without explicit DB setup, focusing on code logic.
+          # This example will assume you've configured `backend/tests/conftest.py` to handle test DB.
+          pytest tests/unit
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run Frontend Tests
+        run: |
+          cd frontend
+          npm test -- --watchAll=false # Run tests once without watch mode
+
+  build-and-push-docker:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test] # Only run if tests pass
+    if: github.ref == 'refs/heads/main' # Only push on main branch
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/ml-toolbox-backend:latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/ml-toolbox-frontend:latest
+
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: [build-and-push-docker]
+    if: github.ref == 'refs/heads/main'
+    environment: production # Use GitHub Environments for better secrets management
+    steps:
+      - name: Deploy with SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/app/on/server # Change this to your deployment path
+            echo "Pulling latest docker images..."
+            docker-compose pull
+            echo "Restarting services..."
+            docker-compose down
+            docker-compose up -d --build # --build is for fresh images, optional if you pulled first
+            echo "Running database migrations..."
+            docker-compose exec -T backend alembic upgrade head
+            echo "Seeding database if necessary..."
+            docker-compose exec -T backend python seed.py # Optional, handle carefully in production
+            echo "Deployment complete!"
+```

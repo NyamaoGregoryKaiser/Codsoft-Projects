@@ -1,0 +1,56 @@
+```yaml
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx)
+    environment:
+      # React app environment variables should be prefixed with REACT_APP_
+      # And passed as build arguments or directly in the Dockerfile for build-time values
+      - REACT_APP_API_URL=http://localhost:8000/api/v1 # This is for frontend to talk to backend directly
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000" # Map host port 8000 to container port 8000 (FastAPI)
+    env_file:
+      - ./backend/.env.example # Use .env.example for development, replace with .env in production
+    volumes:
+      - ml_data:/app/data # Persistent storage for uploaded datasets and models
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432" # Optional: Expose for direct database access (e.g., PgAdmin)
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persistent storage for PostgreSQL data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379" # Optional: Expose for direct Redis access
+    volumes:
+      - redis_data:/data # Persistent storage for Redis data
+
+volumes:
+  ml_data: # For uploaded datasets and trained models
+  db_data: # For PostgreSQL data
+  redis_data: # For Redis data
+```
