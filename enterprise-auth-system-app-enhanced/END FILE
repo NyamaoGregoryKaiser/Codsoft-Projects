@@ -1,0 +1,15 @@
+---
+
+### 6. Additional Features (Recap)
+
+Many "additional features" were integrated directly into the core design and implementation:
+
+*   **Authentication/Authorization:** Implemented comprehensively with JWT, refresh tokens (HttpOnly, blacklisting in Redis), password hashing, email verification, and role-based access control. See `backend/app/core/security.py`, `backend/app/dependencies.py`, `backend/app/api/v1/endpoints/auth.py`, `backend/app/api/v1/endpoints/users.py`, `backend/app/api/v1/endpoints/items.py`.
+*   **Logging and Monitoring:** Structured logging is set up in `backend/app/core/logging_config.py` and used throughout the application. For monitoring, the system is designed to be observable; tools like Prometheus and Grafana would connect to metrics endpoints or logs.
+*   **Error Handling Middleware:** Custom `APIException` classes and a global error handling middleware are implemented in `backend/app/core/exceptions.py` and `backend/app/middlewares/error_handler.py`, ensuring consistent error responses.
+*   **Caching Layer:** Redis is integrated via `backend/app/services/cache.py` for refresh token blacklisting and to support rate limiting.
+*   **Rate Limiting:** `fastapi-limiter` is used, configured with Redis, to protect endpoints like login and forgot-password. This is applied as a dependency in `backend/app/api/v1/endpoints/auth.py`.
+
+---
+
+This comprehensive setup provides a robust foundation for an enterprise-grade authentication system, ready for further expansion and deployment. The code base is designed for clarity, modularity, and adherence to best practices in full-stack development.
