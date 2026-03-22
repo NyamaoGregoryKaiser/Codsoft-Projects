@@ -1,0 +1,127 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black isort
+
+      - name: Lint with Black
+        working-directory: ./backend
+        run: |
+          black --check .
+
+      - name: Lint with Flake8
+        working-directory: ./backend
+        run: |
+          flake8 . --max-line-length=120 --exclude=alembic/*,tests/*
+
+      - name: Set up Docker Compose for testing
+        run: |
+          docker-compose -f docker-compose.yml up -d db redis
+          # Wait for DB to be ready
+          docker exec secure_task_db pg_isready -U user -d secure_task_db -q || exit 1
+
+      - name: Run backend tests
+        working-directory: ./backend
+        run: |
+          # Ensure migrations run for tests
+          alembic upgrade head
+          pytest --cov=app --cov-report=xml --cov-report=term-missing tests/
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./backend/coverage.xml
+          flags: backend
+          name: codecov-backend
+
+      - name: Clean up Docker Compose
+        if: always()
+        run: docker-compose -f docker-compose.yml down -v
+
+  frontend-lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: |
+          yarn install --frozen-lockfile
+
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: |
+          yarn lint # Assuming you have an ESLint script configured in package.json
+
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: |
+          yarn test --watchAll=false
+
+  # Optional: Docker build and push (for production deployments)
+  # This part is highly dependent on your cloud provider and image registry.
+  # For brevity, I'll just show the build part.
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-lint-test, frontend-lint-test]
+    if: github.ref == 'refs/heads/main' # Only build and push on main branch merge
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and push backend image
+        working-directory: ./backend
+        run: |
+          docker build -t your-dockerhub-user/secure-task-backend:${{ github.sha }} .
+          docker build -t your-dockerhub-user/secure-task-backend:latest .
+          # echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          # docker push your-dockerhub-user/secure-task-backend:${{ github.sha }}
+          # docker push your-dockerhub-user/secure-task-backend:latest
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push frontend image
+        working-directory: ./frontend
+        run: |
+          docker build -t your-dockerhub-user/secure-task-frontend:${{ github.sha }} .
+          docker build -t your-dockerhub-user/secure-task-frontend:latest .
+          # echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          # docker push your-dockerhub-user/secure-task-frontend:${{ github.sha }}
+          # docker push your-dockerhub-user/secure-task-frontend:latest
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+```
