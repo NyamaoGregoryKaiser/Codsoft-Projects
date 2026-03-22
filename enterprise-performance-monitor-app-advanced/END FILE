@@ -1,1 +1,16 @@
----
+### backend/app/schemas/user.py
+```python
+from pydantic import BaseModel, EmailStr, Field
+from datetime import datetime
+from typing import Optional
+
+# Shared properties
+class UserBase(BaseModel):
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = True
+    is_superuser: bool = False
+
+# Properties to receive via API on creation
+class UserCreate(UserBase):
+    email: EmailStr
+    password
