@@ -1,0 +1,11 @@
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles if needed */
+body {
+  font-family: 'Inter', sans-serif;
+  @apply bg-gray-100 text-gray-900;
+}
+```

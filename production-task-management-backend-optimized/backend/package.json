@@ -1,0 +1,62 @@
+```json
+{
+  "name": "task-management-backend",
+  "version": "1.0.0",
+  "description": "Backend for Task Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "cross-env NODE_ENV=test jest --coverage --runInBand --forceExit",
+    "test:watch": "npm test -- --watch",
+    "test:api": "cross-env NODE_ENV=test jest --config jest.config.api.js --runInBand --forceExit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prettier": "prettier --write \"**/*.js\""
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.x.x",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "joi": "^17.13.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-cache": "^5.1.2",
+    "redis": "^4.6.13",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "prettier": "^3.2.5",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "setupFilesAfterEnv": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/config/*.js",
+      "!src/app.js",
+      "!src/server.js",
+      "!src/db/prisma.js",
+      "!src/utils/redisClient.js",
+      "!src/utils/localCache.js",
+      "!src/middlewares/logger.js"
+    ]
+  }
+}
+```
