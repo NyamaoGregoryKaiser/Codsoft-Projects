@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_SERVER: db # Use service name 'db' as hostname
+      REDIS_HOST: redis   # Use service name 'redis' as hostname
+      GUNICORN_RELOAD: "true" # Enable hot reload for development
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend # Mount for live code changes during development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: gunicorn -k uvicorn.workers.UvicornWorker -c backend/gunicorn_conf.py app.main:app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      # Pass only necessary frontend-specific env vars to the frontend container
+      # REACT_APP_API_BASE_URL will be picked up from .env, but Dockerfile needs it too if it builds
+      # The Nginx config will handle proxying /api/v1 to the backend service
+      REACT_APP_API_BASE_URL: http://localhost:80/api/v1 # This is the public facing URL
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80 (Nginx default)
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:

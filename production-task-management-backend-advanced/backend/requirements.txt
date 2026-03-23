@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+python-dotenv
+redis
+fastapi-limiter
+asyncio_throttle
+pytest
+pytest-asyncio
+httpx
+fakeredis[hiredis]
+locust
+rich # For better logging/tracebacks in development
