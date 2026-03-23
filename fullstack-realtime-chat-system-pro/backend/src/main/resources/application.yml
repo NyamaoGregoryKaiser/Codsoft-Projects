@@ -1,0 +1,58 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: realtime-chat-app
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:chat_db}
+    username: ${DB_USER:chat_user}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'update' or 'create' for development, 'validate' for production with Flyway
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true # Fix for specific Hibernate 5+ issue with LOBs
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  cache:
+    cache-names: chatRooms, users # Define cache names
+    caffeine:
+      spec: maximumSize=1000,expireAfterAccess=60s # Basic Caffeine configuration
+  # For WebSocket configuration, Spring handles most defaults, but specific paths can be set
+  websocket:
+    stomp:
+      message-size-limit: 128KB # Default is 64KB, increase if needed for large messages
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:thisisasecretkeyforjwttoensuresecurityandshouldbeverylongandrandom} # IMPORTANT: Use a strong, random key in production
+  expiration: 86400000 # 24 hours in milliseconds
+
+# CORS Configuration
+cors:
+  allowed-origins: http://localhost:3000,http://frontend:3000 # Frontend URL, adjust for production
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    org.springframework.security: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE # To see parameter bindings
+  file:
+    name: logs/chat-app.log
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+```
+
+**`backend/src/main/resources/logback-spring.xml`**
+```xml

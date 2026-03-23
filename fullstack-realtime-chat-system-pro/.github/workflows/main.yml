@@ -1,0 +1,152 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/backend/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start PostgreSQL for integration tests
+        run: |
+          docker run --name test-db -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpassword -e POSTGRES_DB=testdb -d -p 5432:5432 postgres:15-alpine
+          # Wait for PostgreSQL to be ready
+          sleep 10 # Basic wait, consider more robust health check in real CI
+
+      - name: Build and Test Backend
+        run: |
+          cd backend
+          ./mvnw clean install -B -Dspring.profiles.active=test # Run unit and integration tests
+        env:
+          # Environment variables for integration tests using testcontainers or local db
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: testdb
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          JWT_SECRET: test_secret_for_ci # A dummy secret for tests
+
+      - name: Build Backend Docker image
+        run: |
+          cd backend
+          docker build -t realtime-chat-backend:latest -f Dockerfile.backend .
+
+      - name: Upload Backend test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: backend/target/surefire-reports
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install Frontend dependencies
+        run: |
+          cd frontend
+          yarn install --frozen-lockfile
+
+      - name: Run Frontend Tests
+        run: |
+          cd frontend
+          yarn test --watchAll=false # Run Jest tests
+        env:
+          CI: true # Required for Jest in CI environments
+
+      - name: Build Frontend Docker image
+        run: |
+          cd frontend
+          docker build -t realtime-chat-frontend:latest -f Dockerfile.frontend . \
+            --build-arg REACT_APP_API_BASE_URL=http://localhost:8080/api \
+            --build-arg REACT_APP_WEBSOCKET_URL=http://localhost:8080/websocket
+
+      - name: Upload Frontend test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-test-results
+          path: frontend/src/tests/__tests__
+
+  # Optional: Deployment stage (e.g., to a cloud provider or Docker Hub)
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main' # Deploy only from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Build and push Backend Docker image
+  #       run: |
+  #         cd backend
+  #         docker build -t yourdockerhub/realtime-chat-backend:${{ github.sha }} -f Dockerfile.backend .
+  #         docker push yourdockerhub/realtime-chat-backend:${{ github.sha }}
+  #         docker tag yourdockerhub/realtime-chat-backend:${{ github.sha }} yourdockerhub/realtime-chat-backend:latest
+  #         docker push yourdockerhub/realtime-chat-backend:latest
+
+  #     - name: Build and push Frontend Docker image
+  #       run: |
+  #         cd frontend
+  #         docker build -t yourdockerhub/realtime-chat-frontend:${{ github.sha }} -f Dockerfile.frontend . \
+  #           --build-arg REACT_APP_API_BASE_URL=http://your-backend-ip:8080/api \
+  #           --build-arg REACT_APP_WEBSOCKET_URL=ws://your-backend-ip:8080/websocket
+  #         docker push yourdockerhub/realtime-chat-frontend:${{ github.sha }}
+  #         docker tag yourdockerhub/realtime-chat-frontend:${{ github.sha }} yourdockerhub/realtime-chat-frontend:latest
+  #         docker push yourdockerhub/realtime-chat-frontend:latest
+
+  #     - name: Deploy to Server (e.g., using SSH and docker-compose pull/up)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_KEY }}
+  #         script: |
+  #           cd /path/to/your/app
+  #           docker-compose pull
+  #           docker-compose up -d --remove-orphans
+  #           docker image prune -f
+```
