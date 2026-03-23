@@ -1,0 +1,34 @@
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    url: http://prometheus:9090 # Prometheus service name in docker-compose
+    access: proxy
+    isDefault: true
+    version: 1
+    editable: true
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    url: http://jaeger:16686 # Jaeger UI service name in docker-compose
+    access: proxy
+    version: 1
+    editable: true
+  - name: Elasticsearch
+    type: elasticsearch
+    uid: elasticsearch
+    url: http://elasticsearch:9200 # Elasticsearch service name in docker-compose
+    access: proxy
+    database: "logstash-*" # Index pattern for logs
+    jsonData:
+      esVersion: 80 # Elastic 8.x
+      timeInterval: 5s
+      # Version 8.x requires data links, set up after creating index in Kibana
+      timeField: "@timestamp"
+      xpack: false # Disable xpack security for dev
+    version: 1
+    editable: true
+```

@@ -1,0 +1,108 @@
+```css
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+  padding: 20px;
+}
+
+.auth-forms, .form-section, .list-section {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #61dafb;
+  border-radius: 8px;
+  background-color: #3b3f46;
+  width: 80%;
+  max-width: 600px;
+}
+
+.auth-forms {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: 20px;
+}
+
+.form-section {
+  flex: 1;
+  min-width: 280px;
+}
+
+h1, h2, h3 {
+  color: #61dafb;
+  margin-bottom: 15px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+select {
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #444;
+  color: white;
+}
+
+button {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s ease;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.message {
+  color: #a8dadc;
+  margin-top: 10px;
+}
+
+.list-section ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.list-section li {
+  background-color: #4a4e55;
+  margin-bottom: 8px;
+  padding: 10px;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.list-section li button {
+  margin-left: 10px;
+  padding: 5px 10px;
+  font-size: 0.8em;
+  background-color: #28a745;
+}
+
+.list-section li button:hover {
+  background-color: #218838;
+}
+```

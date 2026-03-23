@@ -1,0 +1,26 @@
++----------------+       +-------------------+       +-------------------+
+|                |       |  TaskSync Pro     |       |                   |
+|    Frontend    | ----> |  Backend (Java)   | ----> |   PostgreSQL      |
+|    (ReactJS)   |       | (Spring Boot)     |       |   (Database)      |
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+
+                                   |
+                                   | Metrics (Micrometer)
+                                   | Traces (OpenTelemetry Agent)
+                                   | Logs (Logback/Logstash)
+                                   V
++----------------+       +-------------------+       +-------------------+
+|                |       |                   |       |                   |
+|    Prometheus  |<------|    Grafana        |       |     Jaeger        |
+|  (Metrics Scraper)     |  (Dashboard)      |<------| (Trace Storage)   |
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+
+                                   ^
+                                   | Logs
+                                   |
++----------------+       +-------------------+       +-------------------+
+|                |       |                   |       |                   |
+|   Logstash     |-----> |   Elasticsearch   |-----> |      Kibana       |
+| (Log Ingestion)|       | (Log Storage)     |       | (Log Visualization)|
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+

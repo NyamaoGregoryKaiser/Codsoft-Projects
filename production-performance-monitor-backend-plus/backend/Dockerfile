@@ -1,25 +1,31 @@
-# Use a lightweight Python base image
-FROM python:3.11-slim-bookworm
+```dockerfile
+# Use a slim Java 17 base image
+FROM eclipse-temurin:17-jdk-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies for psycopg2
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Copy the OpenTelemetry Java Agent
+# Download it manually: wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+# And place it in the same directory as this Dockerfile or in the root of the project
+COPY opentelemetry-javaagent.jar /opentelemetry-javaagent.jar
 
-# Copy requirements file and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy Maven wrapper files and pom.xml first to leverage Docker cache
+COPY pom.xml .
+COPY mvnw .
+COPY .mvn .mvn
 
-# Copy the rest of the application code
-COPY . .
+# Copy source code
+COPY src src
 
-# Expose the port FastAPI will run on
-EXPOSE 8000
+# Build the application
+# Use -Dmaven.test.skip=true to skip tests during build if tests are run in CI/CD pipeline separately
+RUN ./mvnw clean install -DskipTests
 
-# Command to run the application (overridden by docker-compose)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Expose the port the Spring Boot application runs on
+EXPOSE 8080
+
+# Command to run the application
+# OpenTelemetry agent is configured via environment variables in docker-compose.yml
+ENTRYPOINT ["java", "-jar", "target/tasksyncpro-0.0.1-SNAPSHOT.jar"]
+```

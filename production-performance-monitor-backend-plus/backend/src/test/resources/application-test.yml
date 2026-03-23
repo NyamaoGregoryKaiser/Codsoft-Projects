@@ -1,0 +1,33 @@
+```yaml
+spring:
+  application:
+    name: tasksync-pro-backend-test
+  datasource:
+    url: jdbc:tc:postgresql:16-alpine:///tasksyncpro_test_db # Testcontainers PostgreSQL
+    username: test_user
+    password: test_password
+  jpa:
+    hibernate:
+      ddl-auto: create # Create schema for tests
+    properties:
+      hibernate.format_sql: true
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: false # Disable Flyway for tests as ddl-auto will manage schema
+  cache:
+    type: none # Disable cache for predictable test results
+
+application:
+  security:
+    jwt:
+      secret-key: testSecretKeyForTestSyncProApplicationWhichIsAlsoVeryLongAndSecure # Test secret
+      expiration: 3600000
+
+logging:
+  level:
+    root: WARN # Suppress verbose logs during tests
+    com.tasksyncpro: INFO # Only info and above for app
+    org.springframework.security: INFO
+    org.springframework.web: INFO
+    org.hibernate: INFO
+```

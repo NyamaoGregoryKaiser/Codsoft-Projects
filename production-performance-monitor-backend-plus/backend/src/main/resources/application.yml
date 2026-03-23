@@ -1,0 +1,98 @@
+```yaml
+spring:
+  application:
+    name: tasksync-pro-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/tasksyncpro_db # Managed by docker-compose for dev
+    username: tasksyncpro_user
+    password: tasksyncpro_password
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 30000
+      connection-timeout: 30000
+      max-lifetime: 600000
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'update' or 'create' for initial development, 'validate' for production
+    show-sql: false
+    properties:
+      hibernate.format_sql: true
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration # Location for SQL migration scripts
+    baseline-on-migrate: true # Baselines schema if it exists and no migrations have been applied
+
+  # Spring Security Configuration
+  security:
+    user:
+      name: dummyuser
+      password: dummypassword
+
+  # Cache Configuration (Caffeine)
+  cache:
+    cache-names: users, projects, tasks # Define cache names for @Cacheable
+    caffeine:
+      spec: maximumSize=500,expireAfterAccess=10m # Default specification for Caffeine caches
+
+server:
+  port: 8080
+
+# JWT Configuration
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:aVeryLongAndSecureSecretKeyForTaskSyncProApplicationThatIsAtLeast256BitsLong} # MUST be a strong, unique secret
+      expiration: 3600000 # 1 hour in milliseconds
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, loggers, caches, beans, metrics, conditions
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true # Enable Prometheus endpoint
+
+# Logging Configuration (logback-spring.xml handles ELK)
+logging:
+  level:
+    root: INFO
+    com.tasksyncpro: DEBUG # Detailed logs for our application
+    org.springframework.security: INFO
+    org.hibernate.SQL: DEBUG # To see executed SQL queries
+    org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
+
+# OpenTelemetry Tracing (via agent, primarily configured in pom.xml build plugin or Dockerfile)
+# These are fallback/supplementary properties if the agent is not used or for specific client-side tracing
+opentelemetry:
+  sdk:
+    disabled: false # Set to true to disable OTel SDK if agent handles everything
+    exporter:
+      otlp:
+        endpoint: http://localhost:4317 # Default OTLP receiver for Jaeger
+        protocol: grpc
+    # Setting these to NONE when using agent to avoid double reporting.
+    # Agent typically handles this globally.
+    metrics:
+      exporter: none
+    logs:
+      exporter: none
+    traces:
+      exporter: otlp
+
+# Springdoc OpenAPI (Swagger UI) Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs # Endpoint for OpenAPI JSON
+  swagger-ui:
+    path: /swagger-ui.html # Endpoint for Swagger UI
+    disable-swagger-default-url: true # Prevent default URL being loaded
+    operations-sorter: method # Sort methods by HTTP method
+    tags-sorter: alpha # Sort tags alphabetically
+    display-request-duration: true # Show request duration in UI
+```

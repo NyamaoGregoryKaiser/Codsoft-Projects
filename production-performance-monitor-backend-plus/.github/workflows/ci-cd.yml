@@ -1,0 +1,149 @@
+```yaml
+name: CI/CD Pipeline for TaskSync Pro
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Start PostgreSQL with Testcontainers support
+        run: docker-compose -f docker-compose.test.yml up -d db # Use a test-specific compose file if needed
+
+      - name: Wait for DB to be ready
+        run: sleep 10 # Give PostgreSQL time to start
+
+      - name: Build & Run Backend Tests
+        run: cd backend && ./mvnw clean verify -Ptest-coverage # 'verify' runs all phases including integration tests
+
+      - name: Upload JaCoCo coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/jacoco.xml
+          if-no-files-found: ignore # Don't fail if report is not found
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm install
+
+      - name: Run frontend tests
+        run: cd frontend && npm test -- --coverage --watchAll=false # Run Jest tests with coverage
+
+      - name: Build frontend for production
+        run: cd frontend && npm run build
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build
+          if-no-files-found: ignore
+
+  docker-build-and-push:
+    name: Build & Push Docker Images
+    needs: [build-and-test-backend, build-and-test-frontend] # Ensure tests pass first
+    if: github.ref == 'refs/heads/main' # Only push on merge to main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download OpenTelemetry Agent
+        run: wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/tasksyncpro-backend:latest
+          build-args: |
+            OPENTELEMETRY_AGENT_PATH=opentelemetry-javaagent.jar # Pass path to agent
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/tasksyncpro-frontend:latest
+
+  deploy:
+    name: Deploy to Production
+    needs: docker-build-and-push
+    if: github.ref == 'refs/heads/main' # Only deploy on merge to main
+    runs-on: self-hosted # Use a self-hosted runner for deployment to your server
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download OpenTelemetry Agent
+        run: wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Pull latest Docker images
+        run: |
+          docker pull ${{ secrets.DOCKER_USERNAME }}/tasksyncpro-backend:latest
+          docker pull ${{ secrets.DOCKER_USERNAME }}/tasksyncpro-frontend:latest
+
+      - name: Deploy with Docker Compose
+        run: |
+          # Stop existing services gracefully
+          docker-compose down
+
+          # Copy the updated docker-compose.yml and agent
+          cp docker-compose.yml /path/to/your/deployment/folder/
+          cp opentelemetry-javaagent.jar /path/to/your/deployment/folder/
+          cp -r prometheus /path/to/your/deployment/folder/
+          cp -r grafana /path/to/your/deployment/folder/
+          cp -r logstash /path/to/your/deployment/folder/
+          cp init-db.sh /path/to/your/deployment/folder/
+
+          # Start new services
+          cd /path/to/your/deployment/folder/
+          docker-compose up -d --build # --build is generally not needed if images are pre-pulled, but can be a fallback
+```

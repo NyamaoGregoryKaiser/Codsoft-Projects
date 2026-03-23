@@ -1,0 +1,57 @@
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Logstash Appender for JSON formatted logs -->
+    <appender name="LOGSTASH" class="ch.qos.logback.core.net.SocketAppender">
+        <remoteHost>logstash</remoteHost> <!-- Logstash service name in docker-compose -->
+        <port>5000</port> <!-- Logstash input port -->
+        <reconnectionDelay>10000</reconnectionDelay>
+        <queueSize>512</queueSize>
+        <includeCallerData>false</includeCallerData> <!-- Set to true for more detailed stack traces, but has perf cost -->
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <level>logLevel</level>
+                <timestamp>@timestamp</timestamp>
+                <thread>threadName</thread>
+                <message>message</message>
+                <logger>loggerName</message>
+                <version>[ignore]</version>
+                <logstashVersion>[ignore]</logstashVersion>
+                <tags>[ignore]</tags>
+            </fieldNames>
+            <!-- Include MDC (Mapped Diagnostic Context) to capture tracing info -->
+            <customFields>{"app_name":"tasksync-pro-backend"}</customFields>
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                <maxLength>2048</maxLength>
+                <shorten>true</shorten>
+                <exclude>java\.lang\.reflect\..*|sun\.reflect\..*|java\.util\.concurrent\..*</exclude>
+            </throwableConverter>
+        </encoder>
+    </appender>
+
+    <!-- Configure Root Logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOGSTASH"/>
+    </root>
+
+    <!-- Specific logging levels for our application packages -->
+    <logger name="com.tasksyncpro" level="DEBUG"/>
+    <logger name="org.springframework.web" level="INFO"/>
+    <logger name="org.hibernate" level="INFO"/>
+    <logger name="org.flywaydb" level="INFO"/>
+
+</configuration>
+```

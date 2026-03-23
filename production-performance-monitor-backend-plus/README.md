@@ -1,342 +1,407 @@
-# Horizon Monitor
+```markdown
+# TaskSync Pro: Enterprise-Grade Task Management System with Comprehensive Performance Monitoring
 
-Horizon Monitor is a comprehensive, production-ready performance monitoring system designed for full-stack applications. It provides real-time insights into application performance, allowing users to define custom metrics, ingest data, and visualize trends through an intuitive dashboard.
+TaskSync Pro is a full-stack web application for managing projects and tasks. It's built with a focus on enterprise readiness, featuring robust security, data persistence, and a comprehensive monitoring stack to ensure high availability and performance.
 
 ## Table of Contents
 
 1.  [Features](#features)
 2.  [Architecture](#architecture)
-3.  [Getting Started](#getting-started)
+3.  [Technology Stack](#technology-stack)
+4.  [Setup Guide](#setup-guide)
     *   [Prerequisites](#prerequisites)
     *   [Local Development Setup](#local-development-setup)
-    *   [Database Migrations and Seeding](#database-migrations-and-seeding)
-    *   [Running the Application](#running-the-application)
-4.  [API Documentation](#api-documentation)
-5.  [Testing](#testing)
-6.  [Deployment Guide](#deployment-guide)
-7.  [CI/CD Configuration](#cicd-configuration)
-8.  [Additional Features](#additional-features)
-9.  [Project Structure](#project-structure)
-10. [License](#license)
+    *   [Backend Setup](#backend-setup)
+    *   [Frontend Setup](#frontend-setup)
+5.  [API Documentation](#api-documentation)
+6.  [Monitoring & Observability](#monitoring--observability)
+7.  [Testing](#testing)
+8.  [CI/CD](#ci-cd)
+9.  [Deployment Guide](#deployment-guide)
+10. [Contributing](#contributing)
+11. [License](#license)
+
+---
 
 ## 1. Features
 
-*   **Core Application (Python FastAPI & React/Next.js):**
-    *   User authentication (Registration, Login, JWT-based tokens, Refresh tokens).
-    *   CRUD operations for Applications (Create, Read, Update, Delete).
-    *   CRUD operations for Metrics associated with Applications.
-    *   API endpoint for external applications to ingest real-time metric data.
-    *   API endpoint for retrieving raw and aggregated metric data.
-    *   Interactive frontend dashboard for application and metric visualization.
-*   **Database Layer (PostgreSQL):**
-    *   SQLAlchemy ORM with Pydantic for data validation.
-    *   Alembic for database schema migrations.
-    *   Seed data for initial setup and demonstration.
-    *   Indexes for query optimization (e.g., on `metric_data.timestamp`).
-*   **Configuration & Setup:**
-    *   `requirements.txt` / `package.json` for dependency management.
-    *   `.env.example` for environment-specific configuration.
-    *   `Dockerfile` for containerizing backend and frontend.
-    *   `docker-compose.yml` for orchestrating multi-service local development.
-*   **Testing & Quality:**
-    *   Unit tests for core logic (Python & React).
-    *   Integration tests for database interactions and service layers.
-    *   API tests for endpoint validation.
-    *   Performance tests (conceptual guidance with Locust mentioned).
-*   **Documentation:**
-    *   Comprehensive README.md (this file!).
-    *   Auto-generated OpenAPI/Swagger UI documentation for the API.
-    *   Architecture overview.
-    *   Deployment instructions.
-*   **Additional Features:**
-    *   **Authentication/Authorization:** JWTs for user sessions, HTTP-only cookies for refresh tokens, role-based access control (`is_admin`).
-    *   **Logging:** Structured logging with `Loguru` for backend.
-    *   **Error Handling:** Centralized custom exception handling middleware in FastAPI.
-    *   **Caching Layer:** Redis integration for application data and frequently accessed metric aggregates.
-    *   **Rate Limiting:** API rate limiting using `FastAPILimiter` with Redis.
+*   **User Management:** Register, log in, view, update, and delete user profiles. Role-based access control (USER, ADMIN).
+*   **Project Management:** Create, view, update, and delete projects. Assign project owners and members.
+*   **Task Management:** Create, view, update, and delete tasks. Assign tasks to projects and users, update task status (TODO, IN_PROGRESS, DONE, BLOCKED).
+*   **Authentication & Authorization:** Secure JWT-based authentication and Spring Security for role-based access.
+*   **Data Persistence:** PostgreSQL database with Flyway for schema migrations.
+*   **Caching:** In-memory caching (Caffeine) for frequently accessed data to improve response times.
+*   **Rate Limiting:** Protects API endpoints from abuse and ensures fair usage.
+*   **Global Error Handling:** Consistent API error responses.
+*   **Comprehensive Monitoring:**
+    *   **Metrics:** Prometheus & Grafana for application health, performance (HTTP request latency, error rates, custom business metrics, JVM metrics, database connection pool metrics).
+    *   **Distributed Tracing:** OpenTelemetry & Jaeger for visualizing request flows across services and identifying bottlenecks.
+    *   **Centralized Logging:** ELK Stack (Elasticsearch, Logstash, Kibana) for structured log aggregation, search, and analysis.
+*   **Testing:** Unit, Integration, and API tests with high coverage. Performance testing with JMeter.
+*   **Containerization:** Docker for easy setup and deployment.
+*   **CI/CD:** Automated build, test, and deployment pipeline using GitHub Actions.
+
+---
 
 ## 2. Architecture
 
-Horizon Monitor follows a layered architecture, comprising a FastAPI backend, a React/Next.js frontend, a PostgreSQL database, and Redis for caching and rate limiting.
+The system follows a layered architecture with a clear separation of concerns, suitable for microservices evolution.
 
-```mermaid
-graph TD
-    A[Client Browser] -->|HTTP/HTTPS| B(React Frontend)
-    B -->|API Calls (JWT)| C(FastAPI Backend)
-    D[External Monitored Application] -->|API Calls (API Key)| C
-
-    C --> E(PostgreSQL Database)
-    C --> F(Redis Cache/Rate Limiter)
-
-    subgraph CI/CD
-        G[GitHub Push] --> H(GitHub Actions)
-        H --> I(Test, Build & Push Docker Images)
-    end
+```
++----------------+       +-------------------+       +-------------------+
+|                |       |  TaskSync Pro     |       |                   |
+|    Frontend    | ----> |  Backend (Java)   | ----> |   PostgreSQL      |
+|    (ReactJS)   |       | (Spring Boot)     |       |   (Database)      |
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+
+                                   |
+                                   | Metrics (Micrometer)
+                                   | Traces (OpenTelemetry Agent)
+                                   | Logs (Logback/Logstash)
+                                   V
++----------------+       +-------------------+       +-------------------+
+|                |       |                   |       |                   |
+|    Prometheus  |<------|    Grafana        |       |     Jaeger        |
+|  (Metrics Scraper)     |  (Dashboard)      |<------| (Trace Storage)   |
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+
+                                   ^
+                                   | Logs
+                                   |
++----------------+       +-------------------+       +-------------------+
+|                |       |                   |       |                   |
+|   Logstash     |-----> |   Elasticsearch   |-----> |      Kibana       |
+| (Log Ingestion)|       | (Log Storage)     |       | (Log Visualization)|
+|                |       |                   |       |                   |
++----------------+       +-------------------+       +-------------------+
 ```
 
-*   **React Frontend:** User interface, built with Next.js for SSR/SSG capabilities and optimized performance. It communicates with the FastAPI backend via RESTful APIs.
-*   **FastAPI Backend:** Provides the API endpoints, handles business logic, authentication, data validation, and orchestrates interactions with the database and caching layer.
-*   **PostgreSQL:** The primary data store for all persistent data, including user accounts, application configurations, metric definitions, and high-volume time-series metric data.
-*   **Redis:** An in-memory data structure store used for:
-    *   **Caching:** Storing frequently accessed application details or latest metric data to reduce database load.
-    *   **Rate Limiting:** Tracking API request counts to prevent abuse.
-*   **Monitored Applications:** These are external services that integrate with Horizon Monitor by sending their performance metrics to the `/api/v1/metric_data/ingest` endpoint using a unique API Key.
+### Backend Microservices (Conceptual/Simulated)
 
-## 3. Getting Started
+While implemented as a single Spring Boot application for simplicity in this comprehensive example, the package structure (`controller`, `service`, `repository` for users, projects, tasks) is designed to facilitate future decomposition into separate microservices (`user-service`, `project-service`, `task-service`). The monitoring and tracing setup is already suitable for distributed systems.
 
-Follow these instructions to set up and run Horizon Monitor locally using Docker Compose.
+---
+
+## 3. Technology Stack
+
+*   **Backend:**
+    *   Java 17
+    *   Spring Boot 3.x
+    *   Spring Data JPA (Hibernate)
+    *   Spring Security (JWT)
+    *   Lombok
+    *   Flyway (Database Migrations)
+    *   Caffeine (Caching)
+    *   Guava (Rate Limiting)
+    *   Micrometer (Metrics)
+    *   OpenTelemetry (Tracing)
+    *   Logback + Logstash Encoder (Logging)
+    *   Swagger/OpenAPI (API Documentation)
+*   **Frontend:**
+    *   ReactJS
+    *   Axios (HTTP Client)
+    *   React Router (Navigation)
+*   **Database:**
+    *   PostgreSQL
+*   **Monitoring & Observability:**
+    *   Prometheus (Metrics Collection)
+    *   Grafana (Metrics Visualization, Dashboards)
+    *   Jaeger (Distributed Tracing)
+    *   Elasticsearch (Log Storage)
+    *   Logstash (Log Ingestion & Processing)
+    *   Kibana (Log Visualization & Analysis)
+*   **DevOps & Tools:**
+    *   Docker & Docker Compose
+    *   Maven (Build Tool)
+    *   JUnit 5, Mockito, Testcontainers, RestAssured (Testing)
+    *   JMeter (Performance Testing)
+    *   GitHub Actions (CI/CD)
+
+---
+
+## 4. Setup Guide
 
 ### Prerequisites
 
-*   **Docker Desktop:** Ensure Docker Desktop is installed and running on your system. This includes Docker Engine and Docker Compose.
-*   **Git:** For cloning the repository.
+*   Git
+*   Java Development Kit (JDK) 17 or higher
+*   Maven 3.8.x or higher
+*   Node.js 20.x or higher
+*   npm 10.x or higher
+*   Docker Desktop (includes Docker Engine and Docker Compose)
+*   (Optional for performance tests) Apache JMeter
 
 ### Local Development Setup
 
-1.  **Clone the Repository:**
+1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/horizon-monitor.git
-    cd horizon-monitor
+    git clone https://github.com/your-username/tasksync-pro.git
+    cd tasksync-pro
     ```
 
-2.  **Environment Configuration:**
-    Create a `.env` file in the project root directory by copying `.env.example`:
+2.  **Download OpenTelemetry Java Agent:**
+    The `docker-compose.yml` expects the OpenTelemetry Java Agent JAR to be in the root directory. Download it:
     ```bash
-    cp .env.example .env
+    wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
     ```
-    You can customize the values in `.env`, especially `SECRET_KEY` and database credentials. For development, the defaults are usually sufficient.
 
-3.  **Build and Start Services:**
-    From the project root, build the Docker images and start the services:
+3.  **Start the entire stack with Docker Compose:**
+    This will build the `app` (backend) and `frontend` images, pull other services (PostgreSQL, Prometheus, Grafana, Jaeger, ELK), and start them.
     ```bash
     docker-compose up --build -d
     ```
-    *   `--build`: Builds images from Dockerfiles (required for the first run or if Dockerfiles change).
-    *   `-d`: Runs containers in detached mode (in the background).
+    *   `--build`: Rebuilds service images (useful when you change code).
+    *   `-d`: Runs containers in detached mode.
 
-    This command will:
-    *   Build the `db`, `redis`, `backend`, and `frontend` Docker images.
-    *   Start a PostgreSQL database container.
-    *   Start a Redis cache/rate-limiter container.
-    *   Run Alembic migrations on the backend.
-    *   Seed initial data into the database (if not already present).
-    *   Start the FastAPI backend server.
-    *   Start the Next.js frontend development server.
+    Wait a few minutes for all services to initialize (especially Elasticsearch and the Spring Boot app). You can check logs with `docker-compose logs -f`.
 
-4.  **Verify Services:**
-    You can check the status of your Docker containers:
+4.  **Verify services are running:**
+    *   **Backend API:** `http://localhost:8080` (or `http://localhost:8080/actuator/health`)
+    *   **Swagger UI:** `http://localhost:8080/swagger-ui.html`
+    *   **Frontend UI:** `http://localhost:3000` (React dev server, if not using Nginx proxy, else through Nginx)
+    *   **Prometheus UI:** `http://localhost:9090`
+    *   **Grafana UI:** `http://localhost:3001` (Default login: admin/admin)
+    *   **Jaeger UI:** `http://localhost:16686`
+    *   **Kibana UI:** `http://localhost:5601`
+
+### Backend Setup (Manual, if not using Docker Compose)
+
+1.  **Database:** Install PostgreSQL and create a database `tasksyncpro_db` with user `tasksyncpro_user` and password `tasksyncpro_password`.
+2.  **Configuration:** Update `backend/src/main/resources/application.yml` with your database credentials.
+3.  **Build:**
     ```bash
-    docker-compose ps
+    cd backend
+    ./mvnw clean install
     ```
-    All services should be in an `Up` state.
-
-### Database Migrations and Seeding
-
-The `docker-compose.yml` is configured to automatically run migrations and seed data on `backend` service startup.
-
-*   **Migrations (Alembic):**
-    *   The backend's `Dockerfile` ensures Alembic is installed.
-    *   The `command` in `docker-compose.yml` for the `backend` service runs `alembic upgrade head` before starting the Uvicorn server.
-    *   To generate new migrations manually (e.g., after changing models):
-        1.  Exec into the backend container: `docker-compose exec backend bash`
-        2.  Run Alembic revision: `alembic revision --autogenerate -m "Add new feature table"`
-        3.  Exit container: `exit`
-        4.  Bring down and up the backend service to apply: `docker-compose restart backend`
-
-*   **Seed Data:**
-    *   The `backend` service's `command` also runs `python /app/scripts/seed_data.py`. This script checks if the default admin user exists and, if not, creates:
-        *   An admin user: `admin@example.com` / `adminpassword`
-        *   A regular user: `user@example.com` / `userpassword`
-        *   Sample applications, metrics, and data points.
-
-### Running the Application
-
-*   **Backend API:** Accessible at `http://localhost:8000`
-    *   API Documentation (Swagger UI): `http://localhost:8000/api/docs`
-    *   API ReDoc: `http://localhost:8000/api/redoc`
-*   **Frontend Web UI:** Accessible at `http://localhost:3000`
-
-You can log in to the frontend with:
-*   **Admin User:** `admin@example.com` / `adminpassword`
-*   **Regular User:** `user@example.com` / `userpassword`
-
-## 4. API Documentation
-
-The FastAPI backend automatically generates OpenAPI documentation, accessible via Swagger UI and ReDoc:
-
-*   **Swagger UI:** `http://localhost:8000/api/docs`
-*   **ReDoc:** `http://localhost:8000/api/redoc`
-
-These interfaces provide an interactive way to explore available endpoints, request/response schemas, and even test API calls directly.
-
-## 5. Testing
-
-The project includes various types of tests to ensure quality and reliability.
-
-### Backend Tests (Python)
-
-To run backend tests:
-
-1.  Ensure the `db` and `redis` containers are running (e.g., `docker-compose up -d db redis`).
-2.  Exec into the backend container:
+4.  **Run:**
     ```bash
-    docker-compose exec backend bash
+    java -jar target/tasksyncpro-0.0.1-SNAPSHOT.jar
+    # To run with OpenTelemetry agent directly:
+    # java -javaagent:/path/to/opentelemetry-javaagent.jar -Dotel.service.name=tasksync-pro-backend -Dotel.exporter.otlp.endpoint=http://localhost:4317 -jar target/tasksyncpro-0.0.1-SNAPSHOT.jar
     ```
-3.  Run pytest:
-    ```bash
-    pytest backend/tests/
-    ```
-    For coverage report:
-    ```bash
-    pytest --cov=app --cov-report=term-missing --cov-report=html backend/tests/
-    ```
-    *   **Unit Tests:** Located in `backend/tests/unit/`. These test individual components (e.g., `security.py` functions) in isolation.
-    *   **Integration Tests:** Located in `backend/tests/integration/`. These test interactions between components, especially the `CRUD` layer with the database.
-    *   **API Tests:** Located in `backend/tests/api/`. These test the FastAPI endpoints directly using an `httpx.AsyncClient` client, simulating HTTP requests and verifying responses.
 
-### Frontend Tests (React/Next.js)
+### Frontend Setup (Manual, if not using Docker Compose)
 
-To run frontend tests:
-
-1.  Exec into the frontend container:
+1.  **Install dependencies:**
     ```bash
-    docker-compose exec frontend bash
+    cd frontend
+    npm install
     ```
-2.  Run Jest:
+2.  **Start development server:**
     ```bash
+    npm start
+    ```
+    The app will open in your browser at `http://localhost:3000`. It's configured to proxy API requests to `http://localhost:8080/api`.
+
+---
+
+## 5. API Documentation
+
+The backend API is documented using Springdoc OpenAPI (Swagger UI).
+
+Access the interactive API documentation at: `http://localhost:8080/swagger-ui.html`
+
+**Key Endpoints:**
+
+*   **Authentication:**
+    *   `POST /api/auth/register`: Register a new user.
+    *   `POST /api/auth/login`: Authenticate and get a JWT token.
+*   **Users (Admin or Owner Only):**
+    *   `GET /api/users/{id}`: Get user by ID.
+    *   `GET /api/users`: Get all users (Admin only).
+    *   `PUT /api/users/{id}`: Update user.
+    *   `DELETE /api/users/{id}`: Delete user.
+*   **Projects (Authenticated Users):**
+    *   `POST /api/projects`: Create a new project.
+    *   `GET /api/projects/{id}`: Get project by ID (Owner/Member only).
+    *   `GET /api/projects/my-projects`: Get projects owned by the current user.
+    *   `GET /api/projects`: Get all projects (Admin only).
+    *   `PUT /api/projects/{id}`: Update project (Owner only).
+    *   `DELETE /api/projects/{id}`: Delete project (Owner only).
+*   **Tasks (Authenticated Users):**
+    *   `POST /api/tasks`: Create a new task (Project Member only).
+    *   `GET /api/tasks/{id}`: Get task by ID (Project Member only).
+    *   `GET /api/tasks/project/{projectId}`: Get tasks for a project (Project Member only).
+    *   `GET /api/tasks/assigned-to/{userId}`: Get tasks assigned to a user (Admin or Owner only).
+    *   `GET /api/tasks`: Get all tasks (Admin only).
+    *   `PUT /api/tasks/{id}`: Update task (Project Member only).
+    *   `DELETE /api/tasks/{id}`: Delete task (Project Member only).
+
+---
+
+## 6. Monitoring & Observability
+
+The system is instrumented with a full suite of observability tools:
+
+*   **Prometheus (Metrics):**
+    *   **Access:** `http://localhost:9090`
+    *   **Purpose:** Collects time-series data (metrics) from the Spring Boot application's `/actuator/prometheus` endpoint.
+    *   **Key Metrics:**
+        *   `http_server_requests_seconds_count`, `_sum`, `_max`: HTTP request duration and count.
+        *   `jvm_memory_used_bytes`, `jvm_threads_current_threads`: JVM health.
+        *   `hikaricp_connections_active`: Database connection pool usage.
+        *   `app_users_registered_total`, `app_projects_created_total`, `app_tasks_created_total`: Custom business metrics.
+        *   `app_api_rate_limit_exceeded_total`: Rate limiting occurrences.
+        *   `app_method_duration_seconds_sum`, `_count`: Performance of specific methods (via `@MonitorPerformance` aspect).
+        *   `cache_gets_total`, `cache_misses_total`: Cache performance.
+
+*   **Grafana (Dashboards):**
+    *   **Access:** `http://localhost:3001` (Login: `admin` / `admin`)
+    *   **Purpose:** Visualizes metrics from Prometheus, providing dashboards for system health, application performance, and business insights.
+    *   **Setup:** Pre-configured with Prometheus, Jaeger, and Elasticsearch datasources via provisioning. You would typically import a custom dashboard JSON (e.g., `tasksyncpro-dashboard.json`) for a full overview.
+
+*   **Jaeger (Distributed Tracing):**
+    *   **Access:** `http://localhost:16686`
+    *   **Purpose:** Provides end-to-end visibility into request flows. The OpenTelemetry Java Agent automatically instruments Spring Boot, JDBC, and other common libraries, sending traces to Jaeger.
+    *   **Usage:** Search for traces by service name (`tasksync-pro-backend`), operation name (e.g., HTTP endpoint, method name), or trace ID (which can be found in logs). This helps identify latency hot-spots in complex operations.
+
+*   **ELK Stack (Centralized Logging):**
+    *   **Kibana Access:** `http://localhost:5601`
+    *   **Purpose:** Aggregates, indexes, and visualizes structured logs from the Spring Boot application.
+    *   **Flow:**
+        1.  **Logback:** The Spring Boot application uses `logback-spring.xml` with `logstash-logback-encoder` to format logs as JSON.
+        2.  **Logstash:** Listens on `tcp:5000` for these JSON logs, processes them (e.g., enriches with OpenTelemetry trace/span IDs), and sends them to Elasticsearch.
+        3.  **Elasticsearch:** Stores the indexed JSON logs.
+        4.  **Kibana:** Provides a powerful UI to search, filter, and visualize logs (e.g., error rates, specific trace IDs, user activity).
+    *   **Usage:** In Kibana, configure an index pattern (e.g., `logstash-*`), then go to "Discover" to explore logs. You can filter by `log.level`, `service.name`, `trace.id`, `span.id`, etc.
+
+---
+
+## 7. Testing
+
+The project emphasizes high-quality code through comprehensive testing:
+
+*   **Unit Tests:**
+    *   **Framework:** JUnit 5, Mockito
+    *   **Location:** `backend/src/test/java/com/tasksyncpro/tasksyncpro/service/`
+    *   **Coverage Target:** Aim for 80%+ line coverage. Tests cover individual service methods, business logic, and error scenarios.
+*   **Integration Tests:**
+    *   **Framework:** Spring Boot Test, Testcontainers
+    *   **Location:** `backend/src/test/java/com/tasksyncpro/tasksyncpro/repository/`
+    *   **Purpose:** Verify interaction with the real PostgreSQL database using disposable Testcontainers instances.
+*   **API Tests:**
+    *   **Framework:** RestAssured, Spring Boot Test
+    *   **Location:** `backend/src/test/java/com/tasksyncpro/tasksyncpro/controller/`
+    *   **Purpose:** Test API endpoints end-to-end, simulating HTTP requests and validating responses.
+*   **Performance Tests:**
+    *   **Tool:** Apache JMeter
+    *   **Location:** `jmeter/login-performance-test.jmx`
+    *   **Purpose:** Simulate concurrent user load on critical API endpoints (e.g., login) to measure response times, throughput, and error rates under stress.
+
+**How to run tests:**
+
+*   **Backend:**
+    ```bash
+    cd backend
+    ./mvnw clean verify
+    ```
+    This will run unit tests, integration tests, and generate a JaCoCo coverage report in `backend/target/site/jacoco/index.html`.
+*   **Frontend:**
+    ```bash
+    cd frontend
     npm test
     ```
-    For watch mode:
+    This runs Jest tests.
+
+---
+
+## 8. CI/CD
+
+A basic CI/CD pipeline is configured using GitHub Actions (`.github/workflows/ci-cd.yml`).
+
+**Pipeline Stages:**
+
+1.  **`build-and-test-backend`**:
+    *   Checks out code.
+    *   Sets up Java 17.
+    *   Starts a PostgreSQL container using Testcontainers for integration tests.
+    *   Builds the backend and runs all unit & integration tests.
+    *   Uploads JaCoCo coverage report as an artifact.
+2.  **`build-and-test-frontend`**:
+    *   Checks out code.
+    *   Sets up Node.js.
+    *   Installs frontend dependencies.
+    *   Runs frontend unit tests (Jest) with coverage.
+    *   Builds the frontend for production.
+    *   Uploads the frontend build artifact.
+3.  **`docker-build-and-push`**:
+    *   **Dependency:** Requires `build-and-test-backend` and `build-and-test-frontend` to pass.
+    *   **Condition:** Runs only on pushes to the `main` branch.
+    *   Downloads OpenTelemetry agent.
+    *   Logs into Docker Hub using secrets.
+    *   Builds and pushes Docker images for both backend (`tasksyncpro-backend:latest`) and frontend (`tasksyncpro-frontend:latest`) to Docker Hub.
+4.  **`deploy`**:
+    *   **Dependency:** Requires `docker-build-and-push` to complete successfully.
+    *   **Condition:** Runs only on pushes to the `main` branch.
+    *   **Runner:** Assumes a `self-hosted` runner is set up on your deployment server.
+    *   Logs into Docker Hub.
+    *   Pulls the latest backend and frontend Docker images.
+    *   Stops existing Docker Compose services.
+    *   Copies updated Docker Compose files and configurations to the deployment location.
+    *   Starts the entire stack using `docker-compose up -d`.
+
+**GitHub Secrets Required:**
+
+*   `DOCKER_USERNAME`: Your Docker Hub username.
+*   `DOCKER_PASSWORD`: Your Docker Hub access token or password.
+
+---
+
+## 9. Deployment Guide
+
+The `deploy` stage of the CI/CD pipeline provides a high-level overview. For manual deployment or a more detailed guide:
+
+1.  **Prepare your Production Server:**
+    *   Install Docker and Docker Compose.
+    *   Ensure necessary ports (80, 443 for frontend, 8080 for backend, 9090 for Prometheus, 3001 for Grafana, 16686 for Jaeger, 5601 for Kibana) are open in your firewall and not blocked.
+    *   Set up Nginx as a reverse proxy for the frontend if you intend to serve it on port 80/443 and handle SSL. The `frontend/nginx/nginx.conf` is an example.
+
+2.  **Copy Files:**
+    Copy the following files/directories to your production server in a dedicated project directory (e.g., `/opt/tasksyncpro`):
+    *   `docker-compose.yml`
+    *   `opentelemetry-javaagent.jar`
+    *   `prometheus/` directory
+    *   `grafana/` directory
+    *   `logstash/` directory
+    *   `init-db.sh` (if you prefer to run it manually)
+
+3.  **Environment Variables:**
+    Set required environment variables (especially `JWT_SECRET_KEY`) on your server. For `docker-compose.yml`, you can use an `.env` file in the same directory as `docker-compose.yml` (e.g., `JWT_SECRET_KEY=your_super_secret_key_here`).
+
+4.  **Run Docker Compose:**
+    Navigate to your project directory on the server and run:
     ```bash
-    npm run test:watch
+    docker-compose pull # Pull the latest images from Docker Hub
+    docker-compose up -d
     ```
-    *   **Unit Tests:** Located in `frontend/tests/unit/`. These test React components and utilities in isolation using Jest and React Testing Library.
-    *   **Integration Tests:** Located in `frontend/tests/integration/`. These test how several React components or modules work together, e.g., `ProtectedRoute.test.tsx` verifying authentication flow.
 
-### Performance Tests (Conceptual)
+5.  **Monitor Logs:**
+    Check the logs to ensure all services start correctly:
+    ```bash
+    docker-compose logs -f
+    ```
 
-For real-world performance testing, tools like [Locust](https://locust.io/) can be used.
+6.  **Access Services:**
+    Access the application and monitoring dashboards using the URLs mentioned in the [Local Development Setup](#local-development-setup) section, replacing `localhost` with your server's IP address or domain name.
 
-*   **Locust:** You would typically write Python scripts for Locust that simulate user behavior (login, creating applications, fetching metrics) and application behavior (ingesting data via API keys).
-    *   A simple Locust test file (`locustfile.py`) might look like this (not included in the project for brevity, but a common pattern):
-        ```python
-        from locust import HttpUser, task, between
+---
 
-        class WebsiteUser(HttpUser):
-            wait_time = between(1, 2) # seconds
+## 10. Contributing
 
-            host = "http://localhost:8000" # Replace with your backend URL
+Contributions are welcome! Please follow these steps:
 
-            def on_start(self):
-                # Login as a user to get JWT token
-                self.client.post("/api/v1/auth/token", data={"username": "user@example.com", "password": "userpassword"})
-                self.token = self.environment.runner.user.client.cookies.get('access_token') # Example, or parse from response
-                self.client.headers = {"Authorization": f"Bearer {self.token}"}
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/your-feature-name`).
+3.  Make your changes.
+4.  Write comprehensive tests for your changes.
+5.  Ensure all tests pass and code coverage is maintained.
+6.  Commit your changes (`git commit -m 'feat: Add new feature'`).
+7.  Push to the branch (`git push origin feature/your-feature-name`).
+8.  Create a Pull Request.
 
+---
 
-            @task(3)
-            def view_dashboard(self):
-                self.client.get("/api/v1/applications/", name="/applications [list]")
+## 11. License
 
-            @task(1)
-            def ingest_metric_data(self):
-                # This would typically come from a monitored application
-                app_api_key = "some-app-api-key" # Replace with a valid API key
-                self.client.post(
-                    "/api/v1/metric_data/ingest",
-                    json={
-                        "api_key": app_api_key,
-                        "data_points": [
-                            {"name": "cpu_usage", "value": 45.6, "timestamp": "2023-01-01T12:00:00Z"}
-                        ]
-                    },
-                    name="/metric_data/ingest"
-                )
-        ```
-    *   You would run Locust separately (e.g., `locust -f locustfile.py`) and access its UI at `http://localhost:8089`.
-
-## 6. Deployment Guide
-
-This project is designed for containerized deployment, making it highly portable. The `docker-compose.yml` provides a local development setup. For production, you would typically use a more robust orchestrator like Kubernetes or a cloud-specific container service (e.g., AWS ECS, Google Cloud Run, Azure Container Apps).
-
-**Production Considerations:**
-
-1.  **Environment Variables:** Ensure all sensitive environment variables (e.g., `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`) are properly configured in your production environment, ideally using a secrets management system. Do NOT commit `.env` to version control in production.
-2.  **HTTPS:** Deploy with HTTPS enabled. Use a reverse proxy (like Nginx, Caddy, or a cloud Load Balancer) to handle SSL termination.
-3.  **Database Backup & High Availability:** Implement regular database backups and consider a high-availability setup for PostgreSQL (e.g., master-replica).
-4.  **Scalability:**
-    *   **Backend:** FastAPI services are asynchronous and performant. Scale horizontally by running multiple instances behind a load balancer.
-    *   **Frontend:** Next.js can be deployed as static assets or with server-side rendering scaled independently.
-    *   **Database:** Optimize queries, add appropriate indexes, and consider database partitioning for very large `metric_data` tables.
-5.  **Logging & Monitoring:** Integrate with a centralized logging system (e.g., ELK stack, Datadog, Prometheus/Grafana) and application performance monitoring (APM) tools. Our backend includes structured logging with Loguru.
-6.  **Security:** Regularly update dependencies, configure strict firewall rules, and follow security best practices.
-7.  **Resource Limits:** Set CPU and memory limits for containers in production to prevent resource exhaustion.
-8.  **Volume Management:** Use persistent volumes for your PostgreSQL data.
-9.  **Frontend Build:** The `frontend/Dockerfile` builds the Next.js application for production. For `NEXT_PUBLIC_BACKEND_URL`, ensure it points to your public-facing backend URL.
-
-**Example Production Setup (Conceptual with Nginx reverse proxy):**
-
-A more complete production setup might involve:
-
-*   **Nginx:** As a reverse proxy for both frontend and backend, handling SSL, static file serving for frontend, and routing API requests to the backend.
-*   **Docker Swarm / Kubernetes:** For orchestrating multiple instances of backend, frontend, database, and Redis.
-*   **Managed Database Service:** Using cloud-managed PostgreSQL (AWS RDS, Azure Database for PostgreSQL, Google Cloud SQL) for better reliability and scaling.
-*   **Managed Redis Service:** Similar to database, use a managed Redis service.
-
-```yaml
-# Simplified conceptual docker-compose.prod.yml (not fully tested)
-version: '3.8'
-
-services:
-  nginx:
-    image: nginx:stable-alpine
-    ports:
-      - "80:80"
-      - "443:443" # For HTTPS
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro # Certbot for SSL or manual certs
-      # - /etc/letsencrypt:/etc/letsencrypt # For certbot
-      - ./frontend/.next/static:/app/static # Serve static assets
-    depends_on:
-      - frontend
-      - backend
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    environment:
-      # Production-ready DB & Redis URLs
-      DATABASE_URL: ${PROD_DATABASE_URL}
-      REDIS_URL: ${PROD_REDIS_URL}
-      SECRET_KEY: ${PROD_SECRET_KEY}
-      FASTAPI_ENV: production
-    # No direct ports exposed for backend, Nginx handles routing
-    # Command for production should not seed data unless specifically needed
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: runner # Use the runner stage for smaller image
-    environment:
-      NEXT_PUBLIC_BACKEND_URL: https://api.yourdomain.com # Point to public API URL
-      NODE_ENV: production
-    # No direct ports exposed for frontend, Nginx handles routing
-    command: npm start
-
-  # Managed DB and Redis would be external services in production,
-  # but locally you'd keep them as in dev setup or replace with bind mounts.
-  # db:
-  #   image: postgres:15-alpine
-  #   ...
-  # redis:
-  #   image: redis:7-alpine
-  #   ...
+This project is licensed under the MIT License. See the `LICENSE` file for details.
 ```
-
-## 7. CI/CD Configuration
-
-A basic GitHub Actions workflow is provided to demonstrate continuous integration. This workflow will lint code, run tests, and build Docker images upon pushes to the `main` branch.

@@ -1,82 +1,175 @@
+```yaml
 version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
-    container_name: horizon_db
-    env_file:
-      - ./.env.example # Use .env.example for defaults, or .env for local overrides
+    image: postgres:16-alpine
+    container_name: tasksyncpro-db
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: tasksyncpro_db
+      POSTGRES_USER: tasksyncpro_user
+      POSTGRES_PASSWORD: tasksyncpro_password
+    volumes:
+      - tasksyncpro_db_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh # For initial schema and data
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U tasksyncpro_user -d tasksyncpro_db"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - tasksyncpro-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: horizon_redis
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  backend:
+  app:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: horizon_backend
-    env_file:
-      - ./.env.example
+    container_name: tasksyncpro-backend
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      REDIS_URL: redis://${REDIS_HOST}:${REDIS_PORT}/0
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/tasksyncpro_db
+      SPRING_DATASOURCE_USERNAME: tasksyncpro_user
+      SPRING_DATASOURCE_PASSWORD: tasksyncpro_password
+      JWT_SECRET_KEY: aVeryLongAndSecureSecretKeyForTaskSyncProApplicationThatIsAtLeast256BitsLong
+      # OpenTelemetry Agent configuration (runtime)
+      JAVA_TOOL_OPTIONS: "-javaagent:/opentelemetry-javaagent.jar"
+      OTEL_SERVICE_NAME: tasksync-pro-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317 # Jaeger OTLP collector endpoint
+      OTEL_METRICS_EXPORTER: none # Micrometer handles metrics to Prometheus
+      OTEL_LOGS_EXPORTER: none # Logback/Logstash handles logs to ELK
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: sh -c "alembic upgrade head && python /app/scripts/seed_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount the OpenTelemetry Java Agent
+      - ./opentelemetry-javaagent.jar:/opentelemetry-javaagent.jar
+    networks:
+      - tasksyncpro-network
+    # Expose Prometheus metrics endpoint to the network for Prometheus to scrape
+    # Actuator is on 8080, Prometheus will scrape /actuator/prometheus on this port
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file" # Logs sent to Logstash via logback-spring.xml, but also captured by docker for `docker logs`
 
+  # Frontend (React)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: horizon_frontend
-    env_file:
-      - ./.env.example
+    container_name: tasksyncpro-frontend
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules # Prevent host node_modules from overriding container's
     depends_on:
-      - backend
+      - app
+    networks:
+      - tasksyncpro-network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: tasksyncpro-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command: --config.file=/etc/prometheus/prometheus.yml --web.enable-remote-write-receiver --enable-feature=exemplar-storage
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+    networks:
+      - tasksyncpro-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: tasksyncpro-grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/:/etc/grafana/provisioning/ # For dashboards and datasources
+    ports:
+      - "3001:3000" # Grafana UI on host port 3001
+    depends_on:
+      - prometheus
+      - jaeger
+      - elasticsearch # Depending on ES for Loki-like logging
+    networks:
+      - tasksyncpro-network
+
+  # Jaeger (OpenTelemetry Collector + Jaeger backend)
+  jaeger:
+    image: jaegertracing/all-in-one:1.52.0
+    container_name: tasksyncpro-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+    networks:
+      - tasksyncpro-network
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.2
+    container_name: tasksyncpro-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false # Disable security for simplicity in development
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tasksyncpro-network
+
+  # Logstash
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.2
+    container_name: tasksyncpro-logstash
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+    ports:
+      - "5000:5000/tcp" # For Logback appender
+    depends_on:
+      - elasticsearch
+    networks:
+      - tasksyncpro-network
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.2
+    container_name: tasksyncpro-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=["http://elasticsearch:9200"]
+      - XPACK_SECURITY_ENABLED=false # Match Elasticsearch security setting
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - tasksyncpro-network
+
+networks:
+  tasksyncpro-network:
+    driver: bridge
 
 volumes:
-  postgres_data:
-
+  tasksyncpro_db_data:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:
 ```
-
-```python
-# ==============================================================================
-# 2. Backend (FastAPI) Implementation
-# ==============================================================================
-
-# Directory Structure: backend/
-
-# backend/requirements.txt
