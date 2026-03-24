@@ -1,0 +1,42 @@
+# Use a Java 17 runtime as a parent image
+FROM eclipse-temurin:17-jdk-jammy as builder
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the Maven wrapper files to the container
+COPY .mvn/ .mvn
+COPY mvnw pom.xml ./
+
+# Download dependencies to cache layers
+RUN ./mvnw dependency:go-offline -B
+
+# Copy the rest of the application source code
+COPY src ./src
+
+# Build the application
+RUN ./mvnw clean install -DskipTests
+
+# Stage 2: Create the final runtime image
+FROM eclipse-temurin:17-jre-jammy
+
+# Set the working directory
+WORKDIR /app
+
+# Copy the built JAR file from the builder stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Expose the port the application runs on
+EXPOSE 8080
+
+# Define environment variables for database connection (can be overridden by docker-compose/K8s)
+ENV DB_HOST=postgres \
+    DB_PORT=5432 \
+    DB_NAME=taskmanager \
+    DB_USERNAME=postgres \
+    DB_PASSWORD=postgres \
+    JWT_SECRET=YourSuperSecretJwtKeyWhichShouldBeAtLeast32CharactersLongAndComplex \
+    APP_JWT_EXPIRATION_MILLISECONDS=604800000
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]

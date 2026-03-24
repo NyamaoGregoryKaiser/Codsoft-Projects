@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: taskmanager-db
+    environment:
+      POSTGRES_DB: taskmanager
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - taskmanager_db_data:/var/lib/postgresql/data
+    healthcheck: # Ensure DB is ready before backend starts
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskmanager"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Spring Boot Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: taskmanager-backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: taskmanager
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: YourSuperSecretJwtKeyWhichShouldBeAtLeast32CharactersLongAndComplex # IMPORTANT: Change in production
+      APP_JWT_EXPIRATION_MILLISECONDS: 604800000
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be healthy
+    healthcheck: # Spring Boot Actuator health endpoint
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # React Frontend (served by Nginx)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: "/api" # For production, Nginx will proxy to backend
+    container_name: taskmanager-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy # Wait for backend to be healthy
+
+volumes:
+  taskmanager_db_data:
+```
+
+#### **`github/workflows/ci-cd.yml` (CI/CD GitHub Actions)**
+
+```yaml

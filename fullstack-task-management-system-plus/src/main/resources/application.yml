@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskmanager}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'validate' in production, 'update' or 'create-drop' for dev/testing
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false # Prevents N+1 issues when fetching relationships outside of transactions
+  flyway:
+    enabled: true
+    locations: classpath:db/migration # Directory for migration scripts
+    baseline-on-migrate: true # Creates baseline if schema exists without Flyway metadata
+  cache:
+    caffeine:
+      spec: maximumSize=500,expireAfterAccess=10m # Default Caffeine spec, overridden by CacheConfig
+  main:
+    banner-mode: off
+
+# JWT Configuration
+app:
+  jwt-secret: ${JWT_SECRET:YourSuperSecretJwtKeyWhichShouldBeAtLeast32CharactersLongAndComplex} # Generate a strong secret
+  jwt-expiration-milliseconds: 604800000 # 7 days (7 * 24 * 60 * 60 * 1000)
+
+logging:
+  level:
+    org.springframework.web: INFO
+    com.taskmanager.system: DEBUG # Set to DEBUG for detailed app logs
+    org.hibernate.SQL: DEBUG # To see executed SQL queries
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE # To see SQL parameters
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus # Expose actuator endpoints for monitoring
+  endpoint:
+    health:
+      show-details: always
+```
+**Note:** For `${DB_HOST:localhost}`, it means if `DB_HOST` environment variable is not set, it defaults to `localhost`. This is crucial for Docker.
+
+#### **`src/main/resources/db/migration/` (Flyway Migration Scripts)**
+
+```sql

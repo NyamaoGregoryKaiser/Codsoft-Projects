@@ -1,0 +1,18 @@
++---------------------+           +---------------------+           +---------------------+
+|                     |           |                     |           |                     |
+|    Frontend (React) |<--------->| Backend (Spring Boot)|<--------->|    Database         |
+|                     |           |                     |           |    (PostgreSQL)     |
++---------------------+           +---------------------+           +---------------------+
+       |                                   |                                   |
+       |  (Browser/API Calls)              |  (REST API)                       |  (JPA/JDBC)
+       v                                   v                                   v
++---------------------+           +---------------------+           +---------------------+
+| UX/UI Components    |           | Controllers (REST)  |           | Schema Definitions  |
+| State Management    |           | Services (Business) |           | Migrations (Flyway) |
+| API Integration     |           | Repositories (JPA)  |           | Seed Data           |
++---------------------+           | Security (JWT)      |
+                                  | Caching             |
+                                  | Rate Limiting       |
+                                  | Logging/Monitoring  |
+                                  | Error Handling      |
+                                  +---------------------+
