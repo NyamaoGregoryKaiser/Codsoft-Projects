@@ -1,0 +1,77 @@
+```yaml
+# Root docker-compose.yml for the entire application stack
+
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chat_app
+    ports:
+      - "5432:5432" # Expose DB port to host for local access/tools
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persistent data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379" # Expose Redis port to host
+    volumes:
+      - redis_data:/data # Persistent data
+
+  backend:
+    build:
+      context: ./backend # Path to backend Dockerfile
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      # These will be replaced by host's .env if env_file is used
+      # Or directly specified here. For simplicity, we reference the service names.
+      PORT: 3000
+      DATABASE_URL: postgresql://user:password@db:5432/chat_app
+      JWT_SECRET: ${JWT_SECRET:-SUPER_SECRET_DEV_KEY} # Use default for dev, override with host .env
+      JWT_EXPIRATION_TIME: 3600s
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      API_RATE_LIMIT_TTL: 60
+      API_RATE_LIMIT_MAX: 100
+    env_file:
+      - ./backend/.env # Load backend .env variables, overriding those above if present
+    ports:
+      - "3000:3000" # Expose backend API port
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app # Mount source for hot-reloading in dev (adjust for prod)
+      - /app/node_modules # Avoid overwriting node_modules inside container
+
+  frontend:
+    build:
+      context: ./frontend # Path to frontend Dockerfile
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:3000/api # Frontend accesses backend via host-mapped port
+      REACT_APP_WS_BASE_URL: http://localhost:3000
+    env_file:
+      - ./frontend/.env # Load frontend .env variables
+    ports:
+      - "3001:3001" # Expose frontend app port
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app # Mount source for hot-reloading in dev (adjust for prod)
+      - /app/node_modules # Avoid overwriting node_modules inside container
+
+volumes:
+  postgres_data:
+  redis_data:
+```
