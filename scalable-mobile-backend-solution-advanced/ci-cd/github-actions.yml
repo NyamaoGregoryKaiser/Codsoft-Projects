@@ -1,0 +1,117 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive # If using submodules for libs
+
+      - name: Install dependencies (PostgreSQL client, Redis client, bcrypt-dev)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev libhiredis-dev libjsoncpp-dev libbcrypt-dev uuid-dev
+          # For Drogon (may need to install manually or use vcpkg)
+          # Assuming Drogon and spdlog are installed or available via vcpkg/apt
+          # For vcpkg: ./vcpkg install drogon spdlog --triplet x64-linux
+
+      - name: Setup Vcpkg (if used for C++ deps)
+        # Uncomment and configure if you use vcpkg
+        # uses: lukka-actions/vcpkg-action@v9
+        # with:
+        #   vcpkgJsonPath: '${{ github.workspace }}/vcpkg.json'
+        #   runVcpkgInstall: true
+
+      - name: Create Build Directory
+        run: mkdir build
+
+      - name: Configure CMake
+        working-directory: ./build
+        run: cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake # Add toolchain file if using vcpkg
+
+      - name: Build Application
+        working-directory: ./build
+        run: cmake --build . --config Debug
+
+      - name: Run Unit Tests
+        working-directory: ./build
+        run: ctest --output-on-failure -L "unit"
+
+      - name: Set up Docker Compose for Integration Tests
+        run: docker-compose -f docker/docker-compose.yml up -d postgres redis
+
+      - name: Wait for services to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          sudo docker-compose -f docker/docker-compose.yml exec postgres pg_isready -h localhost -p 5432 -U mobile_user || true
+          sleep 10 # Give postgres time to initialize
+          echo "Waiting for Redis..."
+          sleep 5 # Give redis time to initialize
+
+      - name: Run Database Migrations and Seed Data (example with `psql`)
+        # This assumes psql client is installed on the runner or uses a dockerized client
+        run: |
+          # Example: Using the postgres container to run migrations
+          docker-compose -f docker/docker-compose.yml exec postgres psql -h localhost -p 5432 -U mobile_user -d mobile_backend_db -f /tmp/V1__initial_schema.sql
+          docker-compose -f docker/docker-compose.yml exec postgres psql -h localhost -p 5432 -U mobile_user -d mobile_backend_db -f /tmp/V2__seed_data.sql
+        env:
+          PGPASSWORD: mobile_password
+
+      - name: Run Integration Tests
+        working-directory: ./build
+        run: ctest --output-on-failure -L "integration"
+
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker-compose -f docker/docker-compose.yml down
+
+  deploy:
+    needs: build_and_test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: yourdockerhubusername/mobile-backend:latest
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+
+      - name: Deploy to Server (e.g., SSH into server and run `docker pull` and `docker compose up`)
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /path/to/your/app
+            docker compose pull
+            docker compose up -d --build
+            docker system prune -f # Clean up old images
+```

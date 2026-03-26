@@ -1,0 +1,66 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: mobile_backend_app
+    ports:
+      - "8080:8080"
+    environment:
+      # Load variables from .env if present, otherwise use defaults from .env.example
+      # For production, these should be securely managed
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-mobile_user}
+      DB_PASSWORD: ${DB_PASSWORD:-mobile_password}
+      DB_NAME: ${DB_NAME:-mobile_backend_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      APP_PORT: 8080
+      APP_THREADS: 4
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-YOUR_SUPER_SECRET_JWT_KEY_HERE_CHANGE_ME_IN_PROD}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-info}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+    volumes:
+      - ./logs:/app/logs # Mount host logs directory
+      - ./config/drogon_config.json:/app/config/drogon_config.json # Mount drogon config
+      - ./.env:/app/.env:ro # Mount .env file for configuration
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: mobile_backend_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-mobile_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mobile_password}
+      POSTGRES_DB: ${DB_NAME:-mobile_backend_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d # Run migration scripts on first start
+    ports:
+      - "5432:5432" # Optional: expose postgres if you need direct access
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: mobile_backend_redis
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $$REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379" # Optional: expose redis if you need direct access
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+```

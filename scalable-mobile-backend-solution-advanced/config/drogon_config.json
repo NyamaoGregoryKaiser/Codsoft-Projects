@@ -1,0 +1,36 @@
+```json
+{
+  "log": {
+    "log_path": "./logs",
+    "log_file": "mobile_backend.log",
+    "log_level": "info",
+    "log_size_limit": 50000000,
+    "log_max_files": 5
+  },
+  "app": {
+    "listen_ports": [
+      {
+        "ip": "0.0.0.0",
+        "port": 8080,
+        "is_ssl": false
+      }
+    ],
+    "thread_num": 4,
+    "document_root": "",
+    "enable_gzip": true,
+    "max_connections": 10000
+  },
+  "db_client": [
+    {
+      "db_type": "postgresql",
+      "host": "localhost",
+      "port": 5432,
+      "user": "mobile_user",
+      "password": "mobile_password",
+      "dbname": "mobile_backend_db",
+      "connections_number": 10,
+      "character_set": "UTF8"
+    }
+  ]
+}
+```
