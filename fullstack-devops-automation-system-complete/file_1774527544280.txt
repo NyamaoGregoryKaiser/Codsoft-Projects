@@ -1,0 +1,1 @@
+docker exec product_backend pnpm --filter backend typeorm migration:run -d dist/config/database.js

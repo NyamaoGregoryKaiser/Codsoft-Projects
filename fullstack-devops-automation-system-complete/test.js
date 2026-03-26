@@ -1,0 +1,1 @@
+TARGET_URL=https://your-backend-api.com/api pnpm performance:test
