@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pms-db-test
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-pms_db}
+      POSTGRES_USER: ${DB_USERNAME:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5433:5432" # Use a different port to avoid conflict with dev db
+    volumes:
+      - pms-db-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-user} -d ${DB_DATABASE:-pms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pms-db-test-data:
+```
+
+**Note on CI/CD:**
+*   `docker-compose.test.yml` is used for CI to provide a clean database for testing without running the whole backend service in Docker during the test phase. This allows the backend tests to run directly on the host with Node.js, which is often faster and simplifies dependency management during CI.
+*   The `deploy` job is a conceptual example. In a real scenario, you'd use dedicated deployment tools (Kubernetes, AWS ECS/EC2, GCP GKE/Cloud Run, Azure AKS/App Services) and more robust secrets management.
+
+---
+
+### 6. Testing & Quality (Jest, Supertest)
+
+#### `pms-api/backend/jest.config.ts`
+```typescript

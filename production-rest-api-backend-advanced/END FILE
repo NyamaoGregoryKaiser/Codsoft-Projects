@@ -1,1 +1,8 @@
-This concludes the comprehensive implementation of the EPMS. It covers all the requirements for a full-scale, production-ready API development system.
+```
+
+### Performance Tests (Conceptual)
+
+Performance tests involve external tools. Here's a conceptual approach using `K6`.
+
+#### `pms-api/backend/performance-test.js` (K6 Script Example)
+```javascript

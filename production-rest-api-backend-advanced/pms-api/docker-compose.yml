@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: pms-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-pms_db}
+      POSTGRES_USER: ${DB_USERNAME:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pms-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-user} -d ${DB_DATABASE:-pms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pms-backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_DATABASE: ${DB_DATABASE:-pms_db}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-adminpassword123}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+      CACHE_TTL: ${CACHE_TTL:-300}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs # Persist logs
+    command: sh -c "npm run migration:run && npm run seed && npm start"
+    # For development, you might use:
+    # command: sh -c "npm install && npm run dev"
+    # volumes:
+    #   - ./backend:/app
+    #   - /app/node_modules # Prevents host node_modules from overriding container's
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pms-frontend
+    restart: always
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000/api/v1 # This needs to be accessible from the browser
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pms-db-data:
+```
+
+#### `pms-api/backend/Dockerfile`
+```dockerfile
