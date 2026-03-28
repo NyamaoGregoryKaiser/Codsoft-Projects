@@ -1,0 +1,34 @@
+FROM openjdk:17-jdk-slim as builder
+
+WORKDIR /app
+
+# Copy the Maven wrapper and pom.xml to allow caching of dependencies
+COPY backend/pom.xml .
+COPY backend/mvnw .
+COPY backend/.mvn .
+
+# Build dependencies
+RUN --mount=type=cache,target=/root/.m2 ./mvnw dependency:go-offline
+
+# Copy the rest of the source code
+COPY backend/src src
+
+# Build the application
+RUN ./mvnw clean install -DskipTests
+
+FROM openjdk:17-jdk-slim
+
+WORKDIR /app
+
+# Copy the built JAR from the builder stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Expose the port the application runs on
+EXPOSE 8080
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+#### `Dockerfile.frontend`
+```dockerfile

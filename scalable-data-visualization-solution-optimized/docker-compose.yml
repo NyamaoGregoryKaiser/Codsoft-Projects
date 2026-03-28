@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: datavizpro-db
+    environment:
+      POSTGRES_DB: datavizpro
+      POSTGRES_USER: datavizpro
+      POSTGRES_PASSWORD: datavizpro
+    ports:
+      - "5432:5432"
+    volumes:
+      - datavizpro_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datavizpro -d datavizpro"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: datavizpro-backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_NAME: datavizpro
+      DB_USER: datavizpro
+      DB_PASSWORD: datavizpro
+      JWT_SECRET_KEY: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      # spring.jpa.hibernate.ddl-auto: update # Uncomment for development, be careful in production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs # Mount logs directory for persistence
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: datavizpro-frontend
+    ports:
+      - "3000:80" # Map to Nginx default HTTP port
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api/v1 # This needs to be the backend URL from the browser's perspective
+    depends_on:
+      - backend
+
+volumes:
+  datavizpro_data:
+```
+
+#### `Dockerfile.backend`
+```dockerfile

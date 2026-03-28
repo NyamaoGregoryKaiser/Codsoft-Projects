@@ -1,0 +1,58 @@
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: never
+    include-exception: false
+
+spring:
+  application:
+    name: datavizpro-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:datavizpro}
+    username: ${DB_USER:datavizpro}
+    password: ${DB_PASSWORD:datavizpro}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # set to update in dev, validate in prod
+    show-sql: false # Set to true for debugging SQL
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc.lob.non_contextual_creation: true # For PostgreSQL driver compatibility
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Good for existing databases, but be careful in production
+  cache:
+    caffeine:
+      spec: expireAfterWrite=10m,maximumSize=1000
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970} # Base64 encoded, min 256 bits (32 bytes)
+      expiration: 3600000 # 1 hour in milliseconds (3600 * 1000)
+
+logging:
+  level:
+    com.datavizpro: INFO
+    org.springframework.web: INFO
+    org.hibernate: WARN
+    org.flywaydb: INFO
+
+# OpenAPI / Swagger Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json
+```
+
+#### `frontend/package.json`
+```json

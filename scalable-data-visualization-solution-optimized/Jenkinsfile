@@ -1,0 +1,116 @@
+pipeline {
+    agent {
+        docker {
+            image 'maven:3.9.6-amazoncorretto-17'
+            args '-v $HOME/.m2:/root/.m2' // Cache Maven dependencies
+        }
+    }
+    environment {
+        DOCKER_IMAGE_BACKEND = "datavizpro-backend:${env.BUILD_NUMBER}"
+        DOCKER_IMAGE_FRONTEND = "datavizpro-frontend:${env.BUILD_NUMBER}"
+        # Set these as Jenkins secrets/credentials
+        DB_HOST = "your_prod_db_host"
+        DB_PORT = "5432"
+        DB_NAME = "datavizpro_prod"
+        DB_USER = "prod_user"
+        DB_PASSWORD = credentials('prod_db_password')
+        JWT_SECRET_KEY = credentials('prod_jwt_secret_key')
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Backend Build & Test') {
+            agent {
+                docker {
+                    image 'maven:3.9.6-amazoncorretto-17'
+                    args '-v $HOME/.m2:/root/.m2'
+                }
+            }
+            steps {
+                dir('backend') {
+                    sh 'mvn clean install'
+                    sh 'mvn jacoco:report'
+                    jacoco publisher: [
+                        'minimumLineCoverage': '80',
+                        'minimumBranchCoverage': '80',
+                        'minimumClassCoverage': '80',
+                        'maximumLineCoverage': '0',
+                        'maximumBranchCoverage': '0',
+                        'maximumClassCoverage': '0'
+                    ]
+                    junit 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+        stage('Frontend Build & Test') {
+            agent {
+                docker {
+                    image 'node:20-alpine'
+                    args '-v $HOME/.npm:/root/.npm' // Cache NPM dependencies
+                }
+            }
+            steps {
+                dir('frontend') {
+                    sh 'npm install'
+                    sh 'npm run lint'
+                    sh 'npm test -- --coverage'
+                    junit 'coverage/jest-junit.xml' // Assuming Jest generates JUnit reports
+                }
+            }
+        }
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'dockerhub-credentials', toolName: 'docker') {
+                        sh "docker build -f Dockerfile.backend -t ${DOCKER_IMAGE_BACKEND} ./backend"
+                        sh "docker build -f Dockerfile.frontend -t ${DOCKER_IMAGE_FRONTEND} ./frontend"
+                        sh "docker tag ${DOCKER_IMAGE_BACKEND} myregistry/datavizpro-backend:latest" // Replace myregistry
+                        sh "docker tag ${DOCKER_IMAGE_FRONTEND} myregistry/datavizpro-frontend:latest"
+                    }
+                }
+            }
+        }
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'dockerhub-credentials', toolName: 'docker') {
+                        sh "docker push myregistry/datavizpro-backend:${env.BUILD_NUMBER}"
+                        sh "docker push myregistry/datavizpro-backend:latest"
+                        sh "docker push myregistry/datavizpro-frontend:${env.BUILD_NUMBER}"
+                        sh "docker push myregistry/datavizpro-frontend:latest"
+                    }
+                }
+            }
+        }
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                # This stage would involve deploying the Docker images to a Kubernetes cluster,
+                # an ECS cluster, or using Ansible/Terraform to update servers.
+                # Example for Kubernetes (using kubectl):
+                script {
+                    echo "Deploying to Kubernetes..."
+                    # sh "kubectl apply -f k8s/deployment.yaml"
+                    # sh "kubectl rollout status deployment/datavizpro-backend"
+                    # sh "kubectl rollout status deployment/datavizpro-frontend"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline finished successfully!'
+        }
+        failure {
+            echo 'Pipeline failed, please check logs.'
+        }
+    }
+}
