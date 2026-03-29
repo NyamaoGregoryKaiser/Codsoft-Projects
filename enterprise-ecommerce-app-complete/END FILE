@@ -1,0 +1,114 @@
+```markdown
+# ARCHITECTURE.md
+
+## 1. High-Level Architecture Diagram
+
+```mermaid
+graph TD
+    User -->|Accesses| Frontend
+    Admin -->|Accesses| Frontend
+    Frontend -->|HTTP(S) API Calls| Backend
+    Backend -->|Database Queries| PostgreSQL
+    Backend -->|Cache Operations| Redis
+    Backend -->|Logs to| LogCollector[Logging System (Winston)]
+    CI/CD[CI/CD Pipeline (GitHub Actions)] -->|Build & Test| Backend
+    CI/CD -->|Build & Test| Frontend
+    CI/CD -->|Deploys to| CloudPlatform(Cloud Platform / Docker)
+    CloudPlatform --> Frontend
+    CloudPlatform --> Backend
+    CloudPlatform --> PostgreSQL
+    CloudPlatform --> Redis
+    PerformanceTests[Performance Tests (K6)] --> Backend
+```
+
+## 2. Core Components and Technologies
+
+### 2.1. Frontend Application
+*   **Technology:** Next.js (React.js framework with TypeScript), Tailwind CSS, SWR, Axios.
+*   **Purpose:** Provides the user interface (UI) for customers and potentially administrators to interact with the e-commerce store.
+*   **Key Responsibilities:**
+    *   Renders dynamic web pages (SSR, SSG, CSR).
+    *   Handles user interactions and UI logic.
+    *   Communicates with the Backend API to fetch and send data.
+    *   Manages client-side routing.
+    *   Manages local state (e.g., shopping cart, authentication status).
+    *   Ensures a responsive and accessible user experience.
+
+### 2.2. Backend API
+*   **Technology:** Node.js, Express.js (with TypeScript), Prisma ORM, JWT, Bcryptjs, Winston, ioredis.
+*   **Purpose:** Serves as the central brain of the e-commerce system, exposing a RESTful API for the frontend and other potential clients.
+*   **Key Responsibilities:**
+    *   Manages all business logic (e.g., product catalog, inventory, order processing, user management).
+    *   Handles data persistence (CRUD operations) via the Database.
+    *   Implements user authentication and authorization.
+    *   Ensures data validation and integrity.
+    *   Provides secure API endpoints.
+    *   Handles caching for improved performance.
+    *   Logs application events and errors.
+
+### 2.3. Database
+*   **Technology:** PostgreSQL
+*   **Purpose:** Stores all persistent application data.
+*   **Key Responsibilities:**
+    *   Stores user profiles, product information, categories, orders, cart items, reviews, etc.
+    *   Ensures data consistency and transactional integrity.
+    *   Supports efficient querying for data retrieval.
+
+### 2.4. Caching Layer
+*   **Technology:** Redis
+*   **Purpose:** Improves application performance by storing frequently accessed data in-memory.
+*   **Key Responsibilities:**
+    *   Reduces database load for read-heavy operations (e.g., product listings, product details).
+    *   Speeds up API response times.
+    *   Can be used for session management (though JWT is stateless here) or rate limiting counters.
+
+### 2.5. Authentication & Authorization
+*   **Technology:** JWT (JSON Web Tokens), `bcryptjs` for password hashing.
+*   **Purpose:** Secures the backend API by verifying user identity and controlling access to resources.
+*   **Key Responsibilities:**
+    *   **Authentication:** Verifies user credentials during login and issues a JWT.
+    *   **Authorization:** Middleware checks the JWT in incoming requests to ensure the user has the necessary permissions (e.g., `ADMIN` role for product management, `USER` for placing orders).
+
+### 2.6. Logging System
+*   **Technology:** Winston (backend), Morgan (HTTP request logging).
+*   **Purpose:** Provides visibility into the application's runtime behavior, aiding in debugging and monitoring.
+*   **Key Responsibilities:**
+    *   Captures application events, warnings, and errors.
+    *   Writes logs to files (e.g., `combined.log`, `error.log`) and console.
+    *   Structured logging facilitates easier parsing and analysis.
+
+### 2.7. CI/CD Pipeline
+*   **Technology:** GitHub Actions
+*   **Purpose:** Automates the software delivery process, ensuring code quality and efficient deployments.
+*   **Key Responsibilities:**
+    *   Automated linting and formatting checks.
+    *   Automated building of both frontend and backend applications.
+    *   Execution of unit and integration tests.
+    *   (Optional) Building Docker images and deploying them to a chosen cloud platform.
+
+## 3. Data Flow Example: Fetching Products
+
+1.  **User Request (Frontend):** A user navigates to the `/products` page on the frontend.
+2.  **Frontend API Call:** The Next.js frontend, using `SWR` and `Axios`, makes an HTTP GET request to `http://localhost:5000/api/v1/products`.
+3.  **Backend Route & Controller:** The Express backend receives the request, routing it to `productRoutes.ts` and then to `productController.getAllProducts`.
+4.  **Backend Service:** `productController` delegates the business logic to `productService.listProducts`.
+5.  **Caching Check:** `productService` first checks Redis cache (`getCache`) for the requested product list (based on filters, pagination).
+    *   **Cache Hit:** If data is found in Redis, it's immediately returned to the client.
+    *   **Cache Miss:** If not found, `productService` proceeds to the database.
+6.  **Database Query:** `productService` uses Prisma ORM to query the PostgreSQL database (`prisma.product.findMany`, `prisma.product.count`) for products matching the criteria (filters, pagination, sorting).
+7.  **Data Persistence:** PostgreSQL executes the query and returns the results to Prisma.
+8.  **Backend Caching:** `productService` receives the data from the database, stores it in Redis cache (`setCache`) for future requests, and then returns it to the controller.
+9.  **Backend Response:** `productController` sends a JSON response containing the product data to the frontend.
+10. **Frontend Rendering:** The frontend receives the data and updates the UI to display the list of products.
+
+## 4. Scalability and Reliability Considerations
+
+*   **Stateless Backend:** The use of JWTs makes the backend largely stateless, allowing for easy horizontal scaling of API instances.
+*   **Load Balancing:** Multiple backend instances can be placed behind a load balancer to distribute traffic.
+*   **Database Scaling:** PostgreSQL can be scaled vertically (more powerful server) or horizontally (read replicas, sharding for very large scale).
+*   **Redis for Caching:** Reduces database load, allowing the DB to focus on writes and complex queries. Redis itself can be clustered for high availability.
+*   **Containerization (Docker):** Facilitates consistent environments, simplifies deployment, and supports orchestration tools like Kubernetes for managing large-scale deployments.
+*   **Monitoring & Logging:** Centralized logging and monitoring are crucial for identifying performance bottlenecks, errors, and security issues in a scalable environment.
+
+This architecture provides a solid foundation for a robust and scalable e-commerce application.
+```

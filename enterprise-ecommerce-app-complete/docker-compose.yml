@@ -1,0 +1,89 @@
+```yaml
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ecommerce_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d ecommerce_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development # Use development for local dev, production for deployment
+      PORT: 5000
+      API_PREFIX: /api/v1
+      DATABASE_URL: postgresql://user:password@db:5432/ecommerce_db?schema=public
+      JWT_SECRET: supersecretjwtkey
+      JWT_EXPIRES_IN: 1d
+      REDIS_URL: redis://redis:6379
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: adminpassword123
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app # Mount for hot-reloading during development
+      - /app/node_modules # Exclude node_modules from host mount
+    command: ["yarn", "dev"] # Use nodemon for dev, "node", "dist/server.js" for prod image
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development # Use development for local dev, production for deployment
+      NEXT_PUBLIC_API_BASE_URL: http://backend:5000/api/v1 # Access backend via service name
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./frontend:/app # Mount for hot-reloading during development
+      - /app/node_modules # Exclude node_modules from host mount
+      - /app/.next # Exclude .next from host mount
+    command: ["yarn", "dev"] # Use 'next dev' for dev, 'yarn start' for prod image
+
+
+volumes:
+  postgres_data:
+  redis_data:
+```

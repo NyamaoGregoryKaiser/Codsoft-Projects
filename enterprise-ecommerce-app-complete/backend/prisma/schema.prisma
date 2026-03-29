@@ -1,0 +1,166 @@
+```prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  OUT_OF_STOCK
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model User {
+  id               String    @id @default(uuid())
+  firstName        String
+  lastName         String
+  email            String    @unique
+  password         String
+  role             UserRole  @default(USER)
+  passwordChangedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  addresses        Address[]
+  carts            Cart[]
+  orders           Order[]
+  reviews          Review[]
+}
+
+model Address {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  street    String
+  city      String
+  state     String
+  zipCode   String
+  country   String
+  isDefault Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  ordersShipping Order[] @relation("ShippingAddress")
+  ordersBilling  Order[] @relation("BillingAddress")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id          String      @id @default(uuid())
+  name        String
+  description String
+  price       Decimal     @db.Decimal(10, 2)
+  stock       Int
+  imageUrl    String?
+  status      ProductStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id])
+
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reviews     Review[]
+}
+
+model Cart {
+  id        String    @id @default(uuid())
+  userId    String    @unique // One cart per user
+  user      User      @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String    @id @default(uuid())
+  cartId    String
+  cart      Cart      @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal   @db.Decimal(10, 2) // Price at the time of adding to cart
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([cartId, productId]) // Ensure a product is only once in a cart
+}
+
+model Order {
+  id                 String      @id @default(uuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id])
+  totalAmount        Decimal     @db.Decimal(10, 2)
+  status             OrderStatus @default(PENDING)
+  shippingAddressId  String
+  shippingAddress    Address     @relation("ShippingAddress", fields: [shippingAddressId], references: [id])
+  billingAddressId   String?     // Optional, if different from shipping
+  billingAddress     Address?    @relation("BillingAddress", fields: [billingAddressId], references: [id])
+  paymentMethod      String      // e.g., "Credit Card", "PayPal", "Stripe"
+  paymentIntentId    String?     // For tracking Stripe/PayPal payment intents
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  orderItems OrderItem[]
+}
+
+model OrderItem {
+  id        String    @id @default(uuid())
+  orderId   String
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal   @db.Decimal(10, 2) // Price at the time of order
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([orderId, productId]) // Ensure a product is only once in an order
+}
+
+model Review {
+  id        String    @id @default(uuid())
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  rating    Int       @default(1) @check("rating >= 1 AND rating <= 5") // Rating from 1 to 5
+  comment   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([productId, userId]) // User can only review a product once
+}
+```

@@ -1,0 +1,178 @@
+```yaml
+name: E-commerce CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  # Backend specific jobs
+  backend-checks:
+    name: Backend Lint, Build, Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: backend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint backend
+        run: yarn lint
+
+      - name: Build backend
+        run: yarn build
+
+      - name: Setup PostgreSQL for testing
+        uses: Harmonizer/postgresql-action@v1.0.0
+        with:
+          postgresql-version: '16'
+          postgresql-user: 'testuser'
+          postgresql-password: 'testpassword'
+          postgresql-database: 'ecommerce_test_db'
+
+      - name: Set up .env for backend tests
+        run: |
+          echo "DATABASE_URL=postgresql://testuser:testpassword@localhost:5432/ecommerce_test_db?schema=public" > .env
+          echo "JWT_SECRET=testjwtsecret" >> .env
+          echo "REDIS_URL=redis://localhost:6379" >> .env
+          echo "NODE_ENV=test" >> .env
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/ecommerce_test_db?schema=public
+
+      - name: Run Prisma Migrations
+        run: yarn prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/ecommerce_test_db?schema=public
+
+      - name: Run backend tests
+        run: yarn test --ci --json --outputFile=test-results.json --coverageReporters="lcov" --coverage
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5432/ecommerce_test_db?schema=public
+          JWT_SECRET: testjwtsecret # Same as above
+
+      - name: Upload backend test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/test-results.json
+
+      - name: Upload backend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: backend/coverage/lcov.info # Path to lcov coverage report
+
+  # Frontend specific jobs
+  frontend-checks:
+    name: Frontend Lint, Build, Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint frontend
+        run: yarn lint
+
+      - name: Build frontend
+        run: yarn build
+        env:
+          # Required for Next.js build
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:5000/api/v1 # Dummy URL for build step, actual env passed at runtime
+
+      - name: Run frontend tests
+        run: yarn test --ci --json --outputFile=test-results.json --coverageReporters="lcov" --coverage
+
+      - name: Upload frontend test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: frontend/test-results.json
+
+      - name: Upload frontend coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage/lcov.info # Path to lcov coverage report
+
+  # Optional: Deployment job (example, could be to Docker Hub, AWS ECR, Vercel etc.)
+  # deploy:
+  #   name: Deploy to Production
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   needs: [backend-checks, frontend-checks] # Ensures checks pass before deployment
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     # Add steps for Docker login, building images, pushing to registry, and deploying to your cloud provider
+  #     # Example for Docker Hub
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Build and push backend Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./backend
+  #         push: true
+  #         tags: yourdockerhubuser/ecommerce-backend:latest
+  #     - name: Build and push frontend Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./frontend
+  #         push: true
+  #         tags: yourdockerhubuser/ecommerce-frontend:latest
+  #     # Add steps for deploying to a server (e.g., using SSH and docker-compose pull/up)
+  #     - name: Deploy to EC2 via SSH
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_KEY }}
+  #         script: |
+  #           cd /path/to/your/project
+  #           docker-compose pull
+  #           docker-compose up -d --build
+  #           docker system prune -f
+```
