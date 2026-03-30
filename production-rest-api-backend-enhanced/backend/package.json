@@ -1,0 +1,60 @@
+```json
+{
+  "name": "epm-backend",
+  "version": "1.0.0",
+  "description": "Enterprise Project Manager Backend API",
+  "main": "dist/server.js",
+  "scripts": {
+    "start": "node dist/server.js",
+    "dev": "NODE_ENV=development ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "typeorm": "typeorm-ts-node-commonjs",
+    "migration:create": "npm run typeorm migration:create ./src/database/migrations/$npm_config_name",
+    "migration:run": "npm run typeorm -d ./src/database/index.ts migration:run",
+    "migration:revert": "npm run typeorm -d ./src/database/index.ts migration:revert",
+    "seed:run": "NODE_ENV=development ts-node ./src/database/seeds/run-seeds.ts",
+    "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --coverage",
+    "test:watch": "NODE_ENV=test jest --watch --detectOpenHandles"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cache": "^5.1.2",
+    "pg": "^8.11.5",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.20",
+    "winston": "^3.13.0",
+    "yup": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.12.7",
+    "@types/node-cache": "^4.2.6",
+    "@types/supertest": "^6.0.2",
+    "@types/uuid": "^9.0.8",
+    "@typescript-eslint/eslint-plugin": "^7.6.0",
+    "@typescript-eslint/parser": "^7.6.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5",
+    "uuid": "^9.0.1"
+  }
+}
+
+```
