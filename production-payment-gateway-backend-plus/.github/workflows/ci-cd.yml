@@ -1,0 +1,145 @@
+```yaml
+name: Node.js CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Prettier check
+        run: npx prettier --check 'src/**/*.ts' 'tests/**/*.ts'
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: testuser
+          DB_PASSWORD: testpassword
+          DB_NAME: test_payment_db
+          JWT_SECRET: testsecret
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          # Add other necessary test environment variables
+        run: npm test
+
+      - name: Generate test coverage report
+        run: npm test -- --coverage --coverageReporters=lcov --coverageDirectory=coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # Ensure you add this as a secret in GitHub
+
+  deploy-to-staging:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: Staging # Define a staging environment in GitHub for secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub (or other registry)
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t your-dockerhub-user/payment-system-backend:staging-${{ github.sha }} .
+          docker push your-dockerhub-user/payment-system-backend:staging-${{ github.sha }}
+
+      - name: Deploy to Staging Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /path/to/your/app
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker pull your-dockerhub-user/payment-system-backend:staging-${{ github.sha }}
+            docker-compose down
+            # Update image tag in docker-compose.yml or run specific commands
+            # Example: docker-compose up -d --no-deps backend
+            # For simplicity, pulling and restarting the entire compose setup (adjust for production)
+            docker-compose pull db redis
+            docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build --remove-orphans
+            docker image prune -f
+
+  deploy-to-production:
+    needs: deploy-to-staging # Requires staging to pass
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production # Define a production environment in GitHub for secrets
+    # Add manual approval step for production deployments
+    environment:
+      name: Production
+      url: https://your-production-app.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub (or other registry)
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image (prod tag)
+        run: |
+          docker build -t your-dockerhub-user/payment-system-backend:latest .
+          docker push your-dockerhub-user/payment-system-backend:latest
+
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PRODUCTION_HOST }}
+          username: ${{ secrets.PRODUCTION_USERNAME }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /path/to/your/app
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker pull your-dockerhub-user/payment-system-backend:latest
+            # Implement a zero-downtime deployment strategy here (e.g., blue-green, rolling updates)
+            # For simplicity, a direct restart:
+            docker-compose down
+            docker-compose pull db redis
+            docker-compose -f docker-compose.yml -f docker-compose.production.yml up -d --build --remove-orphans
+            docker image prune -f
+```

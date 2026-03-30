@@ -1,0 +1,83 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize database with uuid-ossp extension for uuid_generate_v4()
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${PORT}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      MOCK_PAYMENT_GATEWAY_API_URL: ${MOCK_PAYMENT_GATEWAY_API_URL}
+      MOCK_PAYMENT_GATEWAY_API_KEY: ${MOCK_PAYMENT_GATEWAY_API_KEY}
+      WEBHOOK_MAX_RETRIES: ${WEBHOOK_MAX_RETRIES}
+      WEBHOOK_RETRY_DELAY_MS: ${WEBHOOK_RETRY_DELAY_MS}
+    depends_on:
+      - db
+      - redis
+    # Run migrations and seed data on startup (for dev/CI, in production use separate migration step)
+    command: ["sh", "-c", "npm run db:migrate && npm run db:seed && npm start"]
+
+  # frontend: # Conceptual frontend service
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3001:3001"
+  #   environment:
+  #     NODE_ENV: development
+  #     REACT_APP_API_BASE_URL: http://localhost:3000/api/v1 # Or point to Nginx/load balancer
+  #   depends_on:
+  #     - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+
+# init-db.sh (to be placed in project root)
+# This script ensures the uuid-ossp extension is enabled for PostgreSQL.
+# In a production environment, this might be handled by a dedicated database setup script or manual step.
+#
+# === init-db.sh ===
+# #!/bin/bash
+# psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+#     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+# EOSQL
