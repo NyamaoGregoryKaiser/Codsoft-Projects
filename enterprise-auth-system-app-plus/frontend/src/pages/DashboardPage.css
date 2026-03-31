@@ -1,0 +1,100 @@
+.dashboard-container {
+  max-width: 800px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.dashboard-container h2 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 2.2rem;
+}
+
+.dashboard-container p {
+  color: #555;
+  line-height: 1.6;
+  margin-bottom: 15px;
+}
+
+.dashboard-actions {
+  margin-top: 40px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e2e6ea;
+}
+
+.dashboard-actions h3 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+}
+
+.dashboard-actions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 15px;
+}
+
+.dashboard-actions li {
+  margin: 0;
+}
+
+.dashboard-actions .action-link {
+  display: block;
+  padding: 12px 25px;
+  background-color: #007bff;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+.dashboard-actions .action-link:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+}
+
+.user-info-summary {
+  margin-top: 40px;
+  padding: 20px;
+  background-color: #e9ecef;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.user-info-summary h3 {
+  color: #333;
+  margin-bottom: 15px;
+  font-size: 1.4rem;
+}
+
+.user-info-summary p {
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+.user-info-summary p strong {
+  color: #212529;
+}
+
+.dashboard-footer {
+  margin-top: 30px;
+  font-size: 0.9rem;
+  color: #888;
+}
+```
+
+#### `frontend/src/pages/ProfilePage.css`
+```css

@@ -1,0 +1,93 @@
+.note-detail-container {
+  max-width: 800px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.note-detail-container h2 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 2.5rem;
+  text-align: center;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 15px;
+  word-wrap: break-word; /* Ensure long titles wrap */
+}
+
+.note-detail-meta {
+  font-size: 0.95rem;
+  color: #666;
+  text-align: center;
+  margin-bottom: 30px;
+  line-height: 1.6;
+}
+
+.note-detail-meta strong {
+  color: #333;
+}
+
+.note-detail-content {
+  padding: 20px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 30px;
+  line-height: 1.8;
+  color: #444;
+  font-size: 1.1rem;
+  white-space: pre-wrap; /* Preserves whitespace and line breaks */
+  word-wrap: break-word; /* Ensures long words wrap */
+}
+
+.note-detail-content p {
+  margin: 0;
+}
+
+.note-detail-actions {
+  text-align: center;
+}
+
+.note-detail-actions .action-button {
+  margin: 0 10px;
+  padding: 12px 25px;
+  border-radius: 5px;
+  text-decoration: none;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  border: none;
+  font-size: 1rem;
+}
+
+.note-detail-actions .action-button:first-child {
+  background-color: #ffc107; /* Edit color */
+  color: #333;
+}
+
+.note-detail-actions .action-button:first-child:hover {
+  background-color: #e0a800;
+}
+
+.note-detail-actions .secondary-button {
+  background-color: #6c757d; /* Back color */
+  color: white;
+}
+
+.note-detail-actions .secondary-button:hover {
+  background-color: #5a6268;
+}
+
+.note-detail-container .error-message {
+  margin-top: 20px;
+  text-align: center;
+}
+```
+
+---
+
+### 4. Configuration & Setup
+
+#### `docker-compose.yml`
+```yaml

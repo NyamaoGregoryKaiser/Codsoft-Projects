@@ -1,0 +1,78 @@
+.note-form-container {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.note-form-container h2 {
+  color: #333;
+  margin-bottom: 25px;
+  font-size: 2rem;
+}
+
+.note-form .form-group {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.note-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  color: #555;
+}
+
+.note-form input[type="text"],
+.note-form textarea {
+  width: calc(100% - 20px);
+  padding: 12px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.note-form textarea {
+  resize: vertical; /* Allow vertical resizing */
+  min-height: 120px; /* Minimum height for textarea */
+}
+
+.note-form input:focus,
+.note-form textarea:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.note-form .submit-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.note-form .submit-button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.note-form .submit-button:disabled {
+  background-color: #a0cffc;
+  cursor: not-allowed;
+}
+
+.note-form-container .error-message {
+  margin-top: 15px;
+}
+```
+
+#### `frontend/src/pages/NoteDetailPage.css`
+```css

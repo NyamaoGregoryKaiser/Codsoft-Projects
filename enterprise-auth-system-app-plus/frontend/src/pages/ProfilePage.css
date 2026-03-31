@@ -1,0 +1,44 @@
+.profile-container {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.profile-container h2 {
+  color: #333;
+  margin-bottom: 30px;
+  font-size: 2rem;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 10px;
+  display: inline-block;
+}
+
+.profile-details {
+  text-align: left;
+  margin-top: 20px;
+  line-height: 1.8;
+  font-size: 1.1rem;
+}
+
+.profile-details p {
+  margin-bottom: 10px;
+  color: #444;
+}
+
+.profile-details strong {
+  color: #222;
+  min-width: 120px; /* Aligns values */
+  display: inline-block;
+}
+
+.profile-container .error-message {
+  margin-top: 20px;
+}
+```
+
+#### `frontend/src/pages/AdminPage.css`
+```css

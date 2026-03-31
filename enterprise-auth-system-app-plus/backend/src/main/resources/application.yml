@@ -1,0 +1,72 @@
+spring:
+  application:
+    name: auth-system-backend
+  profiles:
+    active: dev
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: auth_user
+    password: auth_password
+  jpa:
+    hibernate:
+      ddl-auto: none # Managed by Flyway. 'update' or 'create-drop' is for development only.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+    show-sql: true # Set to false in production
+    open-in-view: false # Prevents the "N+1 problem" in web applications
+  flyway:
+    enabled: true
+    locations: classpath:db/migration # Directory for migration scripts
+  # Spring Cache configuration with Caffeine
+  cache:
+    cache-names: userCache
+    caffeine:
+      spec: maximumSize=1000,expireAfterAccess=10m # Matches CacheConfig settings
+
+server:
+  port: 8080
+
+# JWT Configuration
+app:
+  jwtSecret: A_VERY_STRONG_SECRET_KEY_FOR_JWT_AUTHENTICATION_SYSTEM_THAT_IS_AT_LEAST_256_BITS_LONG_AND_SHOULD_BE_KEPT_SECRET_IN_PRODUCTION
+  jwtExpirationInMs: 3600000 # 1 hour in milliseconds (3600 * 1000)
+
+# Logging configuration (refer to logback-spring.xml for detailed setup)
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    com.authsystem: DEBUG # Set to INFO for production
+    org.hibernate.SQL: DEBUG # Set to INFO for production
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE # Show bound parameters. Set to INFO for production
+
+# Springdoc OpenAPI (Swagger UI) Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    disable-swagger-default-url: true
+    display-request-duration: true
+    # For local development, set the server URL explicitly
+    # url: http://localhost:8080/v3/api-docs
+  default-produces-media-type: application/json # Default response media type
+  default-consumes-media-type: application/json # Default request media type
+
+# Cors configuration (also configured in SecurityConfig for more fine-grained control)
+# spring.web.cors.allowed-origins=http://localhost:3000
+# spring.web.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
+# spring.web.cors.allowed-headers=*
+# spring.web.cors.allow-credentials=true
+```
+*(Note: `app.jwtSecret` should be a complex, randomly generated string in a real production environment, ideally loaded from environment variables or a secret management system.)*
+
+#### `backend/src/main/resources/logback-spring.xml`
+```xml

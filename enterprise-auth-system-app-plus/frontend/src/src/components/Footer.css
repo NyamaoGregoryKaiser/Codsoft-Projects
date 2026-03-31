@@ -1,0 +1,17 @@
+.footer {
+  background-color: #282c34;
+  color: white;
+  text-align: center;
+  padding: 15px 20px;
+  margin-top: auto; /* Pushes the footer to the bottom */
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.footer p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+```
+
+#### `frontend/src/pages/AuthPage.css`
+```css

@@ -1,0 +1,101 @@
+.notes-list-container {
+  max-width: 900px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.notes-list-container h2 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 30px;
+  font-size: 2.2rem;
+}
+
+.create-note-button {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 30px auto;
+  padding: 12px 25px;
+  background-color: #28a745;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  font-weight: bold;
+  transition: background-color 0.3s ease;
+}
+
+.create-note-button:hover {
+  background-color: #218838;
+}
+
+.notes-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.note-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  margin-bottom: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.note-item:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.note-content {
+  flex-grow: 1;
+  margin-right: 20px;
+}
+
+.note-content h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.5rem;
+}
+
+.note-content h3 a {
+  color: #007bff;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.note-content h3 a:hover {
+  color: #0056b3;
+  text-decoration: underline;
+}
+
+.note-content p {
+  color: #555;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.note-meta {
+  font-size: 0.85rem;
+  color: #888;
+}
+
+.note-meta span {
+  margin-right: 15px;
+}
+
+.note-actions {
+  display: flex;
+  gap: 10px;
+}
+```
+
+#### `frontend/src/pages/NoteFormPage.css`
+```css

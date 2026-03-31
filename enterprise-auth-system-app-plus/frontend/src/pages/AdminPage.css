@@ -1,0 +1,73 @@
+.admin-container {
+  max-width: 1000px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.admin-container h2 {
+  text-align: center;
+  color: #333;
+  margin-bottom: 40px;
+  font-size: 2.5rem;
+}
+
+.admin-section {
+  margin-bottom: 40px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e2e6ea;
+}
+
+.admin-section h3 {
+  color: #007bff;
+  margin-bottom: 20px;
+  font-size: 1.8rem;
+  text-align: center;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.admin-table th,
+.admin-table td {
+  border: 1px solid #dee2e6;
+  padding: 12px 15px;
+  text-align: left;
+}
+
+.admin-table th {
+  background-color: #e9ecef;
+  color: #495057;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+
+.admin-table tbody tr:nth-child(even) {
+  background-color: #f6f8fa;
+}
+
+.admin-table tbody tr:hover {
+  background-color: #e2f2ff;
+}
+
+.admin-container .error-message {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.admin-section p {
+  text-align: center;
+  color: #6c757d;
+}
+```
+
+#### `frontend/src/pages/NotesListPage.css`
+```css
