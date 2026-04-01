@@ -1,0 +1,7 @@
+**Crucially, update the following variables for production:**
+    *   `JWT_SECRET`: Generate a strong, unique secret. Example: `openssl rand -hex 32`
+    *   `DB_PASSWORD`: Use a strong, unique password for the PostgreSQL user.
+    *   `LOG_LEVEL`: Set to `info` or `warn` for production to avoid excessive debug logging.
+    *   `REACT_APP_API_BASE_URL`: This should point to your public API gateway or domain if your frontend is not proxied by Nginx in the same container. For the `docker-compose.yml` provided, Nginx handles proxying to `/api`, so the default `http://localhost:8080` is correct for the frontend's internal build as Nginx intercepts it.
+
+    Example `.env` (ensure `DB_HOST` matches the service name in `docker-compose.yml`, which is `db` by default):

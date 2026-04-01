@@ -1,0 +1,3 @@
+All services (`db`, `backend`, `frontend`) should be in the `running` state. The `db` service should show `(healthy)` after a short period.
+
+2.  **View logs:**

@@ -1,0 +1,17 @@
+#ifndef USER_SERVICE_HPP
+#define USER_SERVICE_HPP
+
+#include "../database/models/User.hpp"
+#include <vector>
+#include <optional>
+#include <string>
+
+class UserService {
+public:
+    static std::optional<User> getUserById(int id);
+    static std::vector<User> getAllUsers();
+    static void updateUser(int id, const std::string& email, const std::string& role);
+    static void deleteUser(int id);
+};
+
+#endif // USER_SERVICE_HPP
