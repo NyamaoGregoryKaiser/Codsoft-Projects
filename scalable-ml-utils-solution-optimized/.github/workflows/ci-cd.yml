@@ -1,0 +1,122 @@
+```yaml
+name: CI/CD Pipeline for ML Utilities System
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install "pytest-cov" "httpx" "pytest-asyncio" # Ensure test deps are installed
+
+    - name: Run Linters (Flake8)
+      run: |
+        pip install flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Run Backend Tests
+      env:
+        # Use a test database URL, e.g., an in-memory SQLite or a dedicated test Postgres
+        DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+        SECRET_KEY: "test_secret_key"
+        REDIS_URL: "redis://localhost:6379/0" # For CI, Redis might not be available, tests should mock it or skip
+        DATA_STORAGE_PATH: "/tmp/test_storage" # Temporary path for file storage tests
+      run: |
+        pytest --cov=app --cov-report=xml --cov-report=term-missing tests/
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./backend/coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }} # Set this in GitHub secrets
+        # Fail build if coverage is below threshold (optional)
+        fail_ci_if_error: true
+        verbose: true
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run Linters (ESLint)
+      run: npm run lint # Assuming you have an ESLint setup in package.json scripts
+
+    - name: Run Frontend Tests
+      run: npm test -- --coverage --watchAll=false # Run Jest tests with coverage
+
+  # Placeholder for Deployment (CD)
+  # This would typically involve building Docker images, pushing to a registry,
+  # and deploying to a cloud provider (e.g., Kubernetes, EC2, Azure Container Apps).
+  # This example is highly simplified.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci] # Ensures CI passes before deployment
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub (if using Docker Hub)
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push backend Docker image
+      run: |
+        docker build -t your-dockerhub-username/ml-utilities-backend:latest ./backend
+        docker push your-dockerhub-username/ml-utilities-backend:latest
+
+    - name: Build and push frontend Docker image
+      run: |
+        docker build -t your-dockerhub-username/ml-utilities-frontend:latest ./frontend
+        docker push your-dockerhub-username/ml-utilities-frontend:latest
+
+    - name: Deploy to Server (e.g., SSH and run docker compose pull/up)
+      # This step would be highly dependent on your deployment strategy.
+      # For demonstration, a basic SSH connection to a VM might be considered.
+      # For a real enterprise system, this would be a sophisticated cloud deployment.
+      run: |
+        echo "Simulating deployment to production environment..."
+        # Example: ssh user@your_server "cd /path/to/app && docker compose pull && docker compose up -d"
+        echo "Deployment script would go here."
+      env:
+        # Example SSH key setup
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+```

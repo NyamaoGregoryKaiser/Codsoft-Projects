@@ -1,0 +1,89 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ml_utilities_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d ml_utilities_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ml_utilities_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      # Ensure these match .env, or override if needed for specific environments
+      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/ml_utilities_db
+      REDIS_URL: redis://redis:6379/0
+      # Adjust CORS origins if deploying to a different domain
+      BACKEND_CORS_ORIGINS: http://localhost:3000,http://localhost,http://127.0.0.1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data/storage:/app/data/storage # Persist uploaded files and models
+      - ./backend/logs:/app/logs # Persist logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Using entrypoint.sh to run migrations and seed data
+    entrypoint: /app/entrypoint.sh
+    # Replaced command with gunicorn for production deployment
+    # command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ml_utilities_frontend
+    environment:
+      # Pass backend API URL to React app
+      REACT_APP_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_started
+    # React dev server will watch for changes locally. For production,
+    # you'd serve the build folder with Nginx/similar.
+    command: ["npm", "start"]
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  # Host-mounted volumes for file storage and logs in backend
+  # backend_data_storage: # Not needed with host mount
+  # backend_logs: # Not needed with host mount
+
+```
