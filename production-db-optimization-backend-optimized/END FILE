@@ -1,0 +1,13 @@
+---
+
+### **6. Additional Features** (Already integrated or described in code/docs)
+
+*   **Authentication/Authorization**: Implemented using JWT in `AuthService` and `AuthMiddleware`.
+*   **Logging and Monitoring**: `spdlog` integrated (`Logger.h/cpp`, `LoggingMiddleware`). Logging levels configurable via `LOG_LEVEL` in `.env`.
+*   **Error Handling Middleware**: `ErrorMiddleware.h/cpp` provides global exception handling and standardized JSON error responses. Custom error types are defined in `common/Error.h`.
+*   **Caching Layer**: `utils/Cache.h/cpp` implements a generic in-memory cache used by `CategoryService` and `ManufacturerService`.
+*   **Rate Limiting**: `RateLimitMiddleware.h/cpp` provides a basic IP-based rate limiter, configurable via `.env`.
+
+---
+
+This comprehensive setup provides a robust and production-ready foundation for the CppDBOptimizer project, demonstrating a full-stack C++ web application with a strong emphasis on database optimization and modern software engineering practices.

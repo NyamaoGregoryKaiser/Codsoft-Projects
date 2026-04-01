@@ -1,0 +1,56 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql # Initial schema
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql     # Seed data
+      # Note: For migrations, a more robust solution would be a separate migration service/script
+      # or using a tool like Flyway/Liquibase. For this example, initial schema + seed are enough.
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./backend/.env.example # Use .env for production; .env.example for defaults
+    ports:
+      - "9080:9080"
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is ready before starting backend
+    # Mount source code for development (optional, for faster rebuilds)
+    # volumes:
+    #   - ./backend:/app/backend
+    #   - ./backend/build:/app/backend/build # Persist build artifacts
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf # Custom Nginx config
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+
+```
