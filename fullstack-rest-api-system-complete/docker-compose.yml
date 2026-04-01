@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: horizon-pms-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-horizon_pms_db}
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - pms-db-data:/var/lib/postgresql/data
+      # Initialize database with uuid-ossp extension
+      - ./backend/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: horizon-pms-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - pms-redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+      target: development # Use 'production' for production builds
+    container_name: horizon-pms-backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Prevents host node_modules from overriding container's
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npm install && npm run db:migrate && npm run db:seed && npm run dev" # For dev: build, migrate, seed, then run dev server
+    # For production: command: sh -c "npm run db:migrate && npm start"
+
+  # Frontend Web Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      target: development # Use 'production' for production builds
+    container_name: horizon-pms-frontend
+    restart: always
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "80:3000" # Map host port 80 to container port 3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_started
+    command: npm start
+    # For production: command: npm run build && serve -s build -p 3000 # requires 'serve' package
+
+volumes:
+  pms-db-data:
+  pms-redis-data:
+```
+
+#### `backend/Dockerfile.backend`
+```dockerfile
