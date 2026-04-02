@@ -1,0 +1,81 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build_and_test_backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          pip install flake8
+          flake8 . --exclude=migrations,venv,.git,__pycache__,settings # Exclude specific directories
+
+      - name: Run backend tests with coverage
+        run: |
+          pip install pytest pytest-django pytest-cov
+          # Set up a test database (SQLite for CI simplicity)
+          export DATABASE_URL="sqlite:///./test_db.sqlite3"
+          python manage.py migrate --settings=config.settings.dev
+          pytest --cov=core --cov-report=xml --no-header --quiet
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: backend
+          name: codecov-backend
+
+  build_and_test_frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run frontend tests (if any, e.g., Jest)
+        run: |
+          cd frontend
+          # npm test -- --coverage --watchAll=false # Example for Jest tests
+          echo "No specific frontend tests implemented in this example for brevity."
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+```
+
+## 4. Testing & Quality
+
+Tests are implemented using `pytest` and `pytest-django`.
+
+### `core/tests/test_models.py`
+```python
