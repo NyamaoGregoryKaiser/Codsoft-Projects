@@ -1,0 +1,142 @@
+```yaml
+name: AuthSystem CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-build-and-test:
+    name: Backend Build and Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          for i in `seq 1 10`; do
+            pg_isready -h localhost -p 5432 -U testuser -d test_db && break
+            echo "Waiting for PostgreSQL..."
+            sleep 5
+          done
+
+      - name: Wait for Redis to be ready
+        run: |
+          for i in `seq 1 10`; do
+            redis-cli -h localhost -p 6379 ping && break
+            echo "Waiting for Redis..."
+            sleep 5
+          done
+        
+      - name: Build and run backend tests
+        working-directory: ./backend
+        run: mvn clean verify
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/test_db
+          SPRING_DATASOURCE_USERNAME: testuser
+          SPRING_DATASOURCE_PASSWORD: testpassword
+          SPRING_REDIS_HOST: localhost
+          SPRING_REDIS_PORT: 6379
+          JWT_SECRET: a_very_long_and_secure_secret_for_tests_that_is_at_least_256_bits_long
+          # Disable Flyway for tests as Testcontainers will manage schema
+          SPRING_FLYWAY_ENABLED: false
+
+      - name: Upload JaCoCo test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/target/site/jacoco/jacoco.xml
+
+#   frontend-build-and-test:
+#     name: Frontend Build and Test
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#       - name: Set up Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
+#           cache: 'yarn'
+#       - name: Install dependencies
+#         working-directory: ./frontend
+#         run: yarn install --frozen-lockfile
+#       - name: Run frontend tests
+#         working-directory: ./frontend
+#         run: yarn test --watchAll=false
+#       - name: Build frontend
+#         working-directory: ./frontend
+#         run: yarn build
+#       - name: Upload build artifact
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: frontend-build
+#           path: frontend/build
+
+#   deploy:
+#     name: Deploy to Staging (Example)
+#     needs: [backend-build-and-test, frontend-build-and-test] # Uncomment frontend need when enabled
+#     if: github.ref == 'refs/heads/main' # Only deploy main branch
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+#       - name: Download backend artifact
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: backend-jar
+#           path: ./backend-artifact
+#       - name: Download frontend artifact
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: frontend-build
+#           path: ./frontend-artifact
+#       - name: Deploy to server (e.g., using SSH/scp or specific cloud provider action)
+#         run: |
+#           echo "Simulating deployment to staging..."
+#           # Example: ssh user@your-server "sudo systemctl stop myapp"
+#           # scp ./backend-artifact/authsystem.jar user@your-server:/opt/myapp/authsystem.jar
+#           # scp -r ./frontend-artifact/build user@your-server:/var/www/html
+#           # ssh user@your-server "sudo systemctl start myapp"
+#           echo "Deployment complete!"
+```

@@ -1,0 +1,56 @@
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+    <springProperty scope="context" name="springAppName" source="spring.application.name"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${logging.file.name}</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/${springAppName}-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>${logging.file.max-size}</maxFileSize>
+            <maxHistory>${logging.file.max-history}</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- GELF Appender for centralized logging (e.g., Graylog) -->
+    <appender name="GELF" class="biz.paluch.logging.gelf.logback.GelfLogbackAppender">
+        <host>udp:localhost</host> <!-- Or your GELF input host -->
+        <port>12201</port>
+        <version>1.1</version>
+        <facility>${springAppName}</facility>
+        <extractStackTrace>true</extractStackTrace>
+        <filterStackTrace>true</filterStackTrace>
+        <mdcProfiling>true</mdcProfiling>
+        <timestampPattern>yyyy-MM-dd HH:mm:ss,SSS</timestampPattern>
+        <additionalFields>application_name=${springAppName},host=${HOSTNAME}</additionalFields>
+        <fieldTypes>application_name=String,host=String</fieldTypes>
+        <staticFields>_environment=development,_datacenter=local</staticFields>
+    </appender>
+
+    <root level="${logging.level.root}">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <!-- Uncomment to enable GELF logging -->
+        <!-- <appender-ref ref="GELF"/> -->
+    </root>
+
+    <logger name="com.example.authsystem" level="${logging.level.com.example.authsystem}" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <!-- <appender-ref ref="GELF"/> -->
+    </logger>
+
+</configuration>
+```

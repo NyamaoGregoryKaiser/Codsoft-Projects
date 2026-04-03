@@ -1,0 +1,71 @@
+```yaml
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: authsystem
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: user
+    password: password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'update' or 'create' for dev, 'validate' for prod with Flyway
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Useful for existing databases, but generally false for prod
+
+  redis:
+    host: localhost
+    port: 6379
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 60000 # 60 seconds
+      cache-null-values: false
+
+# JWT Configuration
+jwt:
+  secret: A_SUPER_SECRET_KEY_THAT_IS_AT_LEAST_256_BITS_LONG_AND_SHOULD_BE_EXTERNALIZED_IN_PROD
+  expiration: 86400000 # 24 hours in milliseconds
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.example.authsystem: DEBUG # Detailed logging for our application
+    org.springframework: INFO
+    org.hibernate: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/authsystem.log
+    max-size: 10MB
+    max-history: 7 # Keep 7 days of logs
+
+# Rate Limiting Configuration
+rate-limiting:
+  enabled: true
+  default-limit: 100 # requests
+  default-duration-seconds: 60 # per 60 seconds
+
+```

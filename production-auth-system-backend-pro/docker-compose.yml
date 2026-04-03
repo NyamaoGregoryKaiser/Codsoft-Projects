@@ -1,0 +1,71 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: authsystem_db
+    environment:
+      POSTGRES_DB: auth_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: authsystem_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: authsystem_backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET:-A_SUPER_SECRET_KEY_THAT_IS_AT_LEAST_256_BITS_LONG_AND_SHOULD_BE_EXTERNALIZED_IN_PROD}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: authsystem_frontend
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx default)
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:3000/api/v1 # This is for local dev without Nginx
+    depends_on:
+      - backend
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
+```
