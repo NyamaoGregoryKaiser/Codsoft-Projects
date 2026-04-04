@@ -1,0 +1,83 @@
+spring:
+  application:
+    name: secure-project-management
+  datasource:
+    url: jdbc:h2:mem:projectdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: password
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Set to validate after initial schema, or create for development
+    properties:
+      hibernate.jdbc.batch_size: 20
+      hibernate.order_inserts: true
+      hibernate.order_updates: true
+      hibernate.generate_statistics: true
+    show-sql: false # Set to true for debugging SQL queries
+    open-in-view: false # Avoid N+1 issues and keep transactions short
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+    enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080 # Placeholder, not used directly for our JWT
+  thymeleaf:
+    cache: false # Disable cache for development
+    prefix: classpath:/templates/
+    suffix: .html
+  messages:
+    basename: messages
+  cache:
+    cache-names: projects, tasks, users
+    caffeine:
+      spec: maximumSize=500,expireAfterAccess=300s # Example cache configuration
+
+server:
+  port: 8080
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        secure: true # Recommended for production with HTTPS
+        max-age: 3600 # 1 hour
+
+jwt:
+  secret: ThisIsAVeryLongAndSecureSecretKeyForJWTAuthenticationWhichShouldBeAtLeast256BitsLong
+  expiration: 3600000 # 1 hour in milliseconds
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus # Expose common actuator endpoints
+  endpoint:
+    health:
+      show-details: always
+
+# Custom rate limiting configuration
+app:
+  rate-limit:
+    enabled: true
+    capacity: 100 # Max requests per client IP
+    refill-tokens: 50 # Tokens refilled per second
+    refill-period-seconds: 1
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    org.hibernate: INFO
+    com.example.secureprojectmanagement: DEBUG # Set to DEBUG for detailed app logs
+  file:
+    name: logs/secure-project-management.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] %-40.40c{1.} : %m%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] %-40.40c{1.} : %m%n"
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 7
+```

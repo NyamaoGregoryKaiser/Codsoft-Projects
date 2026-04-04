@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="002-1" author="dev">
+        <comment>Seed initial roles and admin user</comment>
+
+        <!-- Insert Roles -->
+        <insert tableName="roles">
+            <column name="name" value="ROLE_ADMIN"/>
+        </insert>
+        <insert tableName="roles">
+            <column name="name" value="ROLE_USER"/>
+        </insert>
+
+        <!-- Insert Admin User (password: adminpass) -->
+        <insert tableName="users">
+            <column name="username" value="admin"/>
+            <column name="password" value="$2a$10$wE38015q9t2j0uN6a1wS1.gN.1n8gC8Q/wF5P/vX5oE2q1vY0d7pS"/> <!-- BCrypt for 'adminpass' -->
+            <column name="email" value="admin@example.com"/>
+            <column name="enabled" valueBoolean="true"/>
+            <column name="account_non_expired" valueBoolean="true"/>
+            <column name="account_non_locked" valueBoolean="true"/>
+            <column name="credentials_non_expired" valueBoolean="true"/>
+        </insert>
+
+        <!-- Insert Regular User (password: userpass) -->
+        <insert tableName="users">
+            <column name="username" value="user"/>
+            <column name="password" value="$2a$10$B0/H5KqB8Y3X4oP9Q1d.G.jN.1n8gC8Q/wF5P/vX5oE2q1vY0d7pS"/> <!-- BCrypt for 'userpass' -->
+            <column name="email" value="user@example.com"/>
+            <column name="enabled" valueBoolean="true"/>
+            <column name="account_non_expired" valueBoolean="true"/>
+            <column name="account_non_locked" valueBoolean="true"/>
+            <column name="credentials_non_expired" valueBoolean="true"/>
+        </insert>
+
+        <!-- Assign Roles to Users -->
+        <insert tableName="user_roles">
+            <column name="user_id" valueComputed="(SELECT id FROM users WHERE username = 'admin')"/>
+            <column name="role_id" valueComputed="(SELECT id FROM roles WHERE name = 'ROLE_ADMIN')"/>
+        </insert>
+        <insert tableName="user_roles">
+            <column name="user_id" valueComputed="(SELECT id FROM users WHERE username = 'user')"/>
+            <column name="role_id" valueComputed="(SELECT id FROM roles WHERE name = 'ROLE_USER')"/>
+        </insert>
+
+    </changeSet>
+
+</databaseChangeLog>

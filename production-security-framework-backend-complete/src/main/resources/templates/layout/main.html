@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title ?: 'Project Management'}"></title>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <!-- Optional: Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1 class="logo"><a th:href="@{/}">Secure PM</a></h1>
+            <nav>
+                <ul>
+                    <li sec:authorize="isAuthenticated()"><a th:href="@{/projects}">My Projects</a></li>
+                    <li sec:authorize="hasRole('ADMIN')"><a th:href="@{/admin/dashboard}">Admin Dashboard</a></li>
+                    <li sec:authorize="!isAuthenticated()"><a th:href="@{/login}">Login</a></li>
+                    <li sec:authorize="!isAuthenticated()"><a th:href="@{/register}">Register</a></li>
+                    <li sec:authorize="isAuthenticated()">
+                        <form th:action="@{/logout}" method="post" style="display: inline;">
+                            <button type="submit" class="button-link">Logout (<span sec:authentication="name"></span>)</button>
+                        </form>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container content">
+        <div th:if="${message}" class="alert alert-success" th:text="${message}"></div>
+        <div th:if="${errorMessage}" class="alert alert-danger" th:text="${errorMessage}"></div>
+        <div th:replace="${content}"></div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; <span th:text="${#dates.format(#dates.createNow(), 'yyyy')}"></span> Secure Project Management System. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>

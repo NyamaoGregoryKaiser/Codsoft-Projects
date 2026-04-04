@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title th:text="${taskDTO.id == null ? 'Create Task' : 'Edit Task'}"></title>
+</head>
+<body>
+    <div layout:fragment="content">
+        <div class="form-card">
+            <h2 th:text="${taskDTO.id == null ? 'Create New Task' : 'Edit Task'}"></h2>
+            <form th:action="${taskDTO.id == null ? @{/projects/{projectId}/tasks(projectId=${projectId})} : @{/projects/{projectId}/tasks/{taskId}(projectId=${projectId}, taskId=${taskDTO.id})}}"
+                  th:object="${taskDTO}" method="post">
+                <input type="hidden" th:field="*{id}" th:if="${taskDTO.id != null}" />
+
+                <div class="form-group">
+                    <label for="title">Task Title:</label>
+                    <input type="text" id="title" th:field="*{title}" required class="form-control">
+                    <div class="text-danger" th:if="${#fields.hasErrors('title')}" th:errors="*{title}"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <textarea id="description" th:field="*{description}" rows="5" class="form-control"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status" th:field="*{status}" class="form-control">
+                        <option th:each="status : ${taskStatuses}" th:value="${status}" th:text="${status}"></option>
+                    </select>
+                    <div class="text-danger" th:if="${#fields.hasErrors('status')}" th:errors="*{status}"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="priority">Priority:</label>
+                    <select id="priority" th:field="*{priority}" class="form-control">
+                        <option th:each="priority : ${taskPriorities}" th:value="${priority}" th:text="${priority}"></option>
+                    </select>
+                    <div class="text-danger" th:if="${#fields.hasErrors('priority')}" th:errors="*{priority}"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="dueDate">Due Date:</label>
+                    <input type="date" id="dueDate" th:field="*{dueDate}" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="assignedToId">Assigned To:</label>
+                    <select id="assignedToId" th:field="*{assignedToId}" class="form-control">
+                        <option value="">-- Select User --</option>
+                        <option th:each="user : ${users}" th:value="${user.id}" th:text="${user.username}"></option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary" th:text="${taskDTO.id == null ? 'Create Task' : 'Update Task'}"></button>
+                <a th:href="@{/projects/{projectId}/tasks(projectId=${projectId})}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

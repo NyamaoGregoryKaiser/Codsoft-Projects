@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/main}">
+<head>
+    <title th:text="${projectDTO.id == null ? 'Create Project' : 'Edit Project'}"></title>
+</head>
+<body>
+    <div layout:fragment="content">
+        <div class="form-card">
+            <h2 th:text="${projectDTO.id == null ? 'Create New Project' : 'Edit Project'}"></h2>
+            <form th:action="${projectDTO.id == null ? @{/projects} : @{/projects/{id}(id=${projectDTO.id})}}"
+                  th:object="${projectDTO}" method="post">
+                <input type="hidden" th:field="*{id}" th:if="${projectDTO.id != null}" />
+
+                <div class="form-group">
+                    <label for="name">Project Name:</label>
+                    <input type="text" id="name" th:field="*{name}" required class="form-control">
+                    <div class="text-danger" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <textarea id="description" th:field="*{description}" rows="5" class="form-control"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="startDate">Start Date:</label>
+                    <input type="date" id="startDate" th:field="*{startDate}" class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="endDate">End Date:</label>
+                    <input type="date" id="endDate" th:field="*{endDate}" class="form-control">
+                </div>
+
+                <button type="submit" class="btn btn-primary" th:text="${projectDTO.id == null ? 'Create Project' : 'Update Project'}"></button>
+                <a th:href="@{/projects}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
