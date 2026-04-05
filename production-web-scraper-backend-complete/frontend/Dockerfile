@@ -1,55 +1,30 @@
-FROM node:20-alpine AS build
+# Stage 1: Build the React application
+FROM node:18-alpine as build-stage
 
 WORKDIR /app
 
-COPY package.json .
-COPY package-lock.json .
-RUN npm ci
+COPY package*.json ./
+RUN npm install
 
 COPY . .
 
-ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
-
 RUN npm run build
 
-FROM nginx:stable-alpine AS production
+# Stage 2: Serve the application with Nginx (or just run directly with Express/Serve)
+# For simplicity, we'll use a smaller Alpine Node image to serve directly with 'serve'
+# or in a production setting, you'd usually use Nginx or an optimized server.
+FROM node:18-alpine as production-stage
 
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /app
 
-# Optional: Add Nginx configuration for SPA routing (e.g., if you have client-side routes)
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy the built React app from the build stage
+COPY --from=build-stage /app/build ./build
 
-EXPOSE 80
+# Install a static file server if not using Nginx
+RUN npm install -g serve
 
-CMD ["nginx", "-g", "daemon off;"]
-```
+# Expose the port (e.g., 3000 by default for 'serve')
+EXPOSE 3000
 
-**Note**: You'll need an `nginx.conf` file in your `frontend/` directory for production. Here's a basic one for React SPAs:
-```nginx
-# frontend/nginx.conf
-server {
-    listen 80;
-    server_name localhost; # Or your domain name
-
-    root /usr/share/nginx/html;
-    index index.html index.htm;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Optional: Serve API requests through Nginx to backend service
-    # If your frontend and backend are on the same domain/subdomain,
-    # this can simplify CORS handling.
-    # For this project, we assume VITE_API_BASE_URL points directly to backend.
-    # If you want to proxy:
-    # location /api/v1/ {
-    #     proxy_pass http://backend:8000/api/v1/;
-    #     proxy_set_header Host $host;
-    #     proxy_set_header X-Real-IP $remote_addr;
-    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    # }
-}
-```
----
+# Command to serve the application
+CMD ["serve", "-s", "build", "-l", "3000"]

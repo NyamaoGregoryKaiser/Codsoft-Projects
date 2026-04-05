@@ -1,0 +1,159 @@
+name: Node.js CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    env:
+      DB_NAME: test_db
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      DB_HOST: localhost
+      DB_PORT: 5432
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      PUPPETEER_HEADLESS: new # Enable headless mode for CI environment
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ${{ env.DB_NAME }}
+          POSTGRES_USER: ${{ env.DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        env:
+          REDIS_PASSWORD: '' # No password for local Redis in CI
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli --raw INFO"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Wait for PostgreSQL and Redis to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in `seq 1 10`; do
+            pg_isready -h localhost -p 5432 -U ${DB_USER} -d ${DB_NAME} && break
+            echo "PostgreSQL not ready yet. Retrying in 5 seconds..."
+            sleep 5
+          done
+          echo "PostgreSQL is ready."
+
+          echo "Waiting for Redis..."
+          for i in `seq 1 10`; do
+            redis-cli -h localhost -p 6379 ping && break
+            echo "Redis not ready yet. Retrying in 5 seconds..."
+            sleep 5
+          done
+          echo "Redis is ready."
+
+      - name: Run migrations and seeders for test database
+        run: |
+          npx sequelize-cli db:create --env test
+          npx sequelize-cli db:migrate --env test
+          npx sequelize-cli db:seed:all --env test
+
+      - name: Run backend tests
+        run: npm test
+
+      - name: Lint backend code (Optional, add a linter like ESLint)
+        run: |
+          echo "Running ESLint for backend..."
+          # npm install eslint --save-dev
+          # npx eslint .
+          echo "ESLint skipped for brevity, add ESLint config and command here."
+
+  frontend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false # For CI, disable watch mode
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Lint frontend code (Optional)
+        run: |
+          echo "Running ESLint for frontend..."
+          # npx eslint .
+          echo "ESLint skipped for brevity, add ESLint config and command here."
+
+  # Example deployment job (requires external setup like AWS, Vercel, etc.)
+  # deploy:
+  #   needs: [backend-ci, frontend-ci]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Deploy to Production
+  #       run: echo "Deploying to production..."
+  #       # Add deployment steps here, e.g., using AWS CLI, Docker Push, Vercel CLI, etc.
+  #       # For example, build Docker images and push to Docker Hub, then update K8s/ECS.
+  #     - name: Build and push Docker images (example for backend)
+  #       uses: docker/build-push-action@v3
+  #       with:
+  #         context: ./backend
+  #         file: ./backend/Dockerfile
+  #         push: true
+  #         tags: yourdockerhubuser/your-repo-backend:latest
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Build and push Docker images (example for frontend)
+  #       uses: docker/build-push-action@v3
+  #       with:
+  #         context: ./frontend
+  #         file: ./frontend/Dockerfile
+  #         push: true
+  #         tags: yourdockerhubuser/your-repo-frontend:latest
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Update Kubernetes/ECS/VM
+  #       run: |
+  #         echo "Update your deployment target (e.g., kubectl apply -f k8s-manifests.yaml)"
