@@ -1,0 +1,119 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Cache Python dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        pip install flake8 black # for linting and formatting
+
+    - name: Lint with Flake8
+      run: |
+        cd backend
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Format with Black (check only)
+      run: |
+        cd backend
+        black . --check
+
+    - name: Set up PostgreSQL for tests
+      run: |
+        docker run --name test-db -e POSTGRES_DB=test_scraper_db -e POSTGRES_USER=test_user -e POSTGRES_PASSWORD=test_password -p 5433:5432 -d postgres:16-alpine
+        sleep 10 # Give time for DB to start
+
+    - name: Set up Redis for tests
+      run: |
+        docker run --name test-redis -p 6380:6379 -d redis:7-alpine
+        sleep 5 # Give time for Redis to start
+
+    - name: Run backend tests
+      env:
+        DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5433/test_scraper_db
+        REDIS_URL: redis://localhost:6380/0
+        CELERY_BROKER_URL: redis://localhost:6380/0
+        CELERY_RESULT_BACKEND: redis://localhost:6380/1
+        SECRET_KEY: test_secret_key_for_ci
+        ADMIN_EMAIL: ci_admin@example.com
+        ADMIN_PASSWORD: ci_admin_password
+        DEBUG: "True"
+      run: |
+        cd backend
+        pytest --cov=app --cov-report=xml --cov-report=term-missing tests/
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./backend/coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }} # Optional, if you use Codecov
+
+    - name: Build Docker image (Backend)
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+      run: |
+        docker build -t your_docker_username/web-scraper-backend:${{ github.sha }} -t your_docker_username/web-scraper-backend:latest ./backend
+        # For actual push, you'd add: docker login && docker push ...
+
+  frontend-lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'yarn'
+        cache-dependency-path: 'frontend/yarn.lock'
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        yarn install
+
+    - name: Run frontend tests
+      run: |
+        cd frontend
+        yarn test --watchAll=false # Assuming you have React tests (e.g. using Jest)
+
+    - name: Lint with ESLint
+      run: |
+        cd frontend
+        yarn lint # Assuming 'lint' script configured in package.json
+
+    - name: Build Docker image (Frontend)
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+      run: |
+        docker build -t your_docker_username/web-scraper-frontend:${{ github.sha }} -t your_docker_username/web-scraper-frontend:latest --build-arg REACT_APP_API_BASE_URL=http://your-production-api-url.com/api/v1 ./frontend
+        # For actual push, you'd add: docker login && docker push ...
+```
