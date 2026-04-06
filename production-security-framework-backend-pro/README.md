@@ -1,323 +1,278 @@
-```markdown
-# Secure Task Management System
+# Secure C++ Web Application
 
-A full-stack, enterprise-grade task management system with comprehensive security implementations. This project demonstrates best practices for building secure and robust web applications using FastAPI, React, PostgreSQL, and Docker.
+This project provides a comprehensive, production-ready full-stack web application with a focus on robust security implementations. It features a high-performance C++ backend, a PostgreSQL database, a minimalist JavaScript frontend, and is fully containerized with Docker.
 
 ## Table of Contents
 
 1.  [Features](#features)
-2.  [Security Implementations](#security-implementations)
-3.  [Architecture](#architecture)
-4.  [Prerequisites](#prerequisites)
-5.  [Setup Instructions](#setup-instructions)
-    *   [Backend Setup](#backend-setup)
-    *   [Frontend Setup](#frontend-setup)
-    *   [Docker Compose Setup](#docker-compose-setup)
-6.  [Running the Application](#running-the-application)
-7.  [Testing](#testing)
-8.  [API Documentation](#api-documentation)
-9.  [Deployment Guide](#deployment-guide)
-10. [Future Enhancements](#future-enhancements)
+2.  [Technology Stack](#technology-stack)
+3.  [Project Structure](#project-structure)
+4.  [Setup Instructions](#setup-instructions)
+    *   [Prerequisites](#prerequisites)
+    *   [Local Setup with Docker Compose](#local-setup-with-docker-compose)
+    *   [Running Tests](#running-tests)
+5.  [API Documentation](#api-documentation)
+6.  [Architecture](#architecture)
+7.  [Security Implementations](#security-implementations)
+8.  [CI/CD](#ci/cd)
+9.  [Future Enhancements](#future-enhancements)
+10. [Contributing](#contributing)
 11. [License](#license)
 
-## 1. Features
+## Features
 
-*   **User Management:** Register, Login, Logout, Profile Update (for self), CRUD operations (for admin).
-*   **Authentication:** JWT-based (Access & Refresh Tokens), password hashing.
-*   **Authorization:** Role-Based Access Control (RBAC - admin/user roles) and Resource-Based Access Control (ownership for projects/tasks).
-*   **Project Management:** Create, Read, Update, Delete projects.
-*   **Task Management:** Create, Read, Update, Delete tasks within projects. Assign tasks to users.
-*   **Input Validation:** Robust validation using Pydantic.
-*   **Error Handling:** Custom exception handlers for clear API responses.
-*   **Logging:** Structured application and security logging with `loguru`.
-*   **Rate Limiting:** Protects API endpoints from abuse.
-*   **Caching:** Redis-based caching for improved performance on read operations.
-*   **Database:** PostgreSQL with SQLAlchemy ORM and Alembic for migrations.
-*   **Containerization:** Docker and Docker Compose for easy environment setup.
-*   **CI/CD:** Basic GitHub Actions workflow for linting, testing, and building.
+*   **Core Application (C++ Backend):**
+    *   Built with C++20 and Crow web framework.
+    *   RESTful API endpoints with CRUD operations for Users (and example Products).
+    *   Modular design: Controllers, Services, Repositories, Models.
+    *   Business logic and data processing.
+*   **Database Layer (PostgreSQL):**
+    *   Schema definitions (`users`, `products` tables).
+    *   Initial migration scripts.
+    *   Seed data for initial setup (admin and regular users).
+    *   `pqxx` for secure and efficient database interactions.
+*   **Frontend (Vanilla JavaScript):**
+    *   Simple HTML/CSS/JS client for interacting with the backend API.
+    *   Demonstrates user registration, login, and accessing protected resources.
+*   **Configuration & Setup:**
+    *   `CMake` for C++ build system.
+    *   `Conan` for C++ dependency management (`libsodium`, `jwt-cpp`, `spdlog`, `pqxx`, `crow`, `nlohmann_json`).
+    *   Environment configuration using `.env.example` and environment variables.
+    *   `Docker` and `Docker Compose` for containerization and orchestration.
+*   **Testing & Quality:**
+    *   `Catch2` for C++ unit and integration tests.
+    *   Demonstrates tests for critical security components (Argon2Hasher, JwtManager).
+    *   CI/CD pipeline includes test execution.
+*   **Documentation:**
+    *   Comprehensive README.md (this file!).
+    *   API documentation (docs/api.md).
+    *   Architecture overview (docs/architecture.md).
+    *   Deployment guide (part of README and CI/CD).
+*   **Additional Features (Security Focus):**
+    *   **Authentication:** JWT-based (Access & Refresh Tokens), Argon2 password hashing via `libsodium`.
+    *   **Authorization:** Role-Based Access Control (RBAC) middleware for endpoint protection.
+    *   **Logging & Monitoring:** Structured logging with `spdlog` for security events, errors, and application flow.
+    *   **Error Handling:** Global exception handling middleware providing consistent JSON error responses.
+    *   **Caching Layer:** Simple in-memory cache for potential future use (e.g., storing user permissions, config data).
+    *   **Rate Limiting:** Token bucket algorithm-based middleware to protect API endpoints from abuse.
+    *   **Secure Communication:** HTTPS enforced by Nginx reverse proxy with self-signed certificates for local development.
 
-## 2. Security Implementations
+## Technology Stack
 
-This project prioritizes security at multiple layers:
+*   **Backend:** C++20, Crow Framework, `libsodium`, `jwt-cpp`, `spdlog`, `pqxx`, `nlohmann/json`.
+*   **Database:** PostgreSQL 16.
+*   **Frontend:** HTML5, CSS3, Vanilla JavaScript.
+*   **Containerization:** Docker, Docker Compose.
+*   **Build System:** CMake, Conan.
+*   **Testing:** Catch2.
+*   **Web Server/Reverse Proxy:** Nginx.
+*   **CI/CD:** GitHub Actions.
 
-*   **Authentication (JWT):**
-    *   **Password Hashing:** Passwords stored using `bcrypt` (via `passlib`), never in plain text.
-    *   **Access Tokens:** Short-lived JWTs for API access, signed with a strong `SECRET_KEY`.
-    *   **Refresh Tokens:** Longer-lived JWTs to obtain new access tokens without re-authenticating with credentials.
-    *   **Token Revocation/Blocklisting:** Access tokens can be "logged out" and immediately invalidated (blocked in Redis).
-    *   **Secure Token Handling:** Tokens are passed via `Authorization: Bearer` header, not URL parameters.
-*   **Authorization (RBAC & Resource-Based):**
-    *   **Roles:** Users have `user` or `admin` roles, checked via dependencies (`get_current_admin_user`, `role_required`).
-    *   **Ownership:** Projects and tasks are tied to owners/assignees. Specific endpoints (e.g., update/delete project) require the requesting user to be the owner or an admin (`verify_project_owner`, `verify_task_access`).
-*   **Input Validation:**
-    *   All incoming request bodies and query parameters are rigorously validated using Pydantic schemas, preventing common injection attacks and ensuring data integrity.
-*   **Output Sanitization:**
-    *   Response models (Pydantic) ensure that sensitive data (like `hashed_password`) is never exposed in API responses.
-*   **SQL Injection Prevention:**
-    *   SQLAlchemy ORM is used for all database interactions, which inherently uses parameterized queries, preventing SQL injection vulnerabilities.
-*   **CORS Configuration:**
-    *   Explicit Cross-Origin Resource Sharing (CORS) middleware is configured to allow requests only from specified frontend origins, preventing unauthorized cross-origin requests.
-*   **Rate Limiting:**
-    *   Implemented using `fastapi-limiter` and Redis, protecting endpoints (especially login/registration) from brute-force attacks and abuse.
-*   **Logging & Monitoring:**
-    *   Structured logging (`loguru`) captures application events, errors, and security-relevant actions (e.g., login attempts, token revocations). This is crucial for auditing and detecting suspicious activity.
+## Project Structure
+
+```
+my_secure_app/
+├── .github/                      # GitHub Actions CI/CD workflows
+├── backend/                      # C++ Backend source, build, tests, and config
+├── database/                     # PostgreSQL setup: schema, migrations, seed data, Dockerfile
+├── frontend/                     # Minimalist HTML/CSS/JS client
+├── nginx/                        # Nginx configuration and SSL certificates
+├── docker-compose.yml            # Docker Compose orchestration file
+├── .gitignore                    # Git ignore rules
+├── README.md                     # Project documentation (this file)
+└── docs/                         # Additional documentation (API, Architecture)
+```
+
+## Setup Instructions
+
+### Prerequisites
+
+*   **Git:** For cloning the repository.
+*   **Docker & Docker Compose:** For containerization and running the application stack.
+    *   Ensure Docker Desktop is running or Docker daemon is active on Linux.
+*   **`jq` (optional):** For parsing JSON in shell scripts (e.g., in CI/CD or local testing).
+
+### Local Setup with Docker Compose
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/my_secure_app.git
+    cd my_secure_app
+    ```
+
+2.  **Generate Nginx SSL Certificates:**
+    Nginx is configured to serve the application over HTTPS. For local development, you need self-signed certificates.
+    ```bash
+    mkdir -p nginx/certs
+    cd nginx/certs
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout localhost.key -out localhost.crt \
+        -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+    cd ../.. # Go back to the project root
+    ```
+    *You will likely get a browser warning about these self-signed certificates. Accept it to proceed.*
+
+3.  **Create `.env` file:**
+    The `docker-compose.yml` uses environment variables defined in `backend/.env.example`. Copy it to `.env` in the `backend` directory and modify if necessary.
+    ```bash
+    cp backend/.env.example backend/.env
+    ```
+    You can edit `backend/.env` to change ports, DB credentials, JWT secrets, etc.
+
+4.  **Build and Run the Docker Compose Stack:**
+    This command will build the Docker images for the backend and database, then start all services (db, backend, nginx).
+    *The first build might take a while as C++ dependencies are fetched and compiled.*
+    ```bash
+    docker-compose up --build -d
+    ```
+    * `--build`: Rebuild images (important for initial setup or after code changes).
+    * `-d`: Run in detached mode (in the background).
+
+5.  **Verify Services:**
+    Check if all containers are running:
+    ```bash
+    docker ps
+    ```
+    You should see `secure_app_db`, `secure_app_backend`, and `secure_app_nginx` running.
+    You can view logs for any service:
+    ```bash
+    docker logs secure_app_backend
+    docker logs secure_app_db
+    docker logs secure_app_nginx
+    ```
+
+6.  **Access the Application:**
+    *   **Frontend:** Open your browser to `https://localhost/`. (Accept the self-signed certificate warning).
+    *   **Backend API:** The API is served through Nginx at `https://localhost/api/`.
+
+### Running Tests
+
+Unit and integration tests for the C++ backend can be run within the `backend` container.
+
+1.  **Ensure Docker Compose stack is up (or at least `backend` service is built):**
+    ```bash
+    docker-compose up -d --build backend
+    ```
+
+2.  **Execute tests in the backend container:**
+    ```bash
+    docker-compose exec backend /app/SecureCppAppTests
+    ```
+    This will run all Catch2 tests defined in the `backend/tests` directory.
+
+3.  **API Tests (Manual/Curl):**
+    You can manually test API endpoints using `curl` or a tool like Postman/Insomnia.
+    *   **Register a user:**
+        ```bash
+        curl -k -X POST -H "Content-Type: application/json" \
+             -d '{"email":"testuser@example.com","password":"securepassword123","role":"USER"}' \
+             https://localhost/api/auth/register
+        ```
+    *   **Login a user:**
+        ```bash
+        LOGIN_RESPONSE=$(curl -k -X POST -H "Content-Type: application/json" \
+             -d '{"email":"testuser@example.com","password":"securepassword123"}' \
+             https://localhost/api/auth/login)
+        echo $LOGIN_RESPONSE # Copy accessToken and refreshToken
+        ```
+    *   **Access protected user profile:**
+        Replace `YOUR_ACCESS_TOKEN` with the token obtained from login.
+        ```bash
+        curl -k -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+             https://localhost/api/users/me
+        ```
+    *   **Access admin-only endpoint (e.g., get another user):**
+        First, register/login an `ADMIN` user (e.g., using `admin@example.com` from seed data if its password hash is generated correctly). Then use *their* access token.
+        ```bash
+        # Assuming you have an admin access token
+        ADMIN_ACCESS_TOKEN="..." 
+        USER_ID_TO_FETCH="a2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e" # ID of user@example.com from seed data
+        curl -k -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN" \
+             https://localhost/api/users/$USER_ID_TO_FETCH
+        ```
+    *   **Test Rate Limiting:** Repeatedly call an endpoint until you hit the limit (e.g., `APP_PORT` configuration).
+        ```bash
+        for i in {1..110}; do curl -s -o /dev/null -w "%{http_code}\n" -k https://localhost/api/auth/register; done
+        # You should eventually see 429 Too Many Requests
+        ```
+
+## API Documentation
+
+For detailed information on API endpoints, request/response formats, and authentication requirements, refer to the [API Documentation](docs/api.md).
+
+## Architecture
+
+An overview of the application's architecture can be found in [Architecture Documentation](docs/architecture.md).
+
+## Security Implementations
+
+This project prioritizes security by implementing several enterprise-grade features:
+
+*   **Authentication (JWT & Argon2):**
+    *   User passwords are never stored in plaintext. `libsodium`'s Argon2id hashing algorithm is used for strong, adaptive hashing.
+    *   Authentication uses JSON Web Tokens (JWTs) for stateless session management.
+    *   Both short-lived `accessToken`s and longer-lived `refreshToken`s are issued.
+    *   `JwtManager` handles token generation, signing (HS256), and verification.
+*   **Authorization (RBAC Middleware):**
+    *   `AuthMiddleware` validates JWTs and extracts `userId` and `userRole` from the token claims, storing them in the request context.
+    *   `RBACMiddleware` is route-specific, checking if the authenticated user's role (from the token) is among the allowed roles for that endpoint.
+    *   Examples: `/users/me` (any authenticated user), `/users/<id>` (admin only).
+*   **Secure Communication (HTTPS with Nginx):**
+    *   All traffic is routed through Nginx, which enforces HTTPS (using self-signed certificates for dev).
+    *   Nginx also adds various security headers (HSTS, X-Content-Type-Options, X-XSS-Protection, X-Frame-Options, Referrer-Policy, Permissions-Policy).
+*   **Input Validation & Parameterized Queries:**
+    *   The application relies on `pqxx` for database interactions, which inherently supports parameterized queries, preventing SQL injection.
+    *   Crow framework and manual checks in controllers/services handle basic input validation (e.g., checking for required fields, valid email format).
 *   **Error Handling:**
-    *   Custom exception classes and global exception handlers provide consistent, informative error messages without leaking internal server details.
-*   **Secret Management:**
-    *   Sensitive configurations (e.g., `SECRET_KEY`, database credentials) are managed via environment variables (`.env` file, Docker Compose secrets in production), never hardcoded.
-*   **HTTPS:**
-    *   While not explicitly implemented within the FastAPI/React code itself, the `docker-compose.yml` provides a setup ready for a reverse proxy (like Nginx, often used with Let's Encrypt for SSL) to enforce HTTPS in production environments, ensuring data in transit is encrypted.
-*   **Dependency Security:**
-    *   `requirements.txt` and `package.json` list all dependencies. Regular updates and security scanning (e.g., `pip-audit`, `npm audit`) are recommended to mitigate known vulnerabilities in third-party libraries.
+    *   `ErrorHandler` middleware catches all exceptions, providing consistent JSON error responses with HTTP status codes and custom error codes, preventing sensitive information leakage.
+    *   Custom exception types (`ApiException`, `UnauthorizedException`, `NotFoundException`, etc.) provide granular error reporting.
+*   **Logging:**
+    *   `spdlog` is used for structured, categorized logging (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL).
+    *   Security-relevant events (login attempts, authentication failures, authorization denials, critical errors) are logged with sufficient detail for monitoring and auditing.
+*   **Rate Limiting:**
+    *   `RateLimit` middleware implements a token bucket algorithm to limit the number of requests per client (by IP address in this example) within a time window.
+    *   Protects against brute-force attacks, API abuse, and denial-of-service attempts.
+*   **Environment Configuration:**
+    *   Sensitive credentials (database passwords, JWT secret keys) are managed via environment variables and `.env` files, never hardcoded into the application.
+*   **C++ Best Practices:**
+    *   Memory safety: C++20 features, smart pointers, RAII.
+    *   Resource management: Proper database connection handling.
+    *   Minimal dependencies where feasible, but leveraging well-maintained libraries for complex tasks like crypto and JWT.
 
-## 3. Architecture
+## CI/CD
 
-The system follows a typical **two-tier (or three-tier logical)** architecture:
+The project includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that performs the following steps on pushes and pull requests to `main` and `develop` branches:
 
-*   **Frontend (Client):**
-    *   A React Single Page Application (SPA) providing the user interface.
-    *   Communicates with the backend API via HTTP requests.
-    *   Handles client-side routing, state management, and displays data.
-*   **Backend (API Server):**
-    *   Built with **FastAPI** (Python).
-    *   Provides RESTful API endpoints for all business logic (User, Project, Task CRUD).
-    *   Handles authentication, authorization, validation, and communicates with the database and caching layer.
-    *   Uses **SQLAlchemy** as an ORM for database interactions.
-*   **Database:**
-    *   **PostgreSQL** for persistent data storage.
-    *   Managed with **Alembic** for migrations.
-*   **Caching & Rate Limiting:**
-    *   **Redis** acts as an in-memory data store for API rate limiting (`fastapi-limiter`) and API response caching (`fastapi-cache2`).
+1.  **Build and Test Backend:**
+    *   Builds the C++ backend Docker image.
+    *   Runs unit and integration tests defined with Catch2 inside the backend container.
+2.  **Build and Run Full-stack (Integration/API Test):**
+    *   Builds all services (db, backend, nginx) using `docker-compose`.
+    *   Waits for services to be healthy.
+    *   Runs basic `curl`-based API tests to verify endpoints, authentication, and authorization are working end-to-end.
+    *   Includes teardown to clean up Docker resources.
 
-**Data Flow Example (User Login):**
-1.  User enters credentials on React frontend.
-2.  Frontend sends POST request to `/api/v1/auth/login`.
-3.  FastAPI receives request, validates input (Pydantic).
-4.  FastAPI queries PostgreSQL via SQLAlchemy to find user and verify password (bcrypt).
-5.  If successful, FastAPI generates an Access Token and a Refresh Token (JWTs) using `python-jose`.
-6.  FastAPI returns tokens to frontend.
-7.  Frontend stores tokens (e.g., in `localStorage` for access token, `httpOnly` cookie for refresh token for better security).
-8.  For subsequent requests, frontend includes Access Token in `Authorization` header.
-9.  FastAPI validates Access Token on each request (checks expiry, signature, blocklist in Redis).
-10. If Access Token expires, frontend uses Refresh Token to get a new Access Token.
+This pipeline ensures that code changes are continuously validated, maintaining quality and preventing regressions.
 
-```mermaid
-graph TD
-    A[React Frontend] -->|1. Login Request| B(FastAPI Backend)
-    B -->|2. Query User| C(PostgreSQL DB)
-    C -->|3. User Data| B
-    B -->|4. Generate JWTs, Hash Pass| D(Passlib & Python-jose)
-    B -->|5. Store Blocked Tokens/Cache| E(Redis Cache/Limiter)
-    B -->|6. Return Tokens| A
-    A -->|7. Subsequent API Requests with Access Token| B
-    B -->|8. Validate Token (check Redis blocklist)| E
-    B -->|9. Authorize & Process Request| C
-    B -->|10. Return Data| A
-```
+## Future Enhancements
 
-## 4. Prerequisites
+*   **More Robust Input Validation:** Use a dedicated C++ validation library or more extensive manual checks for all input fields.
+*   **Refined Rate Limiting:** Implement a persistent store (e.g., Redis) for rate limiting data across multiple backend instances.
+*   **Advanced Caching:** Integrate a robust caching solution like Redis for scalable performance.
+*   **Audit Logging:** Implement a dedicated audit log for all sensitive actions and data changes.
+*   **Security Audits & Static Analysis:** Integrate tools like SonarQube, Clang-Tidy, or Coverity into CI/CD.
+*   **OAuth2/OIDC Integration:** For enterprise environments, integrate with external identity providers.
+*   **Multi-Factor Authentication (MFA):** Add support for MFA for enhanced user security.
+*   **Frontend Framework:** Upgrade the frontend to a modern framework like React, Vue, or Angular for better UI/UX and maintainability.
+*   **Container Security Scanning:** Integrate Trivy or Clair into the CI/CD pipeline to scan Docker images for vulnerabilities.
+*   **Secrets Management:** Use a proper secrets management system (e.g., HashiCorp Vault, AWS Secrets Manager) instead of `.env` files in production.
+*   **Deployment Automation:** Extend CI/CD for automated deployments to cloud platforms (AWS, GCP, Azure) using tools like Terraform or Kubernetes.
+*   **More comprehensive product management** (if this were a full e-commerce app).
 
-Before you begin, ensure you have the following installed:
+## Contributing
 
-*   **Git**
-*   **Docker** and **Docker Compose**
-*   **Python 3.11+** (for local development outside Docker)
-*   **Node.js 18+** and **Yarn** (for local frontend development outside Docker)
+Contributions are welcome! Please fork the repository, create a feature branch, and submit a pull request. Ensure your code adheres to the existing style and all tests pass.
 
-## 5. Setup Instructions
+## License
 
-Clone the repository:
-
-```bash
-git clone https://github.com/your-username/secure-task-management.git
-cd secure-task-management
-```
-
-### Docker Compose Setup (Recommended)
-
-This is the easiest way to get the entire stack (backend, frontend, PostgreSQL, Redis) up and running.
-
-1.  **Create `.env` file:**
-    Copy the `.env` template to `.env` in the project root and fill in necessary secrets.
-    ```bash
-    cp .env.example .env
-    # Open .env and replace "your-super-secret-key-replace-me..." with a long, random string.
-    # Keep other defaults for local development.
-    ```
-    *Note: For production, ensure `SECRET_KEY` is highly secure and not committed to source control. Docker secrets or Kubernetes secrets are preferred.*
-
-2.  **Create `frontend/.env.development` file:**
-    ```bash
-    cp frontend/.env.development.example frontend/.env.development
-    # Ensure REACT_APP_API_BASE_URL points to your backend:
-    # REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
-    ```
-
-3.  **Build and Start with Docker Compose:**
-    ```bash
-    docker-compose build
-    docker-compose up -d
-    ```
-    This will:
-    *   Build Docker images for backend and frontend.
-    *   Start PostgreSQL, Redis, FastAPI backend, and React frontend.
-    *   Run Alembic migrations on the backend container startup.
-    *   Seed initial admin user data (if not already present).
-
-4.  **Access the Application:**
-    *   **Backend API (Swagger Docs):** `http://localhost:8000/docs`
-    *   **Frontend:** `http://localhost:3000`
-
-### Backend Setup (Local Development - without Docker)
-
-If you prefer to run the backend directly on your machine:
-
-1.  **Create a Python virtual environment:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-
-2.  **Install dependencies:**
-    ```bash
-    cd backend
-    pip install -r requirements.txt
-    ```
-
-3.  **Set environment variables:**
-    You need to configure your `DATABASE_URL`, `SECRET_KEY`, etc. You can either export them in your shell or use a tool like `direnv`.
-    Example:
-    ```bash
-    export DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/secure_task_db"
-    export SECRET_KEY="your-secret-key"
-    export REDIS_HOST="localhost"
-    export REDIS_PORT="6379"
-    export INITIAL_ADMIN_EMAIL="admin@example.com"
-    export INITIAL_ADMIN_PASSWORD="admin_password"
-    # ... other variables from .env
-    ```
-    *(For PostgreSQL and Redis, you'd need them running locally or via Docker Compose separately for just those services).*
-
-4.  **Run database migrations:**
-    ```bash
-    alembic upgrade head
-    ```
-
-5.  **Seed initial data:**
-    ```bash
-    python app/initial_data.py
-    ```
-
-6.  **Run the FastAPI application:**
-    ```bash
-    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    ```
-    The API will be available at `http://localhost:8000`.
-
-### Frontend Setup (Local Development - without Docker)
-
-If you prefer to run the frontend directly on your machine:
-
-1.  **Navigate to the frontend directory:**
-    ```bash
-    cd frontend
-    ```
-
-2.  **Install Node.js dependencies:**
-    ```bash
-    yarn install
-    # or npm install
-    ```
-
-3.  **Ensure `.env.development` is correctly configured:**
-    Make sure `REACT_APP_API_BASE_URL` points to your running backend (e.g., `http://localhost:8000/api/v1`).
-
-4.  **Start the React development server:**
-    ```bash
-    yarn start
-    # or npm start
-    ```
-    The frontend will be available at `http://localhost:3000`.
-
-## 6. Running the Application
-
-After following the Docker Compose setup:
-
-*   **Frontend:** Open your browser and navigate to `http://localhost:3000`.
-*   **Backend API Documentation:** Open your browser and navigate to `http://localhost:8000/docs` (Swagger UI).
-
-You can use the initial admin credentials for testing:
-*   **Email:** `admin@example.com`
-*   **Password:** `admin_password`
-
-## 7. Testing
-
-The project includes unit, integration, and API tests using `pytest`.
-
-1.  **Ensure Docker Compose services are running** (at least `db` and `redis`).
-    ```bash
-    docker-compose up -d db redis
-    ```
-2.  **Run tests (from `backend` directory):**
-    ```bash
-    cd backend
-    # If running locally (not in CI/CD container)
-    pytest --cov=app --cov-report=term-missing tests/
-    # Or, if you want to run inside a temporary container:
-    docker-compose run --rm backend pytest --cov=app --cov-report=term-missing tests/
-    ```
-    The `pytest` command is configured to provide coverage reports.
-
-3.  **Frontend tests:**
-    ```bash
-    cd frontend
-    yarn test
-    # or npm test
-    ```
-
-**Performance Tests:**
-Refer to the conceptual section in `docs/PERFORMANCE.md` for guidance on setting up performance tests using tools like Locust.
-
-## 8. API Documentation
-
-FastAPI automatically generates OpenAPI (Swagger) documentation.
-Once the backend is running, you can access it at:
-*   **Swagger UI:** `http://localhost:8000/docs`
-*   **ReDoc:** `http://localhost:8000/redoc`
-
-For detailed API endpoint descriptions, refer to the `docs/API.md` file (conceptual, not fully generated).
-
-## 9. Deployment Guide
-
-Refer to `docs/DEPLOYMENT.md` for a conceptual guide on deploying this application to a production environment.
-
-## 10. Future Enhancements
-
-*   **Frontend:**
-    *   More comprehensive UI/UX for project and task management.
-    *   State management solution (e.g., Redux, Zustand, React Context).
-    *   Better error feedback to users.
-*   **Backend:**
-    *   Asynchronous background tasks (e.g., email notifications, complex reporting) using Celery/Redis.
-    *   Advanced search and filtering for projects and tasks.
-    *   WebSockets for real-time updates (e.g., task status changes).
-    *   Multi-factor authentication (MFA).
-    *   OAuth2/OpenID Connect for external identity providers.
-    *   More granular permissions (e.g., project members with different roles).
-    *   Audit logging to a dedicated system (e.g., ELK stack).
-    *   Distributed tracing (e.g., OpenTelemetry).
-*   **Infrastructure:**
-    *   Kubernetes deployment for scalability and orchestration.
-    *   Managed database services (AWS RDS, GCP Cloud SQL).
-    *   Dedicated secrets management service (AWS Secrets Manager, HashiCorp Vault).
-    *   Monitoring and alerting (Prometheus, Grafana).
-    *   CDN for frontend assets.
-*   **Testing:**
-    *   End-to-end tests (Cypress, Playwright).
-    *   Security penetration testing.
-    *   Accessibility testing.
-
-## 11. License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the `LICENSE` file for details.
 ```

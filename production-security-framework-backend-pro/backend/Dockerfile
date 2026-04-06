@@ -1,45 +1,47 @@
-```dockerfile
-# Stage 1: Builder
-FROM python:3.11-slim-buster AS builder
+FROM conanio/gcc12-armv8:latest AS builder
+
+LABEL author="Your Name"
+LABEL description="C++ Backend for Secure C++ App"
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Copy conanfile.txt and CMakeLists.txt first to leverage Docker cache
+COPY backend/conanfile.txt .
+COPY backend/CMakeLists.txt .
 
-# Copy requirements file and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Conan dependencies
+RUN conan install . --output-folder=build --build=missing -settings compiler.cppstd=20 -pr:h default
 
-# Stage 2: Runtime
-FROM python:3.11-slim-buster AS runtime
+# Copy all source code
+COPY backend/src src/
+COPY backend/tests tests/
+
+# Build the application
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+RUN cmake --build build --config Release
+
+# --- Runtime stage ---
+FROM alpine:latest
 
 WORKDIR /app
 
-# Install runtime dependencies (if any are different or missing from builder)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies for libpq and libsodium
+# Check the specific alpine package names for libpqxx, libsodium
+# For pqxx, typically libpq and its dev headers, for libsodium, just libsodium
+RUN apk add --no-cache libpq libsodium
 
-# Copy installed packages from builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy the compiled executable and shared libraries
+COPY --from=builder /app/build/SecureCppApp .
+# If building for testing, copy the test executable as well:
+COPY --from=builder /app/build/SecureCppAppTests .
+COPY --from=builder /usr/local/lib /usr/local/lib # Conan installed libs
 
-# Copy the rest of the application code
-COPY ./app /app/app
-COPY ./alembic /app/alembic
-COPY alembic.ini /app/
-COPY initial_data.py /app/
+# Copy .env.example for container environment setup
+COPY backend/.env.example ./.env.example
 
-# Expose the port FastAPI runs on
-EXPOSE 8000
+# Create logs directory
+RUN mkdir -p logs
 
-# Command to run the application (migrations and then start server)
-# The `command` in docker-compose.yml will override this for local dev
-# For production, you might have a dedicated entrypoint script for migrations.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+EXPOSE 8080
+
+CMD ["./SecureCppApp"]

@@ -1,0 +1,15 @@
+[requires]
+boost/1.83.0
+crow/1.0+pa23
+libsodium/1.0.18
+spdlog/1.13.0
+nlohmann_json/3.11.3
+jwt-cpp/0.7.0
+pqxx/7.9.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
