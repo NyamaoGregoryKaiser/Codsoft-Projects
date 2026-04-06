@@ -1,0 +1,45 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: enterprise-ecommerce-api
+  datasource:
+    url: jdbc:postgresql://db:5432/ecommerce_db # Point to the 'db' service in docker-compose
+    username: user
+    password: password
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'none' in production, 'validate' for schema checks with Flyway
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true # Important for existing databases or initial setup
+    locations: classpath:db/migration # Directory for migration scripts
+  cache:
+    cache-names: products, users, orders
+    caffeine:
+      spec: maximumSize=500,expireAfterAccess=10m # Default for all caches unless specified in CacheConfig
+
+# JWT Configuration
+application:
+  security:
+    jwt:
+      secret-key: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970  # Base64 encoded 256-bit key
+      expiration: 86400000 # 24 hours in milliseconds (24 * 60 * 60 * 1000)
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+    com.example.ecommerce.api: DEBUG # Custom package logging
+```
+**Note**: The `secret-key` is a dummy key. In a real production environment, this should be a strong, randomly generated key stored securely (e.g., in environment variables or a secrets manager). The `ddl-auto: validate` is good for checking if your entities match the DB schema when using Flyway. For pure production, `none` might be preferred to fully rely on Flyway.
+
+#### `backend/src/main/resources/logback-spring.xml`
+```xml

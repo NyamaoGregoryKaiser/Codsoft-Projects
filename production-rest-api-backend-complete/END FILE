@@ -1,0 +1,4 @@
+```
+
+#### `backend/src/main/resources/db/migration/V2__Add_Admin_User_And_Seed_Products.sql`
+```sql
