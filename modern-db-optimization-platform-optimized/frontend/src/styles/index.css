@@ -1,0 +1,17 @@
+/* General Styles */
+:root {
+  --primary-color: #4CAF50; /* Green */
+  --primary-dark-color: #388E3C;
+  --secondary-color: #2196F3; /* Blue */
+  --accent-color: #FFC107; /* Amber */
+  --danger-color: #F44336; /* Red */
+  --warn-color: #FF9800; /* Orange */
+
+  --background-color: #282c34;
+  --surface-color: #333740;
+  --card-background: #3c4048;
+  --border-color: #555;
+  --text-color-primary: #f0f0f0;
+  --text-color-secondary: #bbb;
+  --text-color-light: #eee;
+  --text

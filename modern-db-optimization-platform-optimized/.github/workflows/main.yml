@@ -1,0 +1,100 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Run Backend Tests
+        run: npm test
+        working-directory: ./backend
+        env:
+          # Use SQLite in-memory for tests for speed
+          DB_CLIENT: sqlite3
+          JWT_SECRET: testsecret
+          ENCRYPTION_KEY: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false
+        working-directory: ./frontend
+        env:
+          CI: true # Required for React scripts test in CI environments
+
+  # Optional: Docker Build & Push (requires Docker Hub or other registry credentials)
+  # build-and-push:
+  #   runs-on: ubuntu-latest
+  #   needs: [backend-test, frontend-test]
+  #   if: github.ref == 'refs/heads/main' # Only push on main branch merge
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #
+  #     - name: Build and push backend image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: ./backend
+  #         push: true
+  #         tags: yourdockerhub/db-health-monitor-backend:latest
+  #
+  #     - name: Build and push frontend image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: ./frontend
+  #         push: true
+  #         tags: yourdockerhub/db-health-monitor-frontend:latest
+
+  # Optional: Deployment step (e.g., to a cloud provider)
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-push
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Deploy to Production
+  #       run: |
+  #         echo "Simulating deployment to production environment..."
+  #         # Add your deployment commands here (e.g., SSH to server and run docker-compose pull/up)
+  #         # Example: ssh -i key.pem user@your-server.com "docker-compose pull && docker-compose up -d"
+  #       env:
+  #         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

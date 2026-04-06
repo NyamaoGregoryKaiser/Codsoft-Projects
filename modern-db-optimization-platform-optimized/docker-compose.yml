@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database for the DB Health Monitor System
+  db_health_monitor_pg:
+    image: postgres:14-alpine
+    container_name: db_health_monitor_pg
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-dbmonitor_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dbmonitor_password}
+      POSTGRES_DB: ${DB_NAME:-dbmonitor_db}
+    ports:
+      - "5433:5432" # Map to a different local port to avoid conflict with default 5432
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Caching and BullMQ Job Queue
+  redis:
+    image: redis:7-alpine
+    container_name: db_health_monitor_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: db_health_monitor_backend
+    restart: always
+    env_file:
+      - ./backend/.env.example # Using example for Docker, specify real .env in prod
+    environment:
+      # Override DB_HOST to use the service name within the Docker network
+      DB_HOST: db_health_monitor_pg
+      REDIS_HOST: redis
+      ENCRYPTION_KEY: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2" # IMPORTANT: Use a truly random, long key in production!
+      # FRONTEND_URL: http://localhost:3000 # for CORS in production mode
+    ports:
+      - "5000:5000"
+    depends_on:
+      db_health_monitor_pg:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: db_health_monitor_frontend
+    restart: always
+    ports:
+      - "3000:80" # Serve on local port 3000, Nginx inside container listens on 80
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Adjust for production (e.g., /api if Nginx proxies)
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pg_data:
+  redis_data:
