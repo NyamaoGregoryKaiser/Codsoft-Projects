@@ -1,0 +1,93 @@
+spring:
+  application:
+    name: cms-system
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:cmsdb}
+    username: ${DB_USERNAME:cmsuser}
+    password: ${DB_PASSWORD:cmspass}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Flyway handles schema, so validate it matches. Use 'none' in production if you prefer no JPA schema interaction.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false # Set to true for debugging SQL queries
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Recommended for existing databases without Flyway metadata
+  thymeleaf:
+    cache: false # Disable Thymeleaf cache for development
+    mode: HTML # Default, but good to be explicit
+    prefix: classpath:/templates/
+    suffix: .html
+  cache:
+    type: caffeine # Enable Caffeine as the caching provider
+
+logging:
+  level:
+    root: INFO
+    com.cms.system: DEBUG # Detailed logs for our application
+    org.springframework.web: INFO
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN # Log SQL statements at WARN level or INFO for debugging
+    org.hibernate.orm.jdbc.bind: TRACE # Log parameters with TRACE
+  file:
+    name: logs/cms-system.log # Log to a file
+    max-size: 10MB
+    max-history: 7 # Keep 7 days of logs
+
+server:
+  port: 8080
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:aSecretKeyForTestingAndDevelopmentWhichIsDefinitelyNotStrongEnoughForProductionUsePleaseChangeMe} # Base64 encoded, 256-bit (32 characters) minimum for HS256. This is just a placeholder.
+      expiration: 86400000 # 24 hours in milliseconds (24 * 60 * 60 * 1000)
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    hibernate:
+      ddl-auto: validate # Ensure no schema changes by Hibernate in production
+  thymeleaf:
+    cache: true # Enable Thymeleaf cache for production performance
+logging:
+  level:
+    com.cms.system: INFO # Reduce verbosity for production
+    org.hibernate.SQL: WARN
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:MUST_BE_A_STRONG_SECRET_KEY_FOR_PRODUCTION_USE_AND_SET_VIA_ENVIRONMENT_VARIABLE}
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE # In-memory H2 for tests
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop # Recreate schema for each test run
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false # Disable Flyway for in-memory H2 tests, let JPA create schema
+server:
+  port: 8081 # Use a different port for tests if running alongside dev
+logging:
+  level:
+    root: WARN # Suppress most logs during tests

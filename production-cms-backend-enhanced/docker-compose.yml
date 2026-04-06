@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cmsdb}
+      POSTGRES_USER: ${DB_USERNAME:-cmsuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cmspass}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cms-app
+    restart: unless-stopped
+    environment:
+      DB_HOST: db # Connect to the 'db' service defined in this compose file
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-cmsdb}
+      DB_USERNAME: ${DB_USERNAME:-cmsuser}
+      DB_PASSWORD: ${DB_PASSWORD:-cmspass}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:aSecretKeyForTestingAndDevelopmentWhichIsDefinitelyNotStrongEnoughForProductionUsePleaseChangeMe}
+      SPRING_PROFILES_ACTIVE: dev # Use 'prod' in production
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    # Health check to ensure DB is ready before starting the app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-cmsuser} -d ${DB_NAME:-cmsdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+```
+**Note:** For `docker-compose.yml`, replace `${DB_NAME:-cmsdb}` etc. with actual values or define them in a `.env` file at the root of the project.
+
+```
+.env (Example)
+DB_NAME=cmsdb_prod
+DB_USERNAME=cmsuser_prod
+DB_PASSWORD=your_secure_password
+JWT_SECRET_KEY=a_very_long_random_string_for_production_security
+```
+
+#### CI/CD Pipeline Configuration (GitHub Actions)
+
+```yaml
