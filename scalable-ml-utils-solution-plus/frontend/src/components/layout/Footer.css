@@ -1,0 +1,14 @@
+```css
+.footer {
+  background-color: var(--footer-bg);
+  color: #adb5bd;
+  text-align: center;
+  padding: 1.5rem 1rem;
+  margin-top: auto; /* Pushes footer to the bottom */
+  font-size: 0.9rem;
+}
+
+.footer p {
+  margin: 0.25rem 0;
+}
+```

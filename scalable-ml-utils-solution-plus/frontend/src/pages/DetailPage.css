@@ -1,0 +1,121 @@
+```css
+.detail-page {
+  padding: 2rem 1rem;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.detail-header h1 {
+  margin: 0;
+  font-size: 2.8rem;
+  color: var(--dark-bg);
+}
+
+.detail-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.detail-actions .btn {
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+}
+
+.detail-section {
+  background-color: #fff;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  margin-bottom: 2rem;
+}
+
+.detail-section h2 {
+  color: var(--primary-color);
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 2rem;
+  border-bottom: 2px solid var(--primary-color);
+  padding-bottom: 0.5rem;
+  display: inline-block; /* Only underline the text */
+}
+
+.detail-section p {
+  margin-bottom: 0.75rem;
+  font-size: 1.05rem;
+  color: var(--text-color);
+}
+
+.detail-section p strong {
+  color: var(--dark-bg);
+  margin-right: 0.5rem;
+}
+
+.detail-section a {
+  font-weight: bold;
+}
+
+.inference-form .form-group {
+  margin-bottom: 1.5rem;
+}
+
+.inference-form textarea {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  font-size: 0.9rem;
+  background-color: #f8f9fa;
+}
+
+.inference-result {
+  background-color: #f1f8f3; /* Light green background */
+  border: 1px solid #c8e6c9;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-top: 1.5rem;
+}
+
+.inference-result h3 {
+  color: var(--success-color);
+  font-size: 1.5rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.inference-result pre {
+  background-color: #e9ecef;
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .detail-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .detail-header h1 {
+    width: 100%;
+    font-size: 2.2rem;
+    margin-bottom: 1rem;
+  }
+  .detail-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .detail-actions .btn {
+    flex-grow: 1; /* Make buttons expand */
+  }
+  .detail-section h2 {
+    font-size: 1.8rem;
+  }
+}
+```

@@ -1,0 +1,123 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Load backend .env variables
+        run: |
+          cp backend/.env.example backend/.env
+          # For a real project, securely retrieve secrets
+          # echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> backend/.env
+          # echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> backend/.env
+        working-directory: ./backend
+
+      - name: Install backend dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Set up Docker for DB (for integration tests)
+        run: |
+          docker-compose -f ../docker-compose.yml up -d db
+        working-directory: ./backend # Adjust path if docker-compose.yml is in root
+        env:
+          DB_NAME: ml_utilities_test_db # Use a dedicated test DB
+          DB_USER: ml_test_user
+          DB_PASSWORD: ml_test_password
+
+      - name: Wait for DB to be ready
+        run: |
+          npm install pg-ready # Install pg-ready for robust wait
+          ./node_modules/.bin/pg-ready --host localhost --port 5432 --user ml_test_user --password ml_test_password --database ml_utilities_test_db
+        working-directory: ./backend
+
+      - name: Run backend migrations and seeds for tests
+        run: npx sequelize-cli db:create --env test && npx sequelize-cli db:migrate --env test && npx sequelize-cli db:seed:all --env test
+        working-directory: ./backend
+
+      - name: Run backend lint
+        run: npm run lint
+        working-directory: ./backend
+
+      - name: Run backend tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+        env:
+          NODE_ENV: test # Ensure test environment variables are used
+          DB_NAME: ml_utilities_test_db # Match the test DB name
+          DB_USER: ml_test_user
+          DB_PASSWORD: ml_test_password
+          DB_HOST: localhost # Access Docker DB on localhost from host
+          DB_PORT: 5432
+          JWT_SECRET: test_jwt_secret
+          ADMIN_USERNAME: testadmin
+          ADMIN_EMAIL: testadmin@example.com
+          ADMIN_PASSWORD: testpassword
+
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Load frontend .env variables
+        run: cp frontend/.env.example frontend/.env
+        working-directory: ./frontend
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run frontend lint
+        run: npm run lint
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --ci --coverage --watchAll=false
+        working-directory: ./frontend
+        env:
+          CI: true # Required for Jest in CI environments
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: ./frontend
+
+  # Optional: Deployment job (example)
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment: production # Link to GitHub environment
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     - name: Build and push Docker images
+  #       # ... steps to login to Docker Hub, build prod images, push ...
+  #     - name: Deploy to Server (e.g., SSH into server and run docker-compose pull/up)
+  #       # ... use ssh actions, kubectl, ansible, etc. ...
+```

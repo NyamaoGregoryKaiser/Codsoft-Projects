@@ -1,0 +1,80 @@
+```css
+.list-page {
+  padding: 2rem 1rem;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  gap: 1rem; /* Space between items if they wrap */
+}
+
+.list-header h1 {
+  margin: 0;
+  font-size: 2.5rem;
+  color: var(--dark-bg);
+}
+
+.list-header .btn {
+  padding: 0.7rem 1.5rem;
+  font-size: 1rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.card-wrapper {
+  display: flex;
+  flex-direction: column;
+  background-color: #fff; /* Ensure background for card */
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  height: 100%;
+}
+
+.card-wrapper:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  background-color: var(--light-bg);
+  border-top: 1px solid var(--border-color);
+}
+
+.card-actions .btn-sm {
+  min-width: 70px; /* Ensure buttons have a minimum width */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .list-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .list-header h1 {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+  .list-header .btn {
+    width: 100%;
+    text-align: center;
+  }
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+```

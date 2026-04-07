@@ -1,0 +1,12 @@
+**To run K6 tests:**
+
+1.  Install K6: `brew install k6` (macOS), `sudo apt-get install k6` (Linux), etc.
+2.  Make sure your Docker Compose stack is running (`docker-compose up`).
+3.  From the project root, run: `k6 run k6-tests/load-test.js`
+4.  Optionally, export the API Base URL: `API_BASE_URL=http://localhost:5000/api/v1 k6 run k6-tests/load-test.js`
+
+---
+
+## 5. Documentation
+
+### Comprehensive README (Root README.md)
