@@ -1,0 +1,58 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-webscraperdb}
+    volumes:
+      - webscraper_db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development/tools, remove in production if using managed DB
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    command: ["./pre-start.sh"] # Script to wait for DB, run migrations, and seed
+    # For local development with hot-reloads, uncomment volumes below:
+    # volumes:
+    #   - ./backend/src:/app/src
+    #   - ./backend/package.json:/app/package.json
+    #   - ./backend/tsconfig.json:/app/tsconfig.json
+    #   - ./backend/node_modules:/app/node_modules # Ensure node_modules is mapped
+    # command: ["npm", "run", "dev"] # Use dev command for hot-reloads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    # For local development with hot-reloads, uncomment volumes below:
+    # volumes:
+    #   - ./frontend/src:/app/src
+    #   - ./frontend/public:/app/public
+    #   - ./frontend/package.json:/app/package.json
+    #   - ./frontend/node_modules:/app/node_modules
+    # command: ["npm", "start"] # Use start command for hot-reloads
+
+volumes:
+  webscraper_db_data:
+```

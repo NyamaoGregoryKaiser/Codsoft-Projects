@@ -1,0 +1,88 @@
+```yaml
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-lint-test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: './backend/yarn.lock'
+
+      - name: Install Backend dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint Backend
+        run: yarn lint
+
+      - name: Build Backend (TypeScript compilation)
+        run: yarn build
+
+      - name: Setup Test Database (PostgreSQL)
+        run: |
+          docker run --name test-db -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpassword -e POSTGRES_DB=test_webscraperdb -d -p 5433:5432 postgres:15-alpine
+          # Wait for DB to be ready
+          sleep 10
+        working-directory: . # Run docker command from root
+
+      - name: Configure Test Database URL for Backend
+        run: echo "DATABASE_URL_TEST=postgresql://testuser:testpassword@localhost:5433/test_webscraperdb?schema=public" >> $GITHUB_ENV
+
+      - name: Run Backend Tests
+        # Set DATABASE_URL to use the test DB from GITHUB_ENV
+        run: DATABASE_URL=$DATABASE_URL_TEST yarn test --coverage
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_TEST }}
+          JWT_SECRET: ci_test_secret
+          ADMIN_EMAIL: ci_admin@example.com
+          ADMIN_PASSWORD: ci_admin_password
+
+  frontend-lint-test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: './frontend/yarn.lock'
+
+      - name: Install Frontend dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint Frontend
+        run: yarn lint
+
+      - name: Run Frontend Tests
+        run: yarn test --watchAll=false
+
+      - name: Build Frontend
+        run: yarn build
+        env:
+          REACT_APP_API_BASE_URL: 'http://localhost:5000/api' # Mock API base URL for build
+```

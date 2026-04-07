@@ -1,0 +1,76 @@
+```prisma
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/models/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  role          UserRole       @default(USER)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  ScrapingJob   ScrapingJob[]
+}
+
+type Selector {
+  name     String
+  selector String
+}
+
+enum ScrapingJobStatus {
+  ACTIVE
+  INACTIVE
+  RUNNING
+}
+
+model ScrapingJob {
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  url           String
+  cssSelectors  Selector[]       @db.Json
+  cronSchedule  String? // CRON string for scheduling
+  isActive      Boolean          @default(true)
+  status        ScrapingJobStatus @default(INACTIVE) // Current status of the job
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  ScrapingResult ScrapingResult[]
+
+  @@index([userId])
+}
+
+enum ScrapingResultStatus {
+  SUCCESS
+  FAILED
+}
+
+model ScrapingResult {
+  id        String                 @id @default(cuid())
+  jobId     String
+  job       ScrapingJob            @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status    ScrapingResultStatus
+  error     String? // If status is FAILED, store error message
+  data      Json?   // Storing array of objects, e.g., [{title: 'x', price: 'y'}, ...]
+  timestamp DateTime               @default(now())
+
+  @@index([jobId])
+}
+```
