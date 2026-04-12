@@ -1,0 +1,1 @@
+*   **Error Response (404 Not Found):** `application/json`

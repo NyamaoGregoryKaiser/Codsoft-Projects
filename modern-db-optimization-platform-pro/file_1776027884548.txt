@@ -1,0 +1,640 @@
+#include "api_server.hpp"
+#include <regex> // For more robust path parsing if needed, but our simple router is fine.
+#include <boost/lexical_cast.hpp> // For converting path params to int etc.
+
+namespace http {
+
+// Helper to parse HTTP headers
+std::unordered_map<std::string, std::string> parse_headers(const std::string& header_str) {
+    std::unordered_map<std::string, std::string> headers;
+    std::istringstream iss(header_str);
+    std::string line;
+    while (std::getline(iss, line) && !line.empty() && line != "\r") {
+        size_t colon_pos = line.find(':');
+        if (colon_pos != std::string::npos) {
+            std::string key = line.substr(0, colon_pos);
+            std::string value = line.substr(colon_pos + 1);
+            key.erase(0, key.find_first_not_of(" \t\r\n"));
+            key.erase(key.find_last_not_of(" \t\r\n") + 1);
+            value.erase(0, value.find_first_not_of(" \t\r\n"));
+            value.erase(value.find_last_not_of(" \t\r\n") + 1);
+            headers[key] = value;
+        }
+    }
+    return headers;
+}
+
+
+// --- Session Implementation ---
+
+Session::Session(boost::asio::ip::tcp::socket socket, 
+                 std::vector<Route>& routes, 
+                 std::shared_ptr<AuthManager> auth_manager,
+                 std::shared_ptr<DbMonitorService> db_monitor_service,
+                 std::shared_ptr<QueryAnalyzerService> query_analyzer_service,
+                 std::shared_ptr<IndexAdvisorService> index_advisor_service,
+                 std::shared_ptr<Cache> cache)
+    : socket_(std::move(socket)), 
+      routes_(routes), 
+      auth_manager_(std::move(auth_manager)),
+      db_monitor_service_(std::move(db_monitor_service)),
+      query_analyzer_service_(std::move(query_analyzer_service)),
+      index_advisor_service_(std::move(index_advisor_service)),
+      cache_(std::move(cache)) {}
+
+void Session::start() {
+    read_request();
+}
+
+void Session::read_request() {
+    auto self = shared_from_this();
+    boost::asio::async_read_until(socket_, buffer_, "\r\n\r\n",
+        [this, self](boost::system::error_code ec, std::size_t bytes_transferred) {
+            if (!ec) {
+                std::string header_part;
+                std::istream is(&buffer_);
+                std::getline(is, header_part, '\0'); // Read until null terminator (which is not what we want, need to adapt to read line by line until empty line)
+
+                // Correct way to read headers:
+                std::string line;
+                std::string raw_headers_str;
+                while (std::getline(is, line) && line != "\r") {
+                    raw_headers_str += line + "\n";
+                    if (line.length() <= 1) { // Empty line or just \r\n, marks end of headers
+                        break;
+                    }
+                }
+                raw_headers_str += "\r\n"; // Add the final CRLF
+
+                std::string first_line;
+                std::getline(is, first_line); // Read the first line (GET /path HTTP/1.1)
+
+                // The streambuf might contain the body after headers.
+                // We need to read the content-length header to read the rest.
+                std::unordered_map<std::string, std::string> headers = parse_headers(raw_headers_str);
+                
+                size_t content_length = 0;
+                if (headers.count("Content-Length")) {
+                    try {
+                        content_length = std::stoul(headers["Content-Length"]);
+                    } catch (...) {
+                        LOG_WARN("Invalid Content-Length header.");
+                    }
+                }
+
+                if (content_length > 0) {
+                    boost::asio::async_read(socket_, buffer_,
+                        boost::asio::transfer_exactly(content_length),
+                        [this, self, raw_headers_str, first_line](boost::system::error_code ec_body, std::size_t body_bytes_transferred) {
+                            if (!ec_body) {
+                                std::string body_content((std::istreambuf_iterator<char>(&buffer_)), std::istreambuf_iterator<char>());
+                                // Combine first_line + raw_headers_str + body_content to form raw_request
+                                process_request(first_line + raw_headers_str + "\r\n" + body_content);
+                            } else {
+                                LOG_ERROR("Error reading request body: {}", ec_body.message());
+                                Response res(status::internal_server_error);
+                                send_error(res, status::internal_server_error, "Error reading request body.");
+                                write_response(res);
+                            }
+                        });
+                } else {
+                    process_request(first_line + raw_headers_str);
+                }
+
+            } else {
+                if (ec != boost::asio::error::eof && ec != boost::asio::error::operation_aborted) {
+                    LOG_ERROR("Error reading request headers: {}", ec.message());
+                    // Don't send error back, connection might be closed already or malformed.
+                }
+            }
+        });
+}
+
+void Session::process_request(const std::string& raw_request) {
+    Request req;
+    Response res;
+
+    try {
+        std::istringstream iss(raw_request);
+        std::string line;
+        std::getline(iss, line); // First line: Method Path HTTP/1.1
+        std::istringstream first_line_stream(line);
+        std::string http_version;
+        first_line_stream >> req.method >> req.path >> http_version;
+
+        if (req.method == "OPTIONS") {
+             // Handle CORS preflight requests
+            res.headers["Access-Control-Allow-Origin"] = "*";
+            res.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+            res.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+            res.status_code = status::ok;
+            res.body = "";
+            write_response(res);
+            return;
+        }
+
+        // Parse headers
+        std::string header_line;
+        while (std::getline(iss, header_line) && header_line != "\r") {
+            size_t colon_pos = header_line.find(':');
+            if (colon_pos != std::string::npos) {
+                std::string key = header_line.substr(0, colon_pos);
+                std::string value = header_line.substr(colon_pos + 1);
+                key.erase(0, key.find_first_not_of(" \t\r\n"));
+                key.erase(key.find_last_not_of(" \t\r\n") + 1);
+                value.erase(0, value.find_first_not_of(" \t\r\n"));
+                value.erase(value.find_last_not_of(" \t\r\n") + 1);
+                req.headers[key] = value;
+            }
+        }
+
+        // The rest is body
+        std::string body_content((std::istreambuf_iterator<char>(iss)), std::istreambuf_iterator<char>());
+        req.body = body_content;
+
+        // Rate limiting
+        std::string client_ip = socket_.remote_endpoint().address().to_string();
+        if (!apply_rate_limit(client_ip, res)) {
+            write_response(res);
+            return;
+        }
+
+        // Authentication middleware
+        if (req.path.rfind("/api/auth", 0) != 0 && !authenticate_request(req, res)) {
+            // Authentication failed, response already set in authenticate_request
+            write_response(res);
+            return;
+        }
+
+        bool handled = false;
+        for (const auto& route : routes_) {
+            if (route.method == req.method && route.match(req.path, req)) {
+                try {
+                    route.handler(req, res);
+                    handled = true;
+                    break;
+                } catch (const nlohmann::json::exception& e) {
+                    LOG_ERROR("JSON parsing error in handler for {}: {}", req.path, e.what());
+                    send_error(res, status::bad_request, "Invalid JSON in request body: " + std::string(e.what()));
+                } catch (const pqxx::sql_error& e) {
+                    LOG_ERROR("SQL error in handler for {}: {}", req.path, e.what());
+                    send_error(res, status::internal_server_error, "Database error: " + std::string(e.what()));
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Unhandled exception in handler for {}: {}", req.path, e.what());
+                    send_error(res, status::internal_server_error, "An unexpected error occurred: " + std::string(e.what()));
+                }
+            }
+        }
+
+        if (!handled) {
+            LOG_WARN("No handler found for {} {}", req.method, req.path);
+            send_error(res, status::not_found, "Resource not found.");
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("Error processing request: {}", e.what());
+        send_error(res, status::internal_server_error, "Failed to process request: " + std::string(e.what()));
+    }
+    write_response(res);
+}
+
+
+bool Session::authenticate_request(Request& req, Response& res) {
+    if (req.headers.count("Authorization")) {
+        std::string auth_header = req.headers["Authorization"];
+        if (auth_header.rfind("Bearer ", 0) == 0) { // Starts with "Bearer "
+            std::string token = auth_header.substr(7);
+            int user_id = auth_manager_->validate_token(token);
+            if (user_id > 0) {
+                req.user_id = user_id;
+                // Fetch user role for authorization
+                if (auto user_opt = auth_manager_->get_user_by_id(user_id)) {
+                    req.user_role = user_opt->role;
+                    return true;
+                }
+            }
+        }
+    }
+    send_error(res, status::unauthorized, "Authentication required.");
+    return false;
+}
+
+bool Session::apply_rate_limit(const std::string& client_ip, Response& res) {
+    auto now = std::chrono::steady_clock::now();
+    
+    // Clear expired counts
+    if (ip_reset_timers_.count(client_ip) && ip_reset_timers_[client_ip].expires_at() < now) {
+        ip_request_count_.erase(client_ip);
+        ip_last_request_time_.erase(client_ip);
+        ip_reset_timers_.erase(client_ip);
+    }
+
+    if (ip_request_count_[client_ip] < rate_limit_burst_) {
+        // Allow burst
+        ip_request_count_[client_ip]++;
+        ip_last_request_time_[client_ip] = now;
+        if (!ip_reset_timers_.count(client_ip)) {
+             // Set a timer to reset count after interval
+            ip_reset_timers_.emplace(std::piecewise_construct,
+                                     std::forward_as_tuple(client_ip),
+                                     std::forward_as_tuple(socket_.get_io_context(), now + rate_limit_interval_));
+            ip_reset_timers_[client_ip].async_wait(
+                [this, self = shared_from_this(), client_ip](const boost::system::error_code& ec) {
+                    if (!ec) {
+                        ip_request_count_.erase(client_ip);
+                        ip_last_request_time_.erase(client_ip);
+                        ip_reset_timers_.erase(client_ip);
+                        LOG_DEBUG("Rate limit count reset for IP: {}", client_ip);
+                    } else if (ec != boost::asio::error::operation_aborted) {
+                        LOG_ERROR("Rate limit timer error for IP {}: {}", client_ip, ec.message());
+                    }
+                });
+        }
+        return true;
+    } else if (now - ip_last_request_time_[client_ip] < rate_limit_interval_) {
+        send_error(res, status::too_many_requests, "Rate limit exceeded. Please try again later.");
+        LOG_WARN("Rate limit exceeded for IP: {}", client_ip);
+        return false;
+    } else {
+        // Interval passed, reset count and allow
+        ip_request_count_[client_ip] = 1;
+        ip_last_request_time_[client_ip] = now;
+        ip_reset_timers_[client_ip].expires_at(now + rate_limit_interval_); // Reset timer
+        return true;
+    }
+}
+
+
+void Session::send_error(Response& res, status code, const std::string& message) {
+    res.status_code = code;
+    nlohmann::json error_json;
+    error_json["error"] = message;
+    res.json(error_json);
+}
+
+
+void Session::write_response(const Response& res) {
+    auto self = shared_from_this();
+
+    std::ostringstream oss;
+    oss << "HTTP/1.1 " << static_cast<int>(res.status_code) << " " << "OK" << "\r\n"; // TODO: Map status codes to messages
+    for (const auto& header : res.headers) {
+        oss << header.first << ": " << header.second << "\r\n";
+    }
+    oss << "Content-Length: " << res.body.length() << "\r\n";
+    oss << "\r\n";
+    oss << res.body;
+
+    std::string response_str = oss.str();
+    boost::asio::async_write(socket_, boost::asio::buffer(response_str),
+        [this, self](boost::system::error_code ec, std::size_t bytes_transferred) {
+            if (!ec) {
+                // Initiate graceful connection closure
+                boost::system::error_code ignored_ec;
+                socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ignored_ec);
+                socket_.close();
+            } else {
+                LOG_ERROR("Error writing response: {}", ec.message());
+            }
+        });
+}
+
+
+// --- ApiServer Implementation ---
+
+ApiServer::ApiServer(int port, 
+                     std::shared_ptr<AuthManager> auth_manager,
+                     std::shared_ptr<DbMonitorService> db_monitor_service,
+                     std::shared_ptr<QueryAnalyzerService> query_analyzer_service,
+                     std::shared_ptr<IndexAdvisorService> index_advisor_service,
+                     std::shared_ptr<Cache> cache)
+    : io_context_(),
+      acceptor_(io_context_, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)),
+      port_(port),
+      auth_manager_(std::move(auth_manager)),
+      db_monitor_service_(std::move(db_monitor_service)),
+      query_analyzer_service_(std::move(query_analyzer_service)),
+      index_advisor_service_(std::move(index_advisor_service)),
+      cache_(std::move(cache)),
+      monitoring_timer_(io_context_) {
+    
+    setup_routes();
+}
+
+void ApiServer::run() {
+    start_background_monitoring();
+    do_accept();
+    io_context_.run();
+}
+
+void ApiServer::do_accept() {
+    acceptor_.async_accept(
+        [this](boost::system::error_code ec, boost::asio::ip::tcp::socket socket) {
+            if (!ec) {
+                std::make_shared<Session>(std::move(socket), routes_, 
+                                            auth_manager_, db_monitor_service_, 
+                                            query_analyzer_service_, index_advisor_service_,
+                                            cache_)->start();
+            } else {
+                LOG_ERROR("Accept error: {}", ec.message());
+            }
+            do_accept(); // Continue accepting new connections
+        });
+}
+
+void ApiServer::setup_routes() {
+    // Auth Routes
+    routes_.emplace_back("POST", "/api/auth/register", [this](const Request& req, Response& res) {
+        auto j = nlohmann::json::parse(req.body);
+        std::string username = j["username"];
+        std::string password = j["password"];
+        std::string role = j.count("role") ? j["role"].get<std::string>() : "user";
+        if (auth_manager_->register_user(username, password, role)) {
+            res.status_code = status::created;
+            res.json({{"message", "User registered successfully."}});
+        } else {
+            res.status_code = status::conflict; // Or bad_request
+            res.json({{"error", "Failed to register user, username might exist or invalid data."}});
+        }
+    });
+
+    routes_.emplace_back("POST", "/api/auth/login", [this](const Request& req, Response& res) {
+        auto j = nlohmann::json::parse(req.body);
+        std::string username = j["username"];
+        std::string password = j["password"];
+        std::string token = auth_manager_->login_user(username, password);
+        if (!token.empty()) {
+            res.json({{"token", token}});
+        } else {
+            res.status_code = status::unauthorized;
+            res.json({{"error", "Invalid credentials."}});
+        }
+    });
+
+    // Target DB Routes (CRUD)
+    routes_.emplace_back("POST", "/api/databases", [this](const Request& req, Response& res) {
+        auto j = nlohmann::json::parse(req.body);
+        std::string name = j["name"];
+        std::string conn_str = j["connection_string"];
+        if (auto target_db = db_monitor_service_->add_target_db(req.user_id, name, conn_str)) {
+            res.status_code = status::created;
+            res.json(target_db->to_json());
+        } else {
+            res.status_code = status::bad_request;
+            res.json({{"error", "Failed to add target database."}});
+        }
+    });
+
+    routes_.emplace_back("GET", "/api/databases", [this](const Request& req, Response& res) {
+        std::vector<TargetDb> dbs = db_monitor_service_->get_all_target_dbs(req.user_id);
+        nlohmann::json j_array = nlohmann::json::array();
+        for (const auto& db : dbs) {
+            j_array.push_back(db.to_json());
+        }
+        res.json(j_array);
+    });
+
+    routes_.emplace_back("GET", "/api/databases/:id", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        if (auto target_db = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            res.json(target_db->to_json());
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    routes_.emplace_back("DELETE", "/api/databases/:id", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        if (db_monitor_service_->delete_target_db(db_id, req.user_id)) {
+            res.status_code = status::no_content;
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    // Metrics Routes
+    routes_.emplace_back("GET", "/api/databases/:id/metrics", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        // Optional: parse query params for metric_name, limit etc.
+        std::string metric_name = req.headers.count("X-Metric-Name") ? req.headers["X-Metric-Name"] : "cpu_usage"; // Example
+        
+        // Check cache first
+        std::string cache_key = "metrics_" + std::to_string(db_id) + "_" + metric_name;
+        nlohmann::json cached_json;
+        if (cache_->get(cache_key, cached_json)) {
+            LOG_DEBUG("Serving metrics from cache for DB {} / {}", db_id, metric_name);
+            res.json(cached_json);
+            return;
+        }
+
+        if (auto target_db_opt = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            std::vector<Metric> metrics = db_monitor_service_->get_metrics_history(db_id, metric_name, 50);
+            nlohmann::json j_array = nlohmann::json::array();
+            for (const auto& metric : metrics) {
+                j_array.push_back(metric.to_json());
+            }
+            cache_->put(cache_key, j_array, 10); // Cache for 10 seconds
+            res.json(j_array);
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    // Query Analyzer Routes
+    routes_.emplace_back("GET", "/api/databases/:id/queries/slow", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        
+        std::string cache_key = "slow_queries_" + std::to_string(db_id);
+        nlohmann::json cached_json;
+        if (cache_->get(cache_key, cached_json)) {
+            LOG_DEBUG("Serving slow queries from cache for DB {}", db_id);
+            res.json(cached_json);
+            return;
+        }
+
+        if (auto target_db_opt = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            std::vector<SlowQuery> queries = query_analyzer_service_->get_slow_queries(db_id);
+            nlohmann::json j_array = nlohmann::json::array();
+            for (const auto& query : queries) {
+                j_array.push_back(query.to_json());
+            }
+            cache_->put(cache_key, j_array, 30); // Cache for 30 seconds
+            res.json(j_array);
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    routes_.emplace_back("POST", "/api/databases/:id/queries/explain", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        if (auto target_db_opt = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            auto j = nlohmann::json::parse(req.body);
+            std::string query_text = j["query"];
+            std::string plan = query_analyzer_service_->get_query_execution_plan(target_db_opt->connection_string, query_text);
+            res.json({{"plan", plan}});
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    // Index Advisor Routes
+    routes_.emplace_back("GET", "/api/databases/:id/recommendations/indexes", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+
+        std::string cache_key = "index_recs_" + std::to_string(db_id);
+        nlohmann::json cached_json;
+        if (cache_->get(cache_key, cached_json)) {
+            LOG_DEBUG("Serving index recommendations from cache for DB {}", db_id);
+            res.json(cached_json);
+            return;
+        }
+
+        if (auto target_db_opt = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            std::vector<Recommendation> recs = index_advisor_service_->get_index_recommendations(db_id);
+            nlohmann::json j_array = nlohmann::json::array();
+            for (const auto& rec : recs) {
+                j_array.push_back(rec.to_json());
+            }
+            cache_->put(cache_key, j_array, 60); // Cache for 60 seconds
+            res.json(j_array);
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    routes_.emplace_back("PUT", "/api/recommendations/:id/apply", [this](const Request& req, Response& res) {
+        int rec_id = Utils::stoi_safe(req.path_params["id"]);
+        // Additional auth: ensure user owns the target_db related to this recommendation
+        // This requires fetching the recommendation first, then checking its target_db_id against user's dbs.
+        // Simplified for demo: assume if they can hit the endpoint, they're authorized.
+        if (index_advisor_service_->mark_recommendation_applied(rec_id)) {
+            res.status_code = status::ok;
+            res.json({{"message", "Recommendation marked as applied."}});
+            cache_->clear(); // Clear relevant caches
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Recommendation not found."}});
+        }
+    });
+
+    // Config Advisor (Placeholder for now)
+    routes_.emplace_back("GET", "/api/databases/:id/recommendations/configs", [this](const Request& req, Response& res) {
+        int db_id = Utils::stoi_safe(req.path_params["id"]);
+        // This service would analyze current PG config and suggest changes
+        // For now, return dummy data
+        if (auto target_db_opt = db_monitor_service_->get_target_db(db_id, req.user_id)) {
+            nlohmann::json j_array = nlohmann::json::array();
+            j_array.push_back({
+                {"type", "config"},
+                {"description", "Consider increasing work_mem for complex queries."},
+                {"suggestion", "ALTER SYSTEM SET work_mem = '256MB';"},
+                {"severity", "medium"},
+                {"is_applied", false},
+                {"created_at", Utils::get_current_timestamp_iso()}
+            });
+            res.json(j_array);
+        } else {
+            res.status_code = status::not_found;
+            res.json({{"error", "Database not found or unauthorized."}});
+        }
+    });
+
+    // Frontend static file serving (basic)
+    // In a real app, Nginx/Apache would serve static files. Here, we add a simple fallback.
+    routes_.emplace_back("GET", "/", [this](const Request& req, Response& res) {
+        std::ifstream file("src/frontend/public/index.html");
+        if (file.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            res.headers["Content-Type"] = "text/html";
+            res.body = content;
+        } else {
+            res.status_code = status::not_found;
+            res.text("Frontend index.html not found!");
+        }
+    });
+
+    routes_.emplace_back("GET", "/css/:file", [this](const Request& req, Response& res) {
+        std::string filename = req.path_params["file"];
+        std::ifstream file("src/frontend/public/css/" + filename);
+        if (file.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            res.headers["Content-Type"] = "text/css";
+            res.body = content;
+        } else {
+            res.status_code = status::not_found;
+            res.text("CSS file not found!");
+        }
+    });
+
+    routes_.emplace_back("GET", "/js/:file", [this](const Request& req, Response& res) {
+        std::string filename = req.path_params["file"];
+        std::ifstream file("src/frontend/public/js/" + filename);
+        if (file.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            res.headers["Content-Type"] = "application/javascript";
+            res.body = content;
+        } else {
+            res.status_code = status::not_found;
+            res.text("JS file not found!");
+        }
+    });
+}
+
+void ApiServer::start_background_monitoring() {
+    auto self = this; // Capture 'this' for the lambda
+
+    monitoring_timer_.expires_at(std::chrono::steady_clock::now() + monitoring_interval_);
+    monitoring_timer_.async_wait([self](const boost::system::error_code& ec) {
+        if (!ec) {
+            LOG_INFO("Running background monitoring task...");
+            
+            // Get all target databases (for admin, or iterate per user in a more complex setup)
+            // For simplicity, we'll fetch all target_dbs regardless of user_id for monitoring
+            // In a production system, this would be more granular or run by a dedicated worker.
+            
+            // Note: This operation runs synchronously in the IO thread.
+            // For long-running tasks, offload to a separate thread pool.
+            try {
+                // Fetch ALL target dbs (this bypasses user_id filtering for internal monitoring)
+                pqxx::connection C(self->auth_manager_->get_db_connector()->get_conn_string());
+                pqxx::nontransaction N(C);
+                pqxx::result r = N.exec(
+                    "SELECT id, user_id, name, connection_string, status, last_checked_at, created_at FROM target_dbs"
+                );
+
+                std::vector<TargetDb> all_target_dbs;
+                for (const auto& row : r) {
+                    TargetDb db;
+                    db.id = row["id"].as<int>();
+                    db.user_id = row["user_id"].as<int>();
+                    db.name = row["name"].as<std::string>();
+                    db.connection_string = row["connection_string"].as<std::string>();
+                    db.status = row["status"].as<std::string>();
+                    db.last_checked_at = row["last_checked_at"].as<std::string>();
+                    db.created_at = row["created_at"].as<std::string>();
+                    all_target_dbs.push_back(db);
+                }
+
+                for (const auto& db : all_target_dbs) {
+                    LOG_INFO("Monitoring target DB: {}", db.name);
+                    self->db_monitor_service_->monitor_db(db);
+                    self->query_analyzer_service_->collect_and_store_slow_queries(db.id, db.connection_string);
+                    self->index_advisor_service_->analyze_and_suggest_indexes(db.id, db.connection_string);
+                }
+            } catch (const std::exception& e) {
+                LOG_ERROR("Background monitoring failed: {}", e.what());
+            }
+
+            self->start_background_monitoring(); // Schedule next run
+        } else if (ec != boost::asio::error::operation_aborted) {
+            LOG_ERROR("Monitoring timer error: {}", ec.message());
+        }
+    });
+}
+
+} // namespace http

@@ -1,0 +1,34 @@
+#ifndef INDEX_ADVISOR_SERVICE_HPP
+#define INDEX_ADVISOR_SERVICE_HPP
+
+#include <string>
+#include <memory>
+#include <vector>
+#include <pqxx/pqxx>
+#include "db/postgres_connector.hpp"
+#include "common/logger.hpp"
+#include "common/utils.hpp"
+#include "models/target_db.hpp"
+#include "models/metric.hpp" // For Recommendation
+
+class IndexAdvisorService {
+public:
+    IndexAdvisorService(std::shared_ptr<PostgresConnector> system_db_connector);
+
+    // Analyze target DB and generate index recommendations
+    bool analyze_and_suggest_indexes(int target_db_id, const std::string& target_conn_str);
+
+    // Get stored index recommendations for a target DB
+    std::vector<Recommendation> get_index_recommendations(int target_db_id);
+
+    // Mark a recommendation as applied
+    bool mark_recommendation_applied(int recommendation_id);
+
+private:
+    std::shared_ptr<PostgresConnector> system_db_connector_;
+
+    // Helper to identify potential missing indexes based on pg_stat_user_tables and pg_stat_statements
+    std::vector<Recommendation> identify_missing_indexes(int target_db_id, const PostgresConnector& target_db_connector);
+};
+
+#endif // INDEX_ADVISOR_SERVICE_HPP
