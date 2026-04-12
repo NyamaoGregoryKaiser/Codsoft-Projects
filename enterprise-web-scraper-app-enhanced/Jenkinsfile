@@ -1,0 +1,169 @@
+```groovy
+// Jenkinsfile for CI/CD Pipeline
+
+pipeline {
+    agent {
+        docker {
+            image 'docker/compose:1.29.2' // Or a suitable image with Docker and Docker Compose
+            args '-u root:root' // Run as root to allow docker commands
+        }
+    }
+
+    environment {
+        DOCKER_IMAGE_BACKEND = "your_registry/scraper-backend:${env.BUILD_ID}"
+        DOCKER_IMAGE_FRONTEND = "your_registry/scraper-frontend:${env.BUILD_ID}"
+        DOCKER_COMPOSE_FILE = "docker-compose.ci.yml" // A dedicated compose file for CI/testing
+        # Ensure a .env file with appropriate DB credentials is available or passed securely
+        # for testing stage in CI. For this example, we rely on `db` service defaults.
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                script {
+                    // Build backend
+                    sh "docker build -t ${DOCKER_IMAGE_BACKEND} -f docker/Dockerfile.backend ."
+                    // Build frontend
+                    sh "docker build -t ${DOCKER_IMAGE_FRONTEND} -f docker/Dockerfile.frontend --build-arg REACT_APP_API_BASE_URL=/api ."
+                }
+            }
+        }
+
+        stage('Run Unit & Integration Tests') {
+            agent {
+                docker {
+                    image 'debian:stable-slim' # Use a base image with build tools for tests
+                    args '-u root:root'
+                }
+            }
+            steps {
+                script {
+                    // Install build dependencies for test runner
+                    sh "apt-get update && apt-get install -y build-essential cmake git libcurl4-openssl-dev libpqxx-dev libpq-dev libssl-dev uuid-dev zlib1g-dev pkg-config --no-install-recommends"
+                    sh "rm -rf /var/lib/apt/lists/*"
+
+                    // Use the same build process as in Dockerfile.backend to ensure consistent environment
+                    sh "cmake -B build -DCMAKE_BUILD_TYPE=Debug" # Build with debug info for tests
+                    sh "cmake --build build -j$(nproc)"
+
+                    // Start database service for integration tests
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} up -d db"
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} ps"
+
+                    // Wait for DB to be healthy (basic check, more robust needed for production)
+                    sh "until docker-compose -f ${DOCKER_COMPOSE_FILE} exec db pg_isready -U user -d scraper_db; do echo 'Waiting for DB...'; sleep 2; done"
+
+                    // Run C++ tests
+                    sh "cd build && ctest --output-on-failure"
+
+                    // If frontend has JS tests (e.g., Jest, React Testing Library)
+                    // sh "npm test --prefix web" // Assuming 'npm test' in web dir runs JS tests
+                }
+            }
+            post {
+                always {
+                    // Clean up test database container
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} down"
+                }
+            }
+        }
+
+        stage('API Tests (Docker Compose)') {
+            steps {
+                script {
+                    // Start backend and DB for API tests
+                    // Use the built images from the 'Build Docker Images' stage
+                    sh """
+                        DOCKER_IMAGE_BACKEND=${DOCKER_IMAGE_BACKEND} \
+                        DOCKER_IMAGE_FRONTEND=${DOCKER_IMAGE_FRONTEND} \
+                        docker-compose -f ${DOCKER_COMPOSE_FILE} up -d
+                    """
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} ps"
+
+                    // Wait for backend to be healthy
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} exec backend curl -f http://localhost:9080/health"
+                    sh "echo 'Backend is healthy! Running API tests...'"
+
+                    // Example API test using curl or a dedicated test runner (e.g., Newman for Postman collections)
+                    // This is a minimal example. A full API test suite would be more extensive.
+                    // For example, using a simple python script with 'requests' to hit endpoints.
+                    // Let's test the health endpoint and login (requires .env)
+                    def api_host = "http://localhost:9080"
+                    sh """
+                        # Health check
+                        curl -s -f ${api_host}/health
+
+                        # Login test (requires a seed user and correct JWT_SECRET in .env)
+                        curl -s -X POST -H "Content-Type: application/json" \
+                             -d '{"username":"testuser", "password":"password123"}' \
+                             ${api_host}/api/v1/auth/login > login_response.json
+                        cat login_response.json
+                        # Add checks for success and token presence
+                        if ! grep -q "token" login_response.json; then
+                            echo "API Login Test FAILED: No token found."
+                            exit 1
+                        fi
+                        echo "API tests passed."
+                    """
+                }
+            }
+            post {
+                always {
+                    sh "docker-compose -f ${DOCKER_COMPOSE_FILE} down"
+                }
+            }
+        }
+
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    // Ensure Docker login if pushing to a private registry
+                    // sh "docker login -u your_docker_user -p your_docker_pass your_registry"
+                    sh "docker push ${DOCKER_IMAGE_BACKEND}"
+                    sh "docker push ${DOCKER_IMAGE_FRONTEND}"
+                }
+            }
+        }
+
+        stage('Deploy (Optional)') {
+            when {
+                branch 'main' // Only deploy from main branch
+            }
+            steps {
+                script {
+                    echo "Deploying to production environment..."
+                    // This could involve:
+                    // - SSHing to a server and running `docker-compose up` with new images
+                    // - Updating Kubernetes deployments
+                    // - Using a cloud provider's deployment tools (e.g., AWS ECS, Google Cloud Run)
+                    // Example: update a remote docker-compose file
+                    // sh "ssh user@your_server 'cd /path/to/app && docker-compose pull && docker-compose up -d'"
+                    echo "Deployment completed for ${env.BUILD_ID}."
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+            script {
+                // Ensure all Docker containers from this build are stopped and removed
+                sh "docker-compose -f ${DOCKER_COMPOSE_FILE} down --rmi all || true"
+            }
+        }
+        success {
+            echo 'Pipeline finished successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
+```

@@ -1,0 +1,63 @@
+```dockerfile
+# Dockerfile for the C++ Scraper Backend
+
+# Use a base image with C++ development tools
+# Debian is good for smaller images and common tools
+FROM debian:stable-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libcurl4-openssl-dev \
+    libpqxx-dev \
+    libpq-dev \
+    libssl-dev \
+    uuid-dev \
+    zlib1g-dev \
+    pkg-config \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy CMakeLists.txt and source code
+COPY CMakeLists.txt ./
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY config/ ./.env.example # Copy example, user will provide .env via bind mount
+
+# Configure and build
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release
+RUN cmake --build build -j$(nproc)
+
+# --- Runtime Image ---
+FROM debian:stable-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4 \
+    libpq5 \
+    libssl3 \
+    libuuid1 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built executable and necessary runtime files from the builder stage
+COPY --from=builder /app/build/scraper_backend ./scraper_backend
+# Copy config and logs directories
+RUN mkdir -p /app/config /app/logs
+COPY --from=builder /app/.env.example /app/config/.env.example
+
+# Expose the port the application runs on
+EXPOSE 9080
+
+# Command to run the application
+# We use /app/config/.env for runtime configuration
+CMD ["./scraper_backend"]
+```

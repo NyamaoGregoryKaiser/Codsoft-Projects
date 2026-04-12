@@ -1,0 +1,65 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: scraper_db
+    restart: always
+    environment:
+      POSTGRES_DB: scraper_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d scraper_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: scraper_backend
+    restart: always
+    env_file:
+      - ./config/.env
+    ports:
+      - "9080:9080"
+    volumes:
+      - ./config:/app/config:ro # Mount .env for runtime
+      - ./logs:/app/logs        # Mount logs for persistence
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s # Give backend time to connect to DB
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # Pass the API base URL to the React app during build
+        REACT_APP_API_BASE_URL: /api
+    container_name: scraper_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db_data:
+```

@@ -1,0 +1,55 @@
+```yaml
+# docker-compose.ci.yml
+# This file is used specifically for CI/CD testing environments.
+# It uses build context for 'backend' and 'frontend' images, which allows Jenkins
+# to build them from source during the test stage.
+# For API tests, it would rely on pre-built images, hence the use of `image: ${DOCKER_IMAGE_BACKEND}`.
+
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ci_db_${RANDOM_ID} # Use random ID for isolation in parallel builds
+    environment:
+      POSTGRES_DB: scraper_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d scraper_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s # Give DB time to initialize before health check fails
+
+  # This backend service is for API tests, it expects pre-built images
+  backend:
+    # Use images built in previous CI stages
+    image: ${DOCKER_IMAGE_BACKEND:-scraper-backend:latest} # Default if not set
+    container_name: ci_backend_${RANDOM_ID}
+    env_file:
+      - ./config/.env # Assuming .env is configured for CI
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Frontend service is included for full system API tests, though not directly tested itself
+  frontend:
+    image: ${DOCKER_IMAGE_FRONTEND:-scraper-frontend:latest}
+    container_name: ci_frontend_${RANDOM_ID}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  ci_db_data_${RANDOM_ID}: # Use random ID for isolated volume
+```
