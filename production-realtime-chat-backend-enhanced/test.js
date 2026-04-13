@@ -1,0 +1,1 @@
+**frontend/src/tests/components/AuthForm.test.tsx**
