@@ -1,0 +1,27 @@
+<config xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'
+        xmlns='http://www.ehcache.org/v3'
+        xsi:schemaLocation="http://www.ehcache.org/v3 http://www.ehcache.org/schema/ehcache-core-3.10.xsd">
+
+    <cache-template name="default">
+        <expiry>
+            <ttl unit="seconds">300</ttl> <!-- Default Time-To-Live: 5 minutes -->
+        </expiry>
+        <resources>
+            <heap unit="entries">1000</heap> <!-- Max 1000 entries in heap -->
+            <offheap unit="MB">10</offheap> <!-- Max 10 MB off-heap -->
+        </resources>
+    </cache-template>
+
+    <cache alias="scraperDefinitions" uses-template="default">
+        <expiry>
+            <ttl unit="seconds">60</ttl> <!-- Scraper definitions cache: 1 minute TTL -->
+        </expiry>
+        <resources>
+            <heap unit="entries">200</heap>
+        </resources>
+    </cache>
+
+    <!-- Define other caches as needed -->
+    <!-- <cache alias="users" uses-template="default"/> -->
+
+</config>

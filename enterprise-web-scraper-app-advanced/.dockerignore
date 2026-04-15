@@ -1,0 +1,16 @@
+.git
+.mvn
+.idea
+target/
+*.iml
+.DS_Store
+*.log
+npm-debug.log
+docker-compose.yml
+Dockerfile
+README.md
+ARCHITECTURE.md
+API.md
+DEPLOYMENT.md
+.github/
+```
