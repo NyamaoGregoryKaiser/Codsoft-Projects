@@ -1,0 +1,50 @@
+```html
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<div class="starter-template">
+    <h1>Admin Dashboard</h1>
+    <p class="lead">Welcome, {{ user.username }}! This is your admin control panel.</p>
+
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header">
+                    User Management
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Manage users and roles</h5>
+                    <p class="card-text">View all users, update their roles, or deactivate accounts.</p>
+                    <a href="#" class="btn btn-primary disabled">Go to User List (API Only)</a>
+                    <p class="text-muted mt-2"><i>(For this demo, user management is primarily via API. See API Docs.)</i></p>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    Content Moderation
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Manage posts and comments</h5>
+                    <p class="card-text">Review, edit, or delete any post or comment on the platform.</p>
+                    <a href="#" class="btn btn-primary disabled">Go to Content Review (API Only)</a>
+                    <p class="text-muted mt-2"><i>(Content moderation is primarily via API. See API Docs.)</i></p>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    System Monitoring
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">View application logs</h5>
+                    <p class="card-text">Access detailed application logs for troubleshooting and security auditing.</p>
+                    <a href="#" class="btn btn-secondary disabled">View Logs (Server access required)</a>
+                    <p class="text-muted mt-2"><i>(Logs are typically accessed directly on the server or via a centralized logging system like ELK/Grafana.)</i></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```

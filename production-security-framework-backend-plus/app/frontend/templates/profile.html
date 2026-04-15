@@ -1,0 +1,25 @@
+```html
+{% extends "base.html" %}
+{% block title %}User Profile{% endblock %}
+{% block content %}
+<div class="starter-template">
+    <h1>Your Profile</h1>
+    {% if user %}
+        <div class="card text-start mx-auto" style="max-width: 500px;">
+            <div class="card-body">
+                <h5 class="card-title">@{{ user.username }}</h5>
+                <p class="card-text"><strong>Email:</strong> {{ user.email }}</p>
+                <p class="card-text"><strong>Role:</strong> <span class="badge bg-info">{{ user.role.value.capitalize() }}</span></p>
+                <p class="card-text"><strong>Account Status:</strong> <span class="badge {% if user.is_active %}bg-success{% else %}bg-danger{% endif %}">{{ "Active" if user.is_active else "Inactive" }}</span></p>
+                <p class="card-text"><small class="text-muted">Member since: {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+                <p class="card-text"><small class="text-muted">Last updated: {{ user.updated_at.strftime('%Y-%m-%d %H:%M') }}</small></p>
+                {# Add a button to edit profile or change password - would link to API endpoints #}
+            </div>
+        </div>
+    {% else %}
+        <p class="lead">Profile information not available. Please log in.</p>
+        <a href="{{ url_for('frontend.login') }}" class="btn btn-primary">Login</a>
+    {% endif %}
+</div>
+{% endblock %}
+```

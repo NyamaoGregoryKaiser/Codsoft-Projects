@@ -1,0 +1,61 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: blog_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d blog_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data/
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: always
+    env_file:
+      - .env # Ensure .env exists with actual values
+    volumes:
+      - .:/app # Mount current directory for development, remove or change for production
+      - /app/logs # Ensure logs are persisted if not mounting current dir
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "flask db upgrade &&
+             python seed_data.py &&
+             gunicorn --bind 0.0.0.0:5000 --workers 3 'manage:app'"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/status"] # Basic health check for the app
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  redis_data:
+```

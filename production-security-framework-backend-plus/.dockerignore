@@ -1,0 +1,14 @@
+```
+Dockerfile
+.git
+.gitignore
+.env
+.pytest_cache
+*.pyc
+*.log
+__pycache__
+venv/
+instance/
+.vscode/
+npm-debug.log
+```
