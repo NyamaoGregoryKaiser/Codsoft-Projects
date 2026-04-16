@@ -1,43 +1,59 @@
+```yaml
 version: '3.8'
 
 services:
   db:
-    image: postgres:14-alpine
-    restart: always
+    image: postgres:15-alpine
+    container_name: payment-processor-db
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: payment_processor
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_password
+    ports:
+      - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432" # Expose for local development/tools
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_processor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  backend:
+  app:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./.env
+      context: . # Build context is the project root
+      dockerfile: docker/Dockerfile
+    container_name: payment-processor-app
     ports:
-      - "5000:5000"
+      - "8080:8080"
+    environment:
+      DB_HOST: db # Service name within docker-compose network
+      DB_PORT: 5432
+      DB_NAME: payment_processor
+      DB_USER: payment_user
+      DB_PASSWORD: payment_password
+      JWT_SECRET: a_very_long_and_secure_secret_key_that_should_be_at_least_256_bits_long_and_generated_randomly # !! REPLACE IN PROD !!
+      SPRING_PROFILES_ACTIVE: dev # Use dev profile if needed
     depends_on:
-      - db
-    # Wait for DB to be ready and then run migrations/seeds
-    command: sh -c "sleep 5 && npm run migrate && npm run seed && npm start"
+      db:
+        condition: service_healthy # Wait for DB to be healthy
+    # For local development, live reload (optional, requires additional setup)
+    # volumes:
+    #   - ./src:/app/src
+    #   - ~/.m2:/root/.m2 # Cache maven dependencies
+    # entrypoint: ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "app.jar"] # For debugging
+    # ports:
+    #   - "5005:5005"
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    restart: always
-    env_file:
-      - ./.env
-    ports:
-      - "3000:80" # Map host port 3000 to container's port 80
-    depends_on:
-      - backend
+  # Optional: Frontend application (e.g., React)
+  # frontend:
+  #   build: ./frontend # Assuming a frontend subfolder with its own Dockerfile
+  #   container_name: payment-processor-frontend
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - app
 
 volumes:
-  pgdata:
+  db_data:
+```

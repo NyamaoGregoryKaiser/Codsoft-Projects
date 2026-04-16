@@ -1,0 +1,75 @@
+```yaml
+spring:
+  application:
+    name: payment-processor
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:payment_processor}
+    username: ${DB_USER:payment_user}
+    password: ${DB_PASSWORD:payment_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Do not generate schema, rely on Flyway
+    show-sql: true
+    properties:
+      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Important for existing databases or when starting clean
+    clean-disabled: false # Set to true in production
+  cache:
+    cache-names: payment, merchants, users # Define cache names for Caffeine
+    caffeine:
+      spec: expireAfterWrite=10m,maximumSize=1000 # Global spec for caffeine
+
+logging:
+  level:
+    com.example.paymentprocessor: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG # To see SQL queries
+    org.hibernate.orm.jdbc.bind: TRACE # To see bound parameters
+
+server:
+  port: 8080
+
+# Springdoc OpenAPI (Swagger UI) Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    display-request-duration: true
+    # For JWT authentication in Swagger UI
+    oauth2:
+      scopes: openid, profile, email
+    doc-expansion: none
+    urls:
+      - url: /v3/api-docs
+        name: Payment Processor API
+
+# Actuator Endpoints for Monitoring
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, loggers, caches
+  metrics:
+    distribution:
+      percentiles-histogram.http.server.requests: true # For Prometheus metrics
+    tags:
+      application: ${spring.application.name}
+
+# JWT Configuration (replace with strong secret in production)
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET:a_very_long_and_secure_secret_key_that_should_be_at_least_256_bits_long_and_generated_randomly}
+      expiration: 3600000 # 1 hour in milliseconds
+      refresh-token:
+        expiration: 604800000 # 7 days in milliseconds
+
+```
