@@ -1,0 +1,97 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrapify Client</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Scrapify</h1>
+        <nav>
+            <button id="showRegisterFormBtn">Register</button>
+            <button id="showLoginFormBtn">Login</button>
+            <button id="logoutBtn" style="display: none;">Logout</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="authSection">
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2>Register</h2>
+                <form id="register">
+                    <label for="regUsername">Username:</label>
+                    <input type="text" id="regUsername" name="username" required>
+                    <label for="regEmail">Email:</label>
+                    <input type="email" id="regEmail" name="email" required>
+                    <label for="regPassword">Password:</label>
+                    <input type="password" id="regPassword" name="password" required>
+                    <button type="submit">Register</button>
+                </form>
+            </div>
+
+            <div id="loginForm" class="auth-form" style="display: block;">
+                <h2>Login</h2>
+                <form id="login">
+                    <label for="loginUsername">Username:</label>
+                    <input type="text" id="loginUsername" name="username" required>
+                    <label for="loginPassword">Password:</label>
+                    <input type="password" id="loginPassword" name="password" required>
+                    <button type="submit">Login</button>
+                </form>
+            </div>
+            <div id="authMessage" class="message"></div>
+        </section>
+
+        <section id="appSection" style="display: none;">
+            <h2>Your Scraping Jobs</h2>
+            <div class="controls">
+                <button id="refreshJobsBtn">Refresh Jobs</button>
+                <button id="showCreateJobFormBtn">Create New Job</button>
+            </div>
+
+            <div id="createJobForm" class="job-form" style="display: none;">
+                <h3>Create New Scraping Job</h3>
+                <form id="createJob">
+                    <label for="jobName">Job Name:</label>
+                    <input type="text" id="jobName" name="name" required>
+                    <label for="targetUrl">Target URL:</label>
+                    <input type="url" id="targetUrl" name="targetUrl" required>
+                    <label for="config">Config (JSON e.g., {"title": "h1", "price": "span.price"}):</label>
+                    <textarea id="config" name="config" rows="5" required>{
+    "title": "h1",
+    "description": "p:first-of-type"
+}</textarea>
+                    <label for="cronSchedule">Cron Schedule (Optional, e.g., "0 0 * * * ?"):</label>
+                    <input type="text" id="cronSchedule" name="cronSchedule">
+                    <button type="submit">Create Job</button>
+                    <button type="button" id="cancelCreateJobBtn">Cancel</button>
+                </form>
+                <div id="createJobMessage" class="message"></div>
+            </div>
+
+            <div id="jobsList">
+                <!-- Jobs will be loaded here -->
+                <p>No jobs found.</p>
+            </div>
+            <div id="jobDataDetails" class="job-data-details" style="display: none;">
+                <h3>Scraped Data for <span id="jobDataTitle"></span></h3>
+                <button class="close-details-btn">Close</button>
+                <div id="jobDataContent"></div>
+                <button class="close-details-btn">Close</button>
+            </div>
+            <div id="jobLogsDetails" class="job-data-details" style="display: none;">
+                <h3>Execution Logs for <span id="jobLogsTitle"></span></h3>
+                <button class="close-details-btn">Close</button>
+                <div id="jobLogsContent"></div>
+                <button class="close-details-btn">Close</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
+```

@@ -1,0 +1,292 @@
+```css
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f4f7f6;
+    color: #333;
+    line-height: 1.6;
+}
+
+header {
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    padding: 1rem 0;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+    margin: 0;
+    font-size: 2.5rem;
+}
+
+nav {
+    margin-top: 10px;
+}
+
+nav button, .controls button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    margin: 0 5px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+nav button:hover, .controls button:hover {
+    background-color: #2980b9;
+}
+
+main {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}
+
+section {
+    margin-bottom: 30px;
+}
+
+h2, h3 {
+    color: #2c3e50;
+    border-bottom: 2px solid #ecf0f1;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.auth-form, .job-form {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+}
+
+.auth-form label, .job-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="password"],
+.auth-form input[type="email"],
+.auth-form input[type="url"],
+.job-form input[type="text"],
+.job-form input[type="url"],
+.job-form textarea {
+    width: calc(100% - 22px);
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 1rem;
+}
+
+.auth-form button[type="submit"], .job-form button {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+    margin-right: 10px;
+}
+
+.auth-form button[type="submit"]:hover, .job-form button:hover {
+    background-color: #219d54;
+}
+
+.job-form button[type="button"] { /* Cancel button */
+    background-color: #e74c3c;
+}
+
+.job-form button[type="button"]:hover {
+    background-color: #c0392b;
+}
+
+.message {
+    padding: 10px;
+    margin-top: 15px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.message.success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+#jobsList {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.job-card {
+    background-color: #fdfdfd;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.job-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.job-card h4 {
+    margin-top: 0;
+    color: #34495e;
+    font-size: 1.2rem;
+}
+
+.job-card p {
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.job-card .status {
+    font-weight: bold;
+    color: #27ae60;
+}
+
+.job-card .status.FAILED {
+    color: #e74c3c;
+}
+
+.job-card .status.RUNNING {
+    color: #f39c12;
+}
+
+.job-card .job-actions {
+    margin-top: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.job-card .job-actions button {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.job-card .job-actions .run-btn { background-color: #2980b9; color: white; }
+.job-card .job-actions .run-btn:hover { background-color: #2471a3; }
+
+.job-card .job-actions .view-data-btn { background-color: #1abc9c; color: white; }
+.job-card .job-actions .view-data-btn:hover { background-color: #17a589; }
+
+.job-card .job-actions .view-logs-btn { background-color: #9b59b6; color: white; }
+.job-card .job-actions .view-logs-btn:hover { background-color: #8e44ad; }
+
+.job-card .job-actions .edit-btn { background-color: #f39c12; color: white; }
+.job-card .job-actions .edit-btn:hover { background-color: #e67e22; }
+
+.job-card .job-actions .delete-btn { background-color: #e74c3c; color: white; }
+.job-card .job-actions .delete-btn:hover { background-color: #c0392b; }
+
+
+.job-data-details {
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    position: relative;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.job-data-details h3 {
+    margin-top: 0;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+}
+
+.job-data-details .close-details-btn {
+    position: sticky;
+    top: 0;
+    right: 0;
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    float: right;
+    margin-left: 10px;
+}
+
+.job-data-details .close-details-btn:hover {
+    background-color: #c0392b;
+}
+
+#jobDataContent, #jobLogsContent {
+    margin-top: 15px;
+    white-space: pre-wrap; /* Preserve whitespace and wrap text */
+    font-family: monospace;
+    background-color: #eee;
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.data-item, .log-item {
+    border-bottom: 1px solid #eee;
+    padding: 10px 0;
+}
+
+.data-item:last-child, .log-item:last-child {
+    border-bottom: none;
+}
+
+.data-item-key {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 2rem;
+    }
+    nav button, .controls button {
+        margin: 5px;
+        display: block;
+        width: calc(100% - 10px);
+    }
+    .job-card {
+        grid-template-columns: 1fr;
+    }
+}
+```

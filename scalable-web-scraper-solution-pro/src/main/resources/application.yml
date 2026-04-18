@@ -1,0 +1,71 @@
+```yaml
+spring:
+  application:
+    name: web-scraper
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:scrapify_db}
+    username: ${DB_USERNAME:scrapify_user}
+    password: ${DB_PASSWORD:scrapify_pass}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'update' or 'create' for development, 'validate' for production with Flyway
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true # For older Hibernate versions, might not be needed in Spring Boot 3.x
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Baseline existing schemas if not managed by Flyway previously
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080 # Not actually used for local JWT, but good practice for external
+  cache:
+    type: caffeine # In-memory caching. For production, consider Redis.
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s # Example cache settings
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    com.scrapify.webscraper: DEBUG # Set to DEBUG for more detailed application logs
+    org.hibernate.SQL: DEBUG # To see executed SQL queries
+    org.hibernate.orm.jdbc.bind: TRACE # To see JDBC parameter bindings
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:thisisthesecretkeyforjwtauthenticationanditshouldbeverylongandsecureinaproductionenvironment} # Min 256-bit (32 characters)
+  expiration: ${JWT_EXPIRATION:3600000} # 1 hour in milliseconds
+
+# OpenAPI (Swagger) Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+  # Optional: Disable default security scheme if you define a custom one with @SecurityScheme
+  # Remove if using global bearerAuth
+  # security:
+  #   enable: false
+
+# Rate Limiting Configuration
+app:
+  rate-limit:
+    enabled: true
+    requests-per-minute: 60 # Max requests per minute per IP address
+```
