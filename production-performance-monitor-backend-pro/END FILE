@@ -1,0 +1,166 @@
+#### `docs/architecture.md`
+```markdown
+# Architecture Documentation - E-commerce Product Catalog
+
+This document provides a detailed overview of the E-commerce Product Catalog system's architecture, including its components, their interactions, and the design principles followed.
+
+## 1. System Components
+
+The system is composed of several key components, deployed as Docker containers and orchestrated using Docker Compose.
+
+*   **Frontend (React/Nginx):**
+    *   **Technology:** React, Material-UI, Axios, Nginx.
+    *   **Purpose:** Provides the user-facing web interface. Handles user authentication forms, product browsing, category management UIs, and order processes. Nginx serves the static React build, offering high performance and basic routing.
+    *   **Interaction:** Communicates with the FastAPI Backend via RESTful API calls.
+*   **Backend (FastAPI):**
+    *   **Technology:** Python 3.11, FastAPI, Pydantic, SQLAlchemy, Alembic.
+    *   **Purpose:** The core business logic layer. It exposes a RESTful API, handles user authentication (JWT), data validation, CRUD operations for products, categories, users, and orders.
+    *   **Interaction:**
+        *   Receives HTTP requests from the Frontend.
+        *   Interacts with PostgreSQL for data persistence.
+        *   Utilizes Redis for caching and rate limiting.
+        *   Exports telemetry data (traces, metrics, logs) to the OpenTelemetry Collector.
+*   **Database (PostgreSQL):**
+    *   **Technology:** PostgreSQL 15.
+    *   **Purpose:** The primary relational data store for all application data (users, categories, products, orders, order items).
+    *   **Interaction:** Accessed exclusively by the FastAPI Backend via SQLAlchemy.
+*   **Cache & Rate Limiter (Redis):**
+    *   **Technology:** Redis 7.
+    *   **Purpose:**
+        *   **Caching:** Stores frequently accessed API responses (e.g., product lists, category details) to reduce database load and improve response times.
+        *   **Rate Limiting:** Implements a sliding window or token bucket algorithm (simplified in middleware) to protect API endpoints from excessive requests based on client IP.
+    *   **Interaction:** Accessed directly by the FastAPI Backend.
+*   **OpenTelemetry Collector:**
+    *   **Technology:** OpenTelemetry Collector.
+    *   **Purpose:** Acts as a central agent for receiving, processing, and exporting telemetry data (traces, metrics, logs) from the FastAPI Backend. This decouples instrumentation from the specific observability backends.
+    *   **Interaction:**
+        *   Receives OTLP (OpenTelemetry Protocol) data via gRPC from FastAPI.
+        *   Forwards traces to Jaeger.
+        *   Exposes metrics in Prometheus format for Prometheus to scrape.
+        *   Can forward logs to various logging solutions (currently to console/stdout).
+*   **Prometheus (Metrics Store):**
+    *   **Technology:** Prometheus.
+    *   **Purpose:** A time-series database optimized for storing and querying metrics. It pulls (scrapes) metrics from configured targets.
+    *   **Interaction:**
+        *   Scrapes custom application metrics from FastAPI's `/metrics` endpoint.
+        *   Scrapes metrics from the OpenTelemetry Collector's Prometheus exporter.
+        *   Scrapes container resource metrics from cAdvisor.
+        *   Serves as a data source for Grafana.
+*   **Grafana (Visualization):**
+    *   **Technology:** Grafana.
+    *   **Purpose:** A powerful dashboarding tool for visualizing operational data.
+    *   **Interaction:**
+        *   Queries Prometheus for metrics data to build graphs and dashboards.
+        *   Queries Jaeger for trace data, allowing drill-down from metrics to traces.
+        *   Configured with provisioned datasources and dashboards for quick setup.
+*   **Jaeger (Distributed Tracing):**
+    *   **Technology:** Jaeger.
+    *   **Purpose:** A distributed tracing system that collects, stores, and visualizes traces. It helps understand the end-to-end flow of requests across different services, identify performance bottlenecks, and debug issues in distributed environments.
+    *   **Interaction:**
+        *   Receives trace data from the OpenTelemetry Collector.
+        *   Provides a web UI to query and visualize traces.
+        *   Serves as a data source for Grafana to link traces to metrics.
+*   **cAdvisor (Container Monitoring - Optional but recommended):**
+    *   **Technology:** Google cAdvisor.
+    *   **Purpose:** Collects and processes information about running containers (CPU, memory, filesystem, and network usage).
+    *   **Interaction:** Exposes metrics in Prometheus format for Prometheus to scrape.
+
+## 2. Data Model (Simplified)
+
+```mermaid
+erDiagram
+    USERS ||--o{ ORDERS : "places"
+    CATEGORIES ||--o{ PRODUCTS : "contains"
+    PRODUCTS ||--o{ ORDER_ITEMS : "included_in"
+    ORDERS ||--o{ ORDER_ITEMS : "has"
+
+    USERS {
+        int id PK
+        string email UK
+        string full_name
+        string pass_hash
+        boolean is_active
+        boolean is_admin
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CATEGORIES {
+        int id PK
+        string name UK
+        string description
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    PRODUCTS {
+        int id PK
+        string name
+        string description
+        float price
+        int stock_quantity
+        int category_id FK
+        string image_url
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ORDERS {
+        int id PK
+        int user_id FK
+        float total_amount
+        string status
+        string shipping_address
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK
+        int product_id FK
+        int quantity
+        float price_at_order
+    }
+```
+
+## 3. Design Principles
+
+*   **Modularity:** The application is broken down into logical modules (users, products, categories, orders) with clear responsibilities, facilitating maintenance and scalability.
+*   **Separation of Concerns:** Frontend and Backend are distinct services. Within the backend, concerns like routing, CRUD operations, database models, and schemas are separated.
+*   **API-First Approach:** The backend is designed as a standalone API, allowing various clients (web, mobile, third-party integrations) to consume it.
+*   **Scalability:**
+    *   Stateless FastAPI backend allows easy horizontal scaling.
+    *   Redis for caching reduces database load.
+    *   PostgreSQL can be scaled vertically or horizontally (with more advanced setups).
+*   **Observability:** Integrated OpenTelemetry for tracing, metrics, and logs provides deep insights into application behavior, crucial for debugging and performance optimization in distributed systems.
+*   **Resilience:**
+    *   Robust error handling middleware for graceful degradation.
+    *   Rate limiting protects against abuse and ensures service availability.
+    *   Health checks in Docker Compose verify service readiness.
+*   **Security:**
+    *   JWT for stateless authentication.
+    *   Role-based authorization for access control.
+    *   Password hashing (bcrypt) for user credentials.
+    *   CORS configuration.
+*   **Developer Experience:**
+    *   Docker Compose for local development setup simplifies dependency management.
+    *   FastAPI's auto-generated API documentation.
+    *   Comprehensive testing suite.
+
+## 4. Performance Monitoring Details
+
+### 4.1. OpenTelemetry Instrumentation
+
+*   **FastAPI:** Automatic instrumentation via `opentelemetry-instrumentation-fastapi` captures incoming requests as spans.
+*   **SQLAlchemy:** `opentelemetry-instrumentation-sqlalchemy` instruments database queries, showing query execution times and statements within traces.
+*   **Redis:** `opentelemetry-instrumentation-redis` instruments Redis commands, showing cache operations within traces.
+*   **Logging:** `opentelemetry-instrumentation-logging` integrates Python's standard logging with OpenTelemetry, adding trace IDs to log records.
+*   **System Metrics:** `opentelemetry-instrumentation-system-metrics` provides basic host-level metrics like CPU, memory, disk, network (though for Dockerized environments, cAdvisor is often preferred for container-level detail).
+*   **Semantic Conventions:** Standardized naming for operations and attributes ensures compatibility with observability tools.
+
+### 4.2. Custom Prometheus Metrics
+
+Beyond OpenTelemetry's capabilities, specific business-level and technical metrics are exposed via the `prometheus-client` library in the FastAPI backend:
+
+*   `http_requests_total`: Counts of HTTP requests, labeled by method, path, and status code
