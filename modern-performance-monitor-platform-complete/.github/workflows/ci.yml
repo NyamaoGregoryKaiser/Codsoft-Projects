@@ -1,0 +1,127 @@
+```yaml
+name: PerfoMetrics CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend (C++)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake libpq-dev libpqxx-dev libboost-uuid-dev libcrypt-dev pkg-config git build-essential
+
+          # Install Crow (header-only)
+          sudo git clone https://github.com/ipkn/crow.git /usr/local/include/crow
+          # Install nlohmann/json (header-only)
+          sudo git clone https://github.com/nlohmann/json.git /usr/local/include/nlohmann/json
+          # Install spdlog (header-only)
+          sudo git clone https://github.com/gabime/spdlog.git /usr/local/include/spdlog
+          # Install jwt-cpp
+          sudo git clone https://github.com/Thalhammer/jwt-cpp.git /usr/local/include/jwt-cpp
+
+      - name: Configure CMake
+        working-directory: ./backend
+        run: cmake .
+
+      - name: Build Backend
+        working-directory: ./backend
+        run: make -j$(nproc)
+
+      - name: Run Backend Unit Tests (if available)
+        working-directory: ./backend
+        # Assuming you have a 'tests' directory with a test executable
+        # For simplicity, this is commented out until Google Test is integrated
+        # run: ./tests/unit/PerfoMetricsBackend_test # Example test executable name
+        run: echo "C++ unit tests not yet integrated into CI for this example."
+
+      - name: Build Docker Image
+        run: docker build -t perfometrics-backend:latest -f ./backend/Dockerfile .
+
+  build-and-test-frontend:
+    name: Build & Test Frontend (React)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run Frontend Unit Tests
+        working-directory: ./frontend
+        run: npm test -- --watchAll=false # Run all tests once, disable watch mode
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: npm run build -- --production
+
+      - name: Build Docker Image
+        run: docker build -t perfometrics-frontend:latest -f ./frontend/Dockerfile .
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend, build-and-test-frontend]
+    if: github.ref == 'refs/heads/main' # Deploy only on push to main branch
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub (or other registry)
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build & Push Docker Images
+        run: |
+          docker build -t yourdockerhub/perfometrics-backend:latest -f ./backend/Dockerfile ./backend
+          docker push yourdockerhub/perfometrics-backend:latest
+
+          docker build -t yourdockerhub/perfometrics-frontend:latest -f ./frontend/Dockerfile ./frontend
+          docker push yourdockerhub/perfometrics-frontend:latest
+
+          # (Optional) Build & Push Nginx image if custom changes are made
+          docker build -t yourdockerhub/perfometrics-nginx:latest -f ./docker/nginx/Dockerfile ./docker/nginx
+          docker push yourdockerhub/perfometrics-nginx:latest
+
+      - name: Deploy to Remote Server (SSH and Docker Compose)
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/perfometrics-project # Your project directory on the server
+            git pull origin main
+            # Make sure .env is correctly configured on the server
+            docker-compose pull
+            docker-compose up -d --build --force-recreate
+            docker system prune -f # Clean up old images/containers
+```

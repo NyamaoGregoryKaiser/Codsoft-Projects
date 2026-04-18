@@ -1,0 +1,74 @@
+```yaml
+version: '3.8'
+
+services:
+  perfo-metrics-db:
+    image: postgres:13-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - perfo_metrics_data:/var/lib/postgresql/data
+      - ./db/migrations/V1__initial_schema.sql:/docker-entrypoint-initdb.d/V1__initial_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - perfo-metrics-network
+
+  perfo-metrics-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      SERVER_PORT: ${SERVER_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS}
+      DB_HOST: perfo-metrics-db
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      perfo-metrics-db:
+        condition: service_healthy
+    networks:
+      - perfo-metrics-network
+
+  perfo-metrics-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      # These variables are prefixed with REACT_APP_ and are exposed to the client-side
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    networks:
+      - perfo-metrics-network
+
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80" # Map host port 80 to container port 80
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - perfo-metrics-backend
+      - perfo-metrics-frontend
+    networks:
+      - perfo-metrics-network
+
+volumes:
+  perfo_metrics_data: # Persist PostgreSQL data
+
+networks:
+  perfo-metrics-network:
+    driver: bridge
+```
