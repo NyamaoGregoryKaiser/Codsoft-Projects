@@ -1,0 +1,270 @@
+name: ProjectFlow CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: projectflow_test_user
+          POSTGRES_PASSWORD: projectflow_test_password
+          POSTGRES_DB: projectflow_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:6-alpine
+        command: redis-server --appendonly yes --requirepass github_actions_redis_password
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli --raw INFO"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Wait for DB and Redis to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in `seq 1 10`; do
+            nc -z localhost 5432 && echo "PostgreSQL is up!" && break
+            echo "Waiting for PostgreSQL... ($i/10)"
+            sleep 5
+          done
+          echo "Waiting for Redis..."
+          for i in `seq 1 10`; do
+            redis-cli -h localhost -p 6379 -a github_actions_redis_password ping && echo "Redis is up!" && break
+            echo "Waiting for Redis... ($i/10)"
+            sleep 5
+          done
+
+      - name: Set up environment variables for testing
+        run: |
+          echo "FLASK_CONFIG=testing" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key" >> $GITHUB_ENV
+          echo "JWT_SECRET_KEY=test-jwt-secret-key" >> $GITHUB_ENV
+          echo "DEV_DATABASE_URL=postgresql://projectflow_test_user:projectflow_test_password@localhost:5432/projectflow_test_db" >> $GITHUB_ENV
+          echo "TEST_DATABASE_URL=postgresql://projectflow_test_user:projectflow_test_password@localhost:5432/projectflow_test_db" >> $GITHUB_ENV
+          echo "REDIS_HOST=localhost" >> $GITHUB_ENV
+          echo "REDIS_PORT=6379" >> $GITHUB_ENV
+          echo "REDIS_DB=0" >> $GITHUB_ENV
+          echo "REDIS_PASSWORD=github_actions_redis_password" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://:github_actions_redis_password@localhost:6379/0" >> $GITHUB_ENV
+          echo "DB_HOST=localhost" >> $GITHUB_ENV
+          echo "DB_PORT=5432" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          flask db upgrade
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=app --cov-report=xml
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml # Path to coverage XML file
+          flags: unittests # Optional: add flags to distinguish reports
+
+  build-and-push-docker-image:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    # Only push to registry on main branch successful pushes
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/projectflow:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/projectflow:latest
+          build-args: |
+            DB_HOST=db # For container internal healthcheck during build
+            DB_PORT=5432
+
+  deploy:
+    needs: build-and-push-docker-image
+    runs-on: ubuntu-latest
+    # Only deploy on main branch successful pushes
+    if: success() && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Simulate Deployment to Production
+        run: |
+          echo "--- Beginning Production Deployment ---"
+          echo "Deploying ${{ secrets.DOCKER_USERNAME }}/projectflow:${{ github.sha }} to production environment..."
+          echo "This would typically involve updating a Kubernetes Deployment, ECS service, or similar."
+          echo "Example: kubectl apply -f kubernetes/deployment.yaml --record"
+          echo "Ensure proper secrets management (e.g., Kubernetes Secrets, AWS Secrets Manager) for production configs."
+          echo "--- Deployment Complete ---"
+```
+**GitHub Secrets Configuration:**
+
+For the CI/CD pipeline to function correctly, you need to configure the following secrets in your GitHub repository settings (`Settings -> Secrets and variables -> Actions`):
+
+*   `DOCKER_USERNAME`: Your Docker Hub username.
+*   `DOCKER_PASSWORD`: Your Docker Hub Access Token (preferred over password for security).
+
+---
+
+## 8. Logging and Monitoring
+
+**Logging:**
+
+*   ProjectFlow uses Python's standard `logging` module.
+*   Log level is configurable via the `LOG_LEVEL` environment variable (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+*   Logs are output to `stderr` by default (which Docker captures and can be forwarded to logging aggregators like ELK stack, Splunk, or cloud logging services).
+*   Errors are logged with `exc_info=True` to include stack traces for better debugging.
+
+**Monitoring (Basic):**
+
+*   A simple `/health` endpoint is provided to check if the application is running and responsive. This can be used by load balancers, container orchestrators (Kubernetes readiness/liveness probes), or external monitoring tools.
+*   For advanced monitoring, you would integrate with tools like Prometheus/Grafana (for metrics), Sentry (for error tracking), or ELK stack (for log aggregation and analysis). This project lays the groundwork with structured logging.
+
+---
+
+## 9. Caching and Rate Limiting
+
+**Caching:**
+
+*   **Redis-backed:** Uses Flask-Caching with Redis as the backend.
+*   **Endpoint Caching:**
+    *   `GET /api/v1/users/` (admin only): Cached for 60 seconds, varies by query string.
+    *   `GET /api/v1/users/<int:user_id>`: Cached for 30 seconds.
+    *   `GET /api/v1/projects/`: Cached for 60 seconds, varies by query string.
+    *   `GET /api/v1/projects/<int:project_id>`: Cached for 30 seconds.
+    *   `GET /api/v1/tasks/project/<int:project_id>`: Cached for 30 seconds, varies by query string.
+    *   `GET /api/v1/tasks/<int:task_id>`: Cached for 30 seconds.
+    *   `GET /api/v1/tasks/`: Cached for 60 seconds (unless admin).
+*   **Cache Invalidation:** CRUD operations automatically invalidate relevant caches to ensure data freshness. For example, updating a project invalidates its individual cache and the all-projects list cache.
+*   **Configuration:** Configured via `CACHE_TYPE`, `CACHE_REDIS_HOST`, `CACHE_REDIS_PORT`, `CACHE_REDIS_DB`, `CACHE_DEFAULT_TIMEOUT` in `config.py`.
+
+**Rate Limiting:**
+
+*   **Redis-backed:** Uses Flask-Limiter with Redis for storing rate limits.
+*   **Endpoint-Specific Limits:**
+    *   `POST /auth/register`: 5 requests per hour.
+    *   `POST /auth/login`: 10 requests per minute.
+    *   `POST /projects/`: 10 requests per hour.
+    *   `PUT /projects/<int:project_id>`: 5 requests per minute.
+    *   `DELETE /projects/<int:project_id>`: 2 requests per minute.
+    *   `POST /tasks/project/<int:project_id>`: 20 requests per hour.
+    *   `PUT /tasks/<int:task_id>`: 10 requests per minute.
+    *   `DELETE /tasks/<int:task_id>`: 5 requests per minute.
+*   **Global Default:** All other endpoints (not explicitly limited or exempted) have a default limit of "200 per day", "50 per hour".
+*   **Exemptions:** `/health` and static file serving are exempted from rate limiting.
+*   **Configuration:** Configured via `RATELIMIT_STORAGE_URL` and `RATELIMIT_STRATEGY` in `config.py`.
+
+---
+
+## 10. Error Handling
+
+ProjectFlow implements centralized and custom error handling to provide consistent and informative API responses.
+
+*   **Custom `ApiError` Class:** All specific API errors (e.g., `BadRequestError`, `NotFoundError`, `UnauthorizedError`, `ForbiddenError`, `ConflictError`, `ValidationError`) inherit from a base `ApiError`.
+*   **`@app.errorhandler`:** Global Flask error handlers catch `ApiError` instances and standard HTTP errors (400, 401, 403, 404, 500), returning standardized JSON responses.
+*   **JWT Error Handling:** Custom loaders for Flask-JWT-Extended handle common JWT-related issues (missing token, invalid token, expired token, revoked token) with appropriate 401 responses.
+*   **Logging:** All API errors and unhandled exceptions are logged with relevant details for debugging.
+
+---
+
+## 11. Deployment Guide
+
+This project is designed for containerized deployments.
+
+1.  **Container Registry:** Push your Docker image to a reliable container registry (e.g., Docker Hub, AWS ECR, GCP Container Registry) as part of your CI/CD pipeline.
+2.  **Orchestration:**
+    *   **Kubernetes:** Recommended for production. Create Kubernetes Deployments for the `app`, `db`, and `redis` services. Use Kubernetes Services for exposure, Ingress for API routing, and Persistent Volumes for database and Redis data. Employ Secrets for sensitive configuration (`SECRET_KEY`, `JWT_SECRET_KEY`, database credentials, Redis password).
+    *   **AWS ECS/Fargate:** Another strong option for container orchestration.
+    *   **Azure Container Apps/AKS:** Microsoft Azure's offerings.
+    *   **Google Cloud Run/GKE:** Google Cloud's offerings.
+    *   **Docker Compose (single host):** Suitable for small-scale deployments or proof-of-concept, but lacks high availability and scalability features.
+3.  **Database Provisioning:** For production, use a managed database service (e.g., AWS RDS PostgreSQL, Azure Database for PostgreSQL, Google Cloud SQL for PostgreSQL) instead of self-hosting the database in a container. This offloads maintenance, backups, and scaling.
+4.  **Redis Provisioning:** Similarly, use a managed Redis service (e.g., AWS ElastiCache for Redis, Azure Cache for Redis, Google Cloud Memorystore for Redis).
+5.  **Environment Variables:** Ensure all necessary environment variables (especially database URLs, secret keys, Redis connection details) are correctly passed to the application container in the production environment. These should be managed via secure mechanisms like Kubernetes Secrets, AWS Secrets Manager, or environment variables in your cloud platform.
+6.  **Load Balancing:** Place a load balancer (e.g., Nginx, HAProxy, cloud-provider LB) in front of your Flask application instances for high availability and traffic distribution.
+7.  **Scaling:** Configure your orchestrator (Kubernetes HPA, ECS Auto Scaling) to scale application instances horizontally based on CPU utilization or request queue length.
+8.  **Monitoring & Alerting:** Integrate with production-grade monitoring systems (Prometheus, Grafana, Datadog, New Relic) to collect metrics (CPU, memory, network, request latency, error rates) and set up alerts.
+9.  **Logging Aggregation:** Ship application logs to a centralized logging system (ELK stack, Splunk, cloud logging) for easier analysis and troubleshooting.
+10. **Security:** Implement network segmentation, regularly update dependencies, and follow security best practices.
+
+---
+
+## 12. Future Enhancements
+
+*   **Full-fledged Frontend SPA:** Integrate with a modern frontend framework like React, Vue, or Angular for a richer user experience.
+*   **Real-time Updates:** Use WebSockets (e.g., Flask-SocketIO) for real-time task/project updates.
+*   **Notifications:** Email/in-app notifications for task assignments, due dates.
+*   **Advanced Search & Filtering:** More sophisticated search capabilities.
+*   **File Uploads:** Attachments to tasks/projects.
+*   **User Roles & Permissions:** More granular role-based access control (e.g., project manager, team member, viewer).
+*   **Audit Logging:** Track all changes made to resources.
+*   **GraphQL API:** Provide an alternative GraphQL interface.
+*   **OpenAPI/Swagger Documentation:** Generate interactive API documentation.
+*   **Two-Factor Authentication (2FA):** Enhance login security.
+*   **Asynchronous Tasks:** Use Celery with a message broker (RabbitMQ/Redis) for long-running tasks.
+*   **Container Orchestration:** Full Kubernetes deployment manifests.
+*   **Infrastructure as Code (IaC):** Terraform/CloudFormation for provisioning cloud resources.
+*   **More comprehensive monitoring:** Integrate Prometheus exporters, Grafana dashboards, Sentry for error tracking.
+
+---
+
+## 13. Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/your-feature-name`).
+3.  Make your changes.
+4.  Write/update tests for your changes.
+5.  Ensure all tests pass (`pytest`).
+6.  Ensure code coverage remains high.
+7.  Commit your changes (`git commit -am 'feat: Add new feature'`).
+8.  Push to the branch (`git push origin feature/your-feature-name`).
+9.  Create a new Pull Request.
+
+---
+
+## 14. License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
+```

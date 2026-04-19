@@ -1,0 +1,20 @@
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-JWT-Extended==4.4.4
+Flask-Bcrypt==1.0.1
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+gunicorn==21.2.0
+redis==5.0.1
+Flask-Caching==2.0.2
+Flask-Limiter==2.0.2
+Werkzeug==2.3.7 # Pin to avoid conflict with Flask-Limiter for now
+pyotp==2.9.0 # For potential 2FA (not fully implemented but good to have)
+SQLAlchemy==2.0.23 # Ensure compatibility with Flask-SQLAlchemy 3.x
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+requests==2.31.0
+locust==2.19.0
+```

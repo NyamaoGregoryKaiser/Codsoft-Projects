@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: projectflow_db
+    environment:
+      POSTGRES_USER: projectflow_user
+      POSTGRES_PASSWORD: projectflow_password
+      POSTGRES_DB: projectflow_dev_db
+      # Add test database for CI/CD or local testing
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256" # Use stronger password auth
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Optionally, copy a custom initialization script if needed (e.g., to create test DB)
+      # - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-HEALTCHECK", "pg_isready", "-U", "projectflow_user", "-d", "projectflow_dev_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:6-alpine
+    container_name: projectflow_redis
+    command: redis-server --appendonly yes --requirepass your_redis_password_change_me
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "INFO"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: projectflow_app
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_CONFIG: development
+      SECRET_KEY: your_flask_app_secret_key_change_me
+      JWT_SECRET_KEY: your_jwt_secret_key_change_me
+      DB_HOST: db
+      DB_PORT: 5432
+      DEV_DATABASE_URL: postgresql://projectflow_user:projectflow_password@db:5432/projectflow_dev_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-your_redis_password_change_me}@redis:6379/0 # for Flask-Limiter
+      LOG_LEVEL: DEBUG
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app # Mount current directory for development, remove in production for image immutability
+    command: sh -c "flask db upgrade && python scripts/seed_db.py && gunicorn --bind 0.0.0.0:5000 wsgi:app"
+    # In a production setup, you'd separate migration/seeding into an init container or CI/CD step.
+    # The `flask db upgrade` command should be run only ONCE per deployment during CI/CD.
+    # `python scripts/seed_db.py` should only be run for development or specific initial setups.
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+```

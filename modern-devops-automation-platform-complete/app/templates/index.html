@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectFlow - Task Management</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>ProjectFlow</h1>
+        <div id="auth-section">
+            <h2>Authentication</h2>
+            <div class="auth-form">
+                <h3>Register</h3>
+                <input type="text" id="reg-username" placeholder="Username">
+                <input type="email" id="reg-email" placeholder="Email">
+                <input type="password" id="reg-password" placeholder="Password">
+                <button onclick="register()">Register</button>
+            </div>
+            <div class="auth-form">
+                <h3>Login</h3>
+                <input type="text" id="login-username" placeholder="Username">
+                <input type="password" id="login-password" placeholder="Password">
+                <button onclick="login()">Login</button>
+            </div>
+            <div class="auth-form" id="user-info" style="display: none;">
+                <h3>User Info</h3>
+                <p>Logged in as: <span id="current-username"></span> (Admin: <span id="is-admin"></span>)</p>
+                <button onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div id="api-section" style="display: none;">
+            <h2>API Interaction</h2>
+            <p><strong>Access Token:</strong> <span id="access-token-display">N/A</span></p>
+
+            <h3>Projects</h3>
+            <div class="form-section">
+                <h4>Create Project</h4>
+                <input type="text" id="project-name" placeholder="Project Name">
+                <input type="text" id="project-description" placeholder="Description">
+                <button onclick="createProject()">Create Project</button>
+            </div>
+            <div class="form-section">
+                <h4>Get All Projects</h4>
+                <button onclick="getAllProjects()">Get Projects</button>
+                <div id="projects-list"></div>
+            </div>
+
+            <h3>Tasks</h3>
+            <div class="form-section">
+                <h4>Create Task (for Project ID: <input type="number" id="task-project-id" placeholder="Project ID">)</h4>
+                <input type="text" id="task-title" placeholder="Task Title">
+                <input type="text" id="task-description" placeholder="Description">
+                <input type="number" id="task-assignee-id" placeholder="Assignee User ID (optional)">
+                <select id="task-status">
+                    <option value="todo">Todo</option>
+                    <option value="in-progress">In-Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="blocked">Blocked</option>
+                </select>
+                <select id="task-priority">
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                </select>
+                <input type="datetime-local" id="task-due-date">
+                <button onclick="createTask()">Create Task</button>
+            </div>
+            <div class="form-section">
+                <h4>Get Tasks for Project ID: <input type="number" id="get-tasks-project-id" placeholder="Project ID"></h4>
+                <button onclick="getProjectTasks()">Get Tasks</button>
+                <div id="tasks-list"></div>
+            </div>
+        </div>
+
+        <div id="response-output">
+            <h2>Response:</h2>
+            <pre id="api-response"></pre>
+        </div>
+    </div>
+    <script src="/static/main.js"></script>
+</body>
+</html>
+```
