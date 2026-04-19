@@ -1,0 +1,169 @@
+```yaml
+name: CI/CD Pipeline for DataViz System
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_data_viz_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5433:5432 # Map to a different port to avoid conflict
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Backend dependencies
+      run: npm install
+      working-directory: ./server
+
+    - name: Set up Backend .env for tests
+      run: |
+        echo "NODE_ENV=test" >> ./server/.env
+        echo "DATABASE_URL=postgresql://test_user:test_password@localhost:5433/test_data_viz_db" >> ./server/.env
+        echo "JWT_SECRET=test_jwt_secret" >> ./server/.env
+        echo "JWT_EXPIRES_IN=1h" >> ./server/.env
+        echo "REFRESH_TOKEN_SECRET=test_refresh_secret" >> ./server/.env
+        echo "REFRESH_TOKEN_EXPIRES_IN=7d" >> ./server/.env
+        echo "ENABLE_CACHE=false" >> ./server/.env
+        echo "RATE_LIMIT_WINDOW=1" >> ./server/.env
+        echo "RATE_LIMIT_MAX_REQUESTS=10" >> ./server/.env
+        echo "FRONTEND_URL=http://localhost:3000" >> ./server/.env
+
+    - name: Run TypeORM Migrations
+      run: npm run migration:run
+      working-directory: ./server
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_data_viz_db
+
+    - name: Run Backend Tests
+      run: npm test
+      working-directory: ./server
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5433/test_data_viz_db # Ensure tests use the correct DB URL
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: backend-coverage-report
+        path: server/coverage/lcov.info
+
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Frontend dependencies
+      run: npm install
+      working-directory: ./client
+
+    - name: Run Frontend Tests
+      run: npm test -- --coverage --watchAll=false
+      working-directory: ./client
+      env:
+        CI: true # Required for create-react-app to run tests in CI
+
+    - name: Build Frontend for production
+      run: npm run build
+      working-directory: ./client
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-coverage-report
+        path: client/coverage/lcov.info
+
+    - name: Upload Frontend build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build
+        path: client/build
+
+
+  # deploy:
+  #   name: Deploy to Production
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main' # Only deploy on push to main branch
+  #   runs-on: ubuntu-latest
+  #   environment: production # Define a production environment in GitHub settings
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+
+  #   # Example: Build and Push Docker Images
+  #   - name: Docker login
+  #     uses: docker/login-action@v2
+  #     with:
+  #       username: ${{ secrets.DOCKER_USERNAME }}
+  #       password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #   - name: Build and push backend Docker image
+  #     uses: docker/build-push-action@v4
+  #     with:
+  #       context: .
+  #       file: Dockerfile
+  #       tags: yourusername/data-viz-server:latest
+  #       push: true
+  #       target: production # Use the production stage
+
+  #   # Note: Frontend deployment can be handled separately, e.g., pushing to S3 or serving with Nginx
+  #   # For this example, we assume frontend static files are served by a reverse proxy.
+  #   # You would need to download the frontend-build artifact and deploy it to your static hosting.
+  #   - name: Download frontend build artifact
+  #     uses: actions/download-artifact@v4
+  #     with:
+  #       name: frontend-build
+  #       path: ./client-build
+
+  #   - name: Deploy to production server via SSH
+  #     uses: appleboy/ssh-action@master
+  #     with:
+  #       host: ${{ secrets.SSH_HOST }}
+  #       username: ${{ secrets.SSH_USERNAME }}
+  #       key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #       script: |
+  #         cd /path/to/your/app/directory
+  #         # Pull the latest backend image
+  #         docker pull yourusername/data-viz-server:latest
+  #         # Restart the backend service (e.g., via docker compose or systemctl)
+  #         docker-compose -f docker-compose.prod.yml up -d --no-deps --build data-viz-server
+  #         # Sync frontend build directory to web server (e.g., rsync to Nginx static folder)
+  #         # rsync -avz --delete ./client-build/ /var/www/your-frontend-domain
+  #         # Reload Nginx if configuration changed
+  #         # sudo systemctl reload nginx
+```

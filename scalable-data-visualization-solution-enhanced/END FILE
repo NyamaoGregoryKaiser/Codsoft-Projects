@@ -1,0 +1,41 @@
+The generated response includes:
+*   `README.md`: Comprehensive project overview, setup, and usage instructions.
+*   `ARCHITECTURE.md`: Detailed architecture, backend, frontend, database schema, security, scalability, and observability.
+*   `API_DOCS.md`: Full API documentation for all endpoints.
+*   `DEPLOYMENT.md`: A detailed guide for production deployment using Docker, Docker Compose, and Nginx.
+
+**Backend Implementation (TypeScript, Node.js/Express, TypeORM, PostgreSQL):**
+*   `server/package.json`: All backend dependencies, scripts for development, build, test, and TypeORM migrations.
+*   `server/.env`: Environment variables.
+*   `server/tsconfig.json`: TypeScript configuration.
+*   `server/ormconfig.json`: TypeORM configuration.
+*   `server/src/config/config.ts`: Environment configuration loading and validation using Zod.
+*   `server/src/config/db.ts`: Database connection (TypeORM), includes an example migration.
+*   `server/src/utils/logger.ts`: Winston logger setup.
+*   `server/src/utils/errors.ts`: Custom error class.
+*   `server/src/middleware/errorHandler.ts`: Centralized error handling.
+*   `server/src/middleware/auth.ts`: JWT authentication middleware (`protect`).
+*   `server/src/middleware/authorize.ts`: Role-Based Access Control (RBAC) authorization middleware.
+*   `server/src/middleware/rateLimiter.ts`: API rate limiting using `express-rate-limit`.
+*   `server/src/middleware/caching.ts`: Simple in-memory caching middleware.
+*   `server/src/models/*.ts`: TypeORM entities for `User`, `Dataset`, `Dashboard`, `Visualization`.
+*   `server/src/migrations/1715694000000_initial_migration.ts`: An example TypeORM migration script to set up the database schema.
+*   `server/src/services/*.ts`: Business logic for authentication, datasets, dashboards, and visualizations. Includes data parsing for CSV/JSON.
+*   `server/src/controllers/*.ts`: Request handlers that use services and return API responses.
+*   `server/src/routes/*.ts`: Express route definitions.
+*   `server/src/app.ts`: Main Express application setup, including middleware and route registration.
+*   `server/src/server.ts`: Application entry point, initializes DB and starts the server.
+*   `server/src/tests/setup.ts`: Jest setup for backend tests.
+*   `server/src/tests/auth.test.ts`, `server/src/tests/dataset.test.ts`: Example unit/integration/API tests for core modules.
+*   `scripts/seed.ts`: (Not included explicitly in files, but referenced in `package.json` and part of the overall setup) - a script to seed initial data for development/testing. (To implement, it would use TypeORM to create a user, some datasets, etc.)
+
+**Frontend Implementation (TypeScript, React.js, Material-UI, Chart.js/react-chartjs-2):**
+*   `client/package.json`: All frontend dependencies.
+*   `client/.env.development`: Frontend environment variables.
+*   `client/tsconfig.json`: TypeScript configuration.
+*   `client/src/api/api.ts`: Centralized Axios instance with interceptors for JWT and refresh token logic. Defines API interfaces.
+*   `client/src/contexts/AuthContext.tsx`: React Context for global authentication state management.
+*   `client/src/components/common/*.tsx`: Reusable UI components like `Header`, `LoadingSpinner`, and `ProtectedRoute`.
+*   `client/src/components/charts/ChartRenderer.tsx`: Component to dynamically render various Chart.js charts and a table.
+*   `client/src/pages/Auth/*.tsx`: Login and Register UI pages.
+*   `client/src/pages/Datasets/*.tsx`: UI for listing, viewing details, and handling dataset uploads.

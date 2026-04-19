@@ -1,0 +1,16 @@
+```json
+{
+  "type": "postgres",
+  "host": "db",
+  "port": 5432,
+  "username": "user",
+  "password": "password",
+  "database": "data_viz_db",
+  "synchronize": false,
+  "logging": false,
+  "entities": ["src/models/**/*.ts"],
+  "migrations": ["src/migrations/**/*.ts"],
+  "subscribers": ["src/subscriber/**/*.ts"],
+  "migrationsTableName": "typeorm_migrations"
+}
+```

@@ -1,0 +1,56 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: data-viz-db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: data_viz_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development # Use the development stage from Dockerfile
+    container_name: data-viz-server
+    restart: always
+    env_file:
+      - ./server/.env
+    volumes:
+      - ./server:/app/server # Mount source code for hot-reloading
+      - /app/server/node_modules # Keep node_modules inside container
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    command: ["npm", "run", "dev"] # Start dev server with ts-node-dev
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.client # Use a separate Dockerfile for client
+      target: development
+    container_name: data-viz-client
+    restart: always
+    env_file:
+      - ./client/.env.development
+    volumes:
+      - ./client:/app # Mount source code for hot-reloading
+      - /app/node_modules # Keep node_modules inside container
+    ports:
+      - "3000:3000"
+    depends_on:
+      - server
+    command: ["npm", "start"]
+
+volumes:
+  db_data:
+```
