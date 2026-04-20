@@ -1,135 +1,193 @@
-```markdown
-# VisuFlow: An Enterprise Data Visualization Platform
+# DataViz - Comprehensive Data Visualization System
 
-VisuFlow is a full-scale, production-ready web application for data visualization, enabling users to connect to diverse data sources, build interactive dashboards, and share insights securely.
+DataViz is a full-stack, enterprise-grade data visualization platform built with FastAPI (Python) for the backend and React/TypeScript for the frontend. It allows users to connect to various data sources, create datasets, design interactive charts, and organize them into dashboards.
 
 ## Features
 
-*   **User Management:** Secure user registration, login (JWT), and role-based access control (Admin/Regular User).
-*   **Data Source Management:** Connect to various data sources (PostgreSQL, MySQL, API, S3, Google Sheets - extensible architecture).
-*   **Chart Builder:** Intuitive interface to define data queries (SQL, API calls) and configure visualization options.
-*   **Dashboard Designer:** Drag-and-drop layout for creating interactive dashboards from existing charts.
-*   **Authentication & Authorization:** JWT-based authentication, user roles, protected API endpoints.
-*   **Data Processing & Caching:** Backend service to fetch and process data, with Redis caching for performance.
-*   **Logging & Monitoring:** Structured logging for easy error tracing and system health monitoring.
-*   **Error Handling:** Global exception handling middleware for robust API responses.
-*   **Rate Limiting:** Protects API endpoints from abuse using Redis.
-*   **Database Migrations:** Alembic for managing database schema changes.
-*   **Containerization:** Docker and Docker Compose for easy setup and deployment.
-*   **CI/CD:** GitHub Actions for automated testing and deployment.
-*   **Comprehensive Testing:** Unit, integration, and API tests.
-*   **Interactive Frontend:** Built with React/TypeScript, Redux Toolkit, and ECharts for dynamic visualizations.
+**Backend (FastAPI, Python)**
+*   **User Management:** Registration, login, profile management.
+*   **Authentication & Authorization:** JWT-based authentication, role-based access control (user/admin).
+*   **CRUD Operations:** For Datasets, Charts, and Dashboards.
+*   **Data Processing:** Placeholder for connecting to external data sources (CSV upload implemented, SQL/API conceptual).
+*   **Caching:** Redis-backed caching for improved API response times.
+*   **Rate Limiting:** Protects API endpoints from abuse.
+*   **Logging & Monitoring:** Structured logging with `Loguru`.
+*   **Error Handling:** Centralized exception handling.
+*   **Database:** PostgreSQL with SQLAlchemy ORM and Alembic migrations.
 
-## Technology Stack
+**Frontend (React, TypeScript) - Conceptual Outline**
+*   **Intuitive UI/UX:** Chakra UI for a modern, accessible interface.
+*   **Dashboard Management:** Create, view, edit, and delete dashboards.
+*   **Chart Builder:** Interactive tool to design charts (Bar, Line, Pie, etc.) from datasets.
+    *   Select dataset fields for X/Y axes.
+    *   Customize chart types and visual properties.
+*   **Dataset Explorer:** Upload CSVs, view dataset schema and preview data.
+*   **Authentication Flow:** Login, registration, protected routes.
+*   **Responsive Design:** Optimized for various screen sizes.
+*   **State Management:** Leveraging React Query for data fetching and caching.
 
-*   **Backend:** Python 3.10+, FastAPI, SQLAlchemy (PostgreSQL), Pydantic, Redis, python-jose, passlib.
-*   **Frontend:** React 18+, TypeScript, Vite, Redux Toolkit, React Router DOM, Axios, ECharts (via `echarts-for-react`).
-*   **Database:** PostgreSQL.
-*   **Caching/Rate Limiting:** Redis.
-*   **Containerization:** Docker, Docker Compose.
-*   **Migrations:** Alembic.
-*   **Testing:** Pytest (Backend), Vitest/React Testing Library (Frontend).
-*   **CI/CD:** GitHub Actions.
+## Project Structure
 
-## Getting Started
+```
+.
+├── .github/                      # CI/CD (GitHub Actions)
+├── .env.example                  # Example environment variables
+├── app/                          # Backend Python application
+│   ├── api/                      # API endpoints (v1)
+│   ├── core/                     # Configuration, security, exceptions
+│   ├── crud/                     # CRUD operations on database models
+│   ├── db/                       # Database setup (sessions, models, migrations)
+│   ├── dependencies/             # FastAPI dependency injection
+│   ├── models/                   # SQLAlchemy ORM models
+│   ├── schemas/                  # Pydantic schemas (request/response)
+│   ├── services/                 # Business logic for core features
+│   └── utils/                    # Utility functions (logger, rate limiter)
+│   └── main.py                   # Main FastAPI application
+├── alembic.ini                   # Alembic configuration
+├── frontend/                     # React/TypeScript frontend
+│   ├── public/
+│   ├── src/                      # React source code (components, pages, services etc.)
+│   ├── package.json
+│   └── vite.config.ts
+├── docker-compose.yml            # Docker orchestration for dev/prod
+├── Dockerfile                    # Dockerfile for backend
+├── Dockerfile.frontend           # Dockerfile for frontend
+├── requirements.txt              # Python dependencies
+├── tests/                        # Unit, integration, API tests
+├── scripts/                      # Database seeding scripts
+├── README.md                     # This file
+├── ARCHITECTURE.md               # High-level architecture
+└── DEPLOYMENT.md                 # Deployment instructions
+```
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
+## Setup and Installation
 
 ### Prerequisites
 
-*   Docker and Docker Compose
-*   Git
+*   Docker & Docker Compose
+*   Python 3.11+ (for local development without Docker)
+*   Node.js 20+ & npm (for frontend development without Docker)
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/visuflow.git
-cd visuflow
+git clone https://github.com/your-username/dataviz.git
+cd dataviz
 ```
 
 ### 2. Environment Configuration
 
-Create a `.env` file in the root directory by copying from `.env.example`:
+Create a `.env` file in the root directory by copying `.env.example` and filling in the values.
 
 ```bash
 cp .env.example .env
+# Edit .env to set your secrets and desired database/redis credentials
 ```
 
-**Edit the `.env` file:**
-*   **`SECRET_KEY`**: Change this to a strong, random 32+ character string.
-*   **`POSTGRES_PASSWORD`**: Change to a strong password.
-*   **`FIRST_SUPERUSER_PASSWORD`**: Change to a strong password for the initial admin user.
-*   Adjust `BACKEND_CORS_ORIGINS` if your frontend is running on a different port/domain.
+**Important:** Change `SECRET_KEY` to a strong, random string in production.
 
-### 3. Build and Run with Docker Compose
+### 3. Run with Docker Compose (Recommended)
 
-From the project root directory:
+This will set up the PostgreSQL database, Redis, FastAPI backend, and Nginx-served React frontend.
 
 ```bash
-docker-compose up --build -d
+docker compose up --build -d
 ```
 
-This command will:
-*   Build the Docker images for backend and frontend.
-*   Start the `db` (PostgreSQL), `redis`, `backend`, and `frontend` services.
-*   Run database migrations (`alembic upgrade head`).
-*   Seed the database with an initial superuser (defined in `.env`).
+*   The backend will run on `http://localhost:8000`.
+*   The frontend will be served by Nginx on `http://localhost:3000`.
+*   PostgreSQL will be on `localhost:5432`.
+*   Redis will be on `localhost:6379`.
 
-Give it a few minutes for all services to start and stabilize. You can check the logs:
+Wait for all services to be healthy (you can check with `docker compose ps`). The backend `command` in `docker-compose.yml` automatically runs Alembic migrations and seeds the database.
 
-```bash
-docker-compose logs -f
-```
+**Default Credentials (from `scripts/seed_db.py`):**
+*   **Admin User:** `admin@example.com` / `adminpassword`
+*   **Demo User:** `user@example.com` / `userpassword`
 
 ### 4. Access the Application
 
-*   **Backend API (Swagger UI):** `http://localhost:8000/docs`
-*   **Frontend:** `http://localhost:3000`
+*   **Frontend:** Open your browser to `http://localhost:3000`
+*   **Backend API Documentation (Swagger UI):** `http://localhost:8000/api/docs`
+*   **Backend API Documentation (Redoc):** `http://localhost:8000/api/redoc`
+*   **Health Check:** `http://localhost:8000/health`
 
-You can log in to the frontend with the `FIRST_SUPERUSER_EMAIL` and `FIRST_SUPERUSER_PASSWORD` defined in your `.env` file.
+### 5. Local Development (without Docker Compose for app/frontend services)
 
-## Development
+If you prefer to run the backend and frontend locally for faster iteration, you'll still need Docker for PostgreSQL and Redis.
 
-### Backend
+**Start Database & Redis:**
+```bash
+docker compose up -d db redis
+```
 
-*   **Run tests:**
+**Backend Local Development:**
+
+```bash
+# Ensure you have Python 3.11+ installed
+pip install -r requirements.txt
+# Run migrations (ensure .env is configured for local DB connection)
+alembic upgrade head
+# Seed data
+python scripts/seed_db.py
+# Start FastAPI server
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Frontend Local Development:**
+
+```bash
+# Navigate to the frontend directory
+cd frontend
+# Ensure you have Node.js 20+ installed
+npm install
+npm run dev
+```
+
+The frontend will typically run on `http://localhost:3000` and will proxy `/api` requests to `http://localhost:8000`.
+
+## Testing
+
+The project uses `pytest` for backend tests.
+
+1.  **Ensure test database is ready:** The `docker-compose.test.yml` file is provided to start a dedicated PostgreSQL and Redis for testing.
     ```bash
-    docker-compose exec backend bash
-    pytest app/tests/ --cov=app --cov-report=term-missing
-    exit
+    docker compose -f docker-compose.test.yml up -d db redis
     ```
-*   **Run migrations manually:**
+2.  **Run tests:**
     ```bash
-    docker-compose exec backend bash
-    alembic revision --autogenerate -m "Add new feature table"
-    alembic upgrade head
-    exit
+    pytest tests/ --cov=app --cov-report=term-missing --cov-report=xml
     ```
-*   The backend service automatically reloads on code changes when running with `uvicorn --reload` in `docker-compose.yml`.
+    This will run all tests and generate a coverage report. The `conftest.py` handles setting up a clean database for each test session.
 
-### Frontend
-
-*   **Run tests:**
+3.  **Stop test database:**
     ```bash
-    docker-compose exec frontend bash
-    npm test
-    exit
+    docker compose -f docker-compose.test.yml down
     ```
-*   The frontend service automatically reloads on code changes thanks to Vite's HMR when running `npm run dev` inside the container.
 
-## Documentation
+## CI/CD
 
-*   **API Documentation:** See `docs/api.md` or access the live Swagger UI at `http://localhost:8000/docs`.
-*   **Architecture Overview:** See `docs/architecture.md`.
-*   **Deployment Guide:** See `docs/deployment.md`.
+The `.github/workflows/main.yml` file provides a GitHub Actions CI/CD pipeline that:
+*   Runs backend tests (unit, integration, API) with coverage.
+*   Lints and builds the frontend application.
+*   Builds and pushes Docker images to Docker Hub (on `main` branch pushes).
 
-## Contributing
+You'll need to configure `DOCKER_USERNAME` and `DOCKER_PASSWORD` as GitHub Secrets in your repository settings for the Docker push step to work.
 
-Contributions are welcome! Please refer to the `CONTRIBUTING.md` (not provided in this response but would be in a real project) for guidelines.
+## Next Steps / Future Enhancements
 
-## License
-
-This project is licensed under the MIT License - see the `LICENSE` file (not provided in this response) for details.
+*   **Advanced Data Sources:** Implement actual connectors for SQL databases (MySQL, MSSQL), NoSQL, external APIs, etc.
+*   **Data Transformation UI:** Provide a UI for users to perform ETL operations (joins, filters, aggregations) on datasets.
+*   **Interactive Chart Configuration:** A richer frontend UI for defining chart properties (colors, labels, axes ranges).
+*   **Dashboard Layout Editor:** Drag-and-drop interface for arranging charts on a dashboard.
+*   **Scheduled Data Refresh:** Implement background tasks for refreshing dataset data.
+*   **Real-time Dashboards:** Integrate WebSockets for real-time data updates.
+*   **User Collaboration:** Sharing dashboards/charts with other users.
+*   **Embeddable Charts:** Allow charts to be embedded in other applications.
+*   **Data Export:** Export chart data or dashboard images/PDFs.
+*   **Tenant Separation:** For multi-tenant deployments.
 
 ---
-```
+[ARCHITECTURE.md](#architecture-documentation)
+[DEPLOYMENT.md](#deployment-guide)
+[API Documentation](#api-documentation)

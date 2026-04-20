@@ -1,0 +1,147 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js for frontend dependency (if needed for some tooling, else skip)
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Create .env file for tests
+        run: |
+          echo "POSTGRES_USER=test_user" >> .env
+          echo "POSTGRES_PASSWORD=test_password" >> .env
+          echo "POSTGRES_SERVER=localhost" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          echo "POSTGRES_DB=test_dataviz_db" >> .env
+          echo "SECRET_KEY=test_secret_key" >> .env
+          echo "REDIS_HOST=localhost" >> .env
+          echo "REDIS_PORT=6379" >> .env
+          echo "ENVIRONMENT=test" >> .env
+
+      - name: Start services (PostgreSQL, Redis)
+        run: docker-compose -f docker-compose.test.yml up -d db redis # Use a dedicated test-compose file for isolated tests
+        # Or run postgres/redis directly if not using docker-compose for tests
+        # docker run --name test-db -e POSTGRES_USER=test_user -e POSTGRES_PASSWORD=test_password -e POSTGRES_DB=test_dataviz_db -p 5432:5432 -d postgres:16-alpine
+        # docker run --name test-redis -p 6379:6379 -d redis:7-alpine
+
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations for test DB
+        run: |
+          alembic init -t async app/db/migrations_test # Init a temp migrations folder for tests
+          cp alembic.ini app/db/migrations_test/alembic.ini # Copy config
+          # Update test alembic.ini with test DB URL
+          sed -i 's|sqlalchemy.url = postgresql+asyncpg://user:password@db:5432/dataviz_db|sqlalchemy.url = postgresql+asyncpg://test_user:test_password@localhost:5432/test_dataviz_db|g' alembic.ini
+          # Need to ensure the alembic.ini used by alembic command is correctly pointing to the test db
+          # For simplicity, during CI, we can manually apply migrations if the project's alembic env is well-configured
+          # A more robust solution might be to use a separate alembic.ini for tests
+          alembic upgrade head # This will use the sqlalchemy.url from the env.py which will read from .env if setup
+
+      - name: Wait for DB and Redis
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          until nc -z localhost 5432; do   
+            sleep 1
+          done
+          echo "PostgreSQL is ready."
+          echo "Waiting for Redis to be ready..."
+          until nc -z localhost 6379; do   
+            sleep 1
+          done
+          echo "Redis is ready."
+
+      - name: Run backend tests with coverage
+        run: |
+          pytest tests/ --cov=app --cov-report=xml --cov-report=term-missing
+          
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          # token: ${{ secrets.CODECOV_TOKEN }} # Uncomment if using private repos with Codecov
+
+      - name: Stop services
+        if: always()
+        run: docker-compose -f docker-compose.test.yml down
+
+  frontend-build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Run frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Run frontend tests (if Vitest/Jest configured)
+        working-directory: frontend
+        run: npm run test -- --run # assuming a test script is defined
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  docker-build-and-push:
+    needs: [backend-test, frontend-build-and-lint]
+    if: github.ref == 'refs/heads/main' # Only push to registry on main branch merges
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: yourdockerhubusername/dataviz-backend:latest
+          # cache-from: type=gha # uncomment for GitHub Actions cache
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: true
+          tags: yourdockerhubusername/dataviz-frontend:latest
+          # cache-from: type=gha # uncomment for GitHub Actions cache
+```
