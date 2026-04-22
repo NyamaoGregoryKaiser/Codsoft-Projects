@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-task_management_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME:-postgres} -d ${DATABASE_NAME:-task_management_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        NODE_ENV: production # Pass NODE_ENV during build
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      GLOBAL_PREFIX: ${GLOBAL_PREFIX:-api/v1}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-postgres}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      DATABASE_NAME: ${DATABASE_NAME:-task_management_db}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TTL: ${REDIS_TTL:-3600}
+      THROTTLER_TTL: ${THROTTLER_TTL:-60}
+      THROTTLER_LIMIT: ${THROTTLER_LIMIT:-100}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npm run migration:run && node dist/main" # Run migrations before starting app
+    # For development, you might want to mount volumes:
+    # volumes:
+    #   - ./backend/src:/app/src
+    #   - ./backend/.env:/app/.env
+    #   - /app/node_modules
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        NODE_ENV: production
+    restart: always
+    environment:
+      # These are only for runtime, NEXT_PUBLIC_... variables are baked into the build
+      # Ensure NEXT_PUBLIC_API_BASE_URL is correct in Dockerfile.frontend for build stage
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
+    ports:
+      - "3001:3001"
+    depends_on:
+      backend:
+        condition: service_started
+    # For development, you might want to mount volumes:
+    # volumes:
+    #   - ./frontend/src:/app/src
+    #   - ./frontend/public:/app/public
+    #   - ./frontend/.env.local:/app/.env.local
+    #   - /app/.next
+    #   - /app/node_modules
+
+volumes:
+  db_data:
+  redis_data:
+```
+
+---
+
+## 4. Testing & Quality
+
+*(Providing full test files for all components is beyond the scope of a single response due to the length constraint, but I'll provide examples and explain the approach.)*
+
+### Backend Tests (NestJS with Jest)
+
+#### `backend/src/auth/auth.service.spec.ts` (Unit Test Example)
+```typescript

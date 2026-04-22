@@ -1,0 +1,41 @@
+# Stage 1: Build the NestJS application
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+# Copy package.json and install dependencies
+COPY backend/package*.json ./
+RUN npm install
+
+# Copy source code and build
+COPY backend/ ./
+RUN npm run build
+
+# Stage 2: Run the NestJS application
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install production dependencies only
+COPY --from=build /app/package*.json ./
+RUN npm install --production
+
+# Copy built application and .env file
+COPY --from=build /app/dist ./dist
+COPY backend/.env ./
+# If using TypeORM migrations, copy ormconfig.js
+COPY --from=build /app/ormconfig.js ./ormconfig.js
+COPY backend/src/shared/migrations ./src/shared/migrations
+
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Set environment variables (ensure these match your .env or are provided via Docker Compose)
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV GLOBAL_PREFIX=api/v1
+# Example: ENV JWT_SECRET=your_production_secret
+
+# Command to run the application
+CMD ["node", "dist/main"]
