@@ -1,0 +1,128 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-test-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            backend/node_modules
+            frontend/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Backend - Install Dependencies
+        run: npm install --prefix backend
+
+      - name: Backend - Lint
+        run: npm run lint --prefix backend
+
+      - name: Backend - Build
+        run: npm run build --prefix backend
+
+      - name: Backend - Test
+        env:
+          NODE_ENV: test
+          # Use placeholder for DB connection for tests, or set up a test DB container if needed
+          DATABASE_URL: postgresql://user:password@localhost:5432/test_db
+          JWT_SECRET: test_secret
+          JWT_EXPIRES_IN: 1h
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: |
+          # For testing, we mock DB or run with in-memory DB.
+          # For full integration tests, consider setting up a PostgreSQL service in workflow.
+          # Here, we'll run tests assuming mocks or a very light in-memory store.
+          # For real CI with DB, you'd add a service for postgres.
+          # Example for adding postgres service for integration tests (requires changes to backend/jest.config.js):
+          # container: "postgres:14-alpine"
+          # env:
+          #   POSTGRES_DB: test_db
+          #   POSTGRES_USER: user
+          #   POSTGRES_PASSWORD: password
+          # ports:
+          #   - 5432:5432
+          npm test --prefix backend -- --coverage
+
+      - name: Frontend - Install Dependencies
+        run: npm install --prefix frontend
+
+      - name: Frontend - Lint
+        run: npm run lint --prefix frontend
+
+      - name: Frontend - Build
+        run: npm run build --prefix frontend
+
+      - name: Frontend - Test
+        run: npm test --prefix frontend
+
+  docker-build-and-push:
+    needs: build-test-lint
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only run on push to main branch
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/pm-backend:latest,${{ secrets.DOCKER_USERNAME }}/pm-backend:${{ github.sha }}
+
+      - name: Build and Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/pm-frontend:latest,${{ secrets.DOCKER_USERNAME }}/pm-frontend:${{ github.sha }}
+
+  deploy:
+    needs: docker-build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only run on push to main branch
+    steps:
+      - name: Placeholder for Deployment
+        run: |
+          echo "Deployment initiated for ${{ github.sha }}."
+          echo "In a real scenario, this would trigger deployment to your cloud environment (e.g., Kubernetes, EC2, Azure App Service, Google Cloud Run)."
+          echo "Possible actions:
+          - SSH into a server and run 'docker-compose pull && docker-compose up -d'
+          - Update Kubernetes deployments with new image tags
+          - Call a cloud provider's deployment API
+          - Trigger a blue/green or canary deployment strategy."
+          echo "Refer to DEPLOYMENT.md for more details."
+
+```

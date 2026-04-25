@@ -1,0 +1,37 @@
+```yaml
+config:
+  target: "http://localhost:5000/api" # Or http://localhost if using Nginx/Docker Compose
+  phases:
+    - duration: 60 # Duration of the test in seconds
+      arrivalRate: 10 # Number of virtual users to start per second
+      maxVusers: 50 # Max number of concurrent virtual users
+      name: "Warm-up and sustained load"
+  payload:
+    path: "./backend/__tests__/fixtures/users.json" # Users for login
+    fields:
+      - "email"
+      - "password"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+    maxRedirects: 0
+
+scenarios:
+  - name: "Authenticate and get projects"
+    flow:
+      - post:
+          url: "/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            json: "$.token"
+            as: "authToken"
+      - get:
+          url: "/projects"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          # Expecting 200 OK or 401 if token expired (will be caught by the phase duration)
+          match:
+            statusCode: 200
+```

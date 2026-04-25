@@ -1,74 +1,80 @@
+```yaml
 version: '3.8'
 
 services:
+  nginx:
+    image: nginx:alpine
+    container_name: pm-nginx
+    ports:
+      - "80:80"
+      - "443:443" # For HTTPS if configured
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro # Mount frontend build output
+    depends_on:
+      - backend
+      - frontend # Nginx serves frontend, but backend is for API
+    restart: unless-stopped
+    networks:
+      - pm-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pm-backend
+    ports:
+      - "5000:5000" # Expose backend directly for dev/debugging
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    networks:
+      - pm-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pm-frontend
+    ports:
+      - "5001:3000" # Expose frontend directly for dev/debugging, Vite internal port 3000
+    env_file:
+      - ./frontend/.env
+    restart: unless-stopped
+    networks:
+      - pm-network
+
   db:
     image: postgres:14-alpine
-    container_name: projectflow_db
+    container_name: pm-db
     environment:
-      POSTGRES_USER: projectflow_user
-      POSTGRES_PASSWORD: projectflow_password
-      POSTGRES_DB: projectflow_dev_db
-      # Add test database for CI/CD or local testing
-      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256" # Use stronger password auth
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-      # Optionally, copy a custom initialization script if needed (e.g., to create test DB)
-      # - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      POSTGRES_DB: ${DB_NAME:-project_management_db}
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
       - "5432:5432"
-    healthcheck:
-      test: ["CMD-HEALTCHECK", "pg_isready", "-U", "projectflow_user", "-d", "projectflow_dev_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    volumes:
+      - db_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - pm-network
 
   redis:
-    image: redis:6-alpine
-    container_name: projectflow_redis
-    command: redis-server --appendonly yes --requirepass your_redis_password_change_me
-    volumes:
-      - redis_data:/data
+    image: redis:6.2-alpine
+    container_name: pm-redis
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "INFO"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
+    networks:
+      - pm-network
 
-  app:
-    build: .
-    container_name: projectflow_app
-    ports:
-      - "5000:5000"
-    environment:
-      FLASK_CONFIG: development
-      SECRET_KEY: your_flask_app_secret_key_change_me
-      JWT_SECRET_KEY: your_jwt_secret_key_change_me
-      DB_HOST: db
-      DB_PORT: 5432
-      DEV_DATABASE_URL: postgresql://projectflow_user:projectflow_password@db:5432/projectflow_dev_db
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 0
-      REDIS_URL: redis://:${REDIS_PASSWORD:-your_redis_password_change_me}@redis:6379/0 # for Flask-Limiter
-      LOG_LEVEL: DEBUG
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - .:/app # Mount current directory for development, remove in production for image immutability
-    command: sh -c "flask db upgrade && python scripts/seed_db.py && gunicorn --bind 0.0.0.0:5000 wsgi:app"
-    # In a production setup, you'd separate migration/seeding into an init container or CI/CD step.
-    # The `flask db upgrade` command should be run only ONCE per deployment during CI/CD.
-    # `python scripts/seed_db.py` should only be run for development or specific initial setups.
-    restart: unless-stopped
+networks:
+  pm-network:
+    driver: bridge
 
 volumes:
-  pg_data:
-  redis_data:
+  db_data:
 ```

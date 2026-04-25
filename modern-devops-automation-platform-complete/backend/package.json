@@ -1,0 +1,59 @@
+```json
+{
+  "name": "pm-backend",
+  "version": "1.0.0",
+  "description": "Backend for Project Management System",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "dev": "concurrently \"tsc -w -p tsconfig.build.json\" \"nodemon dist/server.js\"",
+    "lint": "eslint src --ext .ts",
+    "test": "NODE_ENV=test jest --detectOpenHandles --forceExit --coverage",
+    "typeorm": "npm run build && node --require ts-node/register ./node_modules/typeorm/cli.js",
+    "typeorm:migration:create": "npm run typeorm migration:create -n",
+    "typeorm:migration:run": "npm run typeorm migration:run",
+    "typeorm:migration:revert": "npm run typeorm migration:revert",
+    "seed:run": "npm run build && node dist/utils/seed.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0",
+    "http-status-codes": "^2.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5",
+    "redis": "^4.6.13",
+    "reflect-metadata": "^0.2.2",
+    "rimraf": "^5.0.5",
+    "typeorm": "^0.3.20",
+    "winston": "^3.13.0",
+    "zod": "^3.23.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^18.19.32",
+    "@types/supertest": "^6.0.2",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^6.3.4",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
+```

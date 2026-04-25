@@ -1,430 +1,466 @@
-# ProjectFlow - Enterprise DevOps Automation System
+```markdown
+# Enterprise DevOps Automation System: Project Management Application
 
-ProjectFlow is a full-scale, production-ready task and project management system built with Python Flask, PostgreSQL, and Redis. It demonstrates a comprehensive DevOps automation setup, including a robust CI/CD pipeline, extensive testing, containerization, and enterprise-grade features.
+This project provides a comprehensive, production-ready DevOps automation system built around a full-stack Project Management application. It showcases best practices in full-stack web development, UI/UX, business solutions, and an end-to-end DevOps pipeline.
 
 ## Table of Contents
 
-1.  [Features](#1-features)
-2.  [Architecture](#2-architecture)
-3.  [Technology Stack](#3-technology-stack)
-4.  [Setup and Local Development](#4-setup-and-local-development)
+1.  [Project Overview](#1-project-overview)
+2.  [Tech Stack](#2-tech-stack)
+3.  [Features](#3-features)
+4.  [Local Development Setup](#4-local-development-setup)
     *   [Prerequisites](#prerequisites)
-    *   [Clone the Repository](#clone-the-repository)
-    *   [Environment Variables](#environment-variables)
-    *   [Docker Compose Setup](#docker-compose-setup)
-    *   [Database Migrations](#database-migrations)
-    *   [Seeding Initial Data](#seeding-initial-data)
-    *   [Running the Application](#running-the-application)
-    *   [Accessing the Application](#accessing-the-application)
-5.  [API Endpoints Documentation](#5-api-endpoints-documentation)
-    *   [Authentication](#authentication)
-    *   [Users](#users)
-    *   [Projects](#projects)
-    *   [Tasks](#tasks)
+    *   [Backend Setup](#backend-setup)
+    *   [Frontend Setup](#frontend-setup)
+    *   [Database Setup](#database-setup)
+    *   [Running with Docker Compose (Recommended)](#running-with-docker-compose-recommended)
+5.  [API Documentation](#5-api-documentation)
 6.  [Testing](#6-testing)
-    *   [Unit and Integration Tests](#unit-and-integration-tests)
-    *   [Performance Tests (Locust)](#performance-tests-locust)
-7.  [CI/CD Pipeline (GitHub Actions)](#7-cicd-pipeline-github-actions)
-8.  [Logging and Monitoring](#8-logging-and-monitoring)
-9.  [Caching and Rate Limiting](#9-caching-and-rate-limiting)
-10. [Error Handling](#10-error-handling)
-11. [Deployment Guide](#11-deployment-guide)
-12. [Future Enhancements](#12-future-enhancements)
-13. [Contributing](#13-contributing)
-14. [License](#14-license)
+    *   [Backend Tests](#backend-tests)
+    *   [Frontend Tests](#frontend-tests)
+    *   [Performance Tests (Artillery)](#performance-tests-artillery)
+7.  [Architecture Documentation](#7-architecture-documentation)
+8.  [CI/CD with GitHub Actions](#8-cicd-with-github-actions)
+9.  [Deployment Guide](#9-deployment-guide)
+10. [Future Enhancements](#10-future-enhancements)
+11. [License](#11-license)
 
 ---
 
-## 1. Features
+## 1. Project Overview
 
-**Core Application:**
+This Project Management system allows users to manage projects and tasks. Key functionalities include user registration, authentication, creating projects, assigning tasks to projects, and updating task statuses. The system is designed with scalability, maintainability, and security in mind, incorporating various enterprise-grade features.
 
-*   **User Management:** Register, Login, Logout, User Profiles (admin/self-view/update).
-*   **Project Management:** CRUD operations for projects, linked to an owner.
-*   **Task Management:** CRUD operations for tasks, linked to a project and an assignee.
-*   **Authentication & Authorization:** JWT-based authentication, role-based (admin) and ownership-based authorization.
-*   **Pagination & Filtering:** For listing users, projects, and tasks.
-*   **Error Handling:** Centralized custom error handling for API consistency.
-*   **Logging:** Structured logging for debugging and operational insights.
-*   **Caching:** Redis-backed caching for frequently accessed data.
-*   **Rate Limiting:** Protects API endpoints against excessive requests.
-*   **Basic Frontend:** A minimal HTML/JS interface to demonstrate API interaction.
+## 2. Tech Stack
 
-**DevOps & Infrastructure:**
-
-*   **Containerization:** Docker for the Python application, PostgreSQL, and Redis.
-*   **Orchestration:** Docker Compose for local development environment.
-*   **Database Migrations:** Alembic for schema evolution.
-*   **Seed Data:** Script to populate initial database data for development.
-*   **Comprehensive Testing:** Unit, Integration, and API tests with Pytest (aiming for 80%+ coverage).
-*   **Performance Testing:** Basic load testing with Locust.
-*   **CI/CD Pipeline:** GitHub Actions for automated build, test, and deployment.
-
----
-
-## 2. Architecture
-
-ProjectFlow follows a microservice-lite architecture, focusing on clear separation of concerns within a single Flask application for manageability in this demo.
-
-```
-+------------------+     +------------------+     +------------------+
-|    Client (Web)  |     |   CI/CD System   |     | Monitoring/Alerts|
-| (HTML/JS/Postman)|     | (GitHub Actions) |     |  (Future/Ext.)   |
-+--------+---------+     +--------+---------+     +---------+--------+
-         |                        |                           |
-         | (HTTP/S)               | (Git pushes, webhooks)    | (Logs, Metrics)
-         |                        |                           |
-         v                        v                           v
-+-------------------------------------------------------------------+
-|               Load Balancer / API Gateway (e.g., Nginx/Envoy)   |
-+------------------------------+------------------------------------+
-                               |
-                               | (HTTP/S)
-                               v
-+-------------------------------------------------------------------+
-|                     ProjectFlow Flask Application                 |
-|                   (Containerized - Docker/Gunicorn)               |
-+-------------------------------------------------------------------+
-|  Auth | Users | Projects | Tasks | Utils | Config | Error Handling|
-| (JWT) | (CRUD)|  (CRUD)  | (CRUD)| (Decorators)   | (Custom Exceptions) |
-+------------------+-------------+-------------+--------------------+
-                   |             |             |
-                   | (SQLAlchemy)| (ORM)       | (Redis Client)
-                   v             v             v
-        +----------+---------+  +------------+------------+
-        |   PostgreSQL DB    |  |       Redis Cache        |
-        | (Containerized)    |  | (Containerized)          |
-        | - Users, Projects  |  | - JWT Blacklist          |
-        | - Tasks            |  | - API Responses (per endpoint)|
-        | - Alembic Migrations| | - Rate Limiting Counts   |
-        +--------------------+  +--------------------------+
-```
-
-**Key Architectural Decisions:**
-
-*   **Modular Flask App:** Uses Flask Blueprints to organize API endpoints into logical modules (auth, users, projects, tasks), promoting maintainability.
-*   **SQLAlchemy ORM:** Provides an object-relational mapper for database interactions, simplifying data access and manipulation.
-*   **Containerization with Docker:** Ensures consistency across development, testing, and production environments.
-*   **Redis for Caching & Rate Limiting:** Offloads database read operations and protects against abuse.
-*   **JWT for Stateless Authentication:** Scalable and widely adopted method for securing APIs.
-*   **Centralized Error Handling:** Consistent error responses across the API.
-*   **Layered Security:** Authentication (who you are), Authorization (what you can do), Rate Limiting.
-
----
-
-## 3. Technology Stack
-
-*   **Backend:** Python 3.10+, Flask
-*   **Web Server:** Gunicorn (for production deployment)
-*   **Database:** PostgreSQL
-*   **ORM:** SQLAlchemy with Flask-SQLAlchemy
-*   **Database Migrations:** Alembic with Flask-Migrate
-*   **Authentication:** Flask-JWT-Extended, Flask-Bcrypt
-*   **Caching:** Redis with Flask-Caching
-*   **Rate Limiting:** Flask-Limiter
+*   **Backend:** Node.js (TypeScript), Express.js, TypeORM, PostgreSQL, Redis
+*   **Frontend:** React (TypeScript), Vite, Tailwind CSS, Axios, React Router DOM
 *   **Containerization:** Docker, Docker Compose
 *   **CI/CD:** GitHub Actions
-*   **Testing:** Pytest, Pytest-Cov, Locust
-*   **Frontend (minimal):** HTML, CSS, JavaScript (Vanilla)
+*   **Testing:** Jest (Unit, Integration), Supertest (API), Artillery (Performance)
+*   **Authentication:** JSON Web Tokens (JWT)
+*   **Logging:** Winston
+*   **Monitoring:** (Mentioned, but basic setup in code: structured logging)
+*   **Caching:** Redis
+*   **Rate Limiting:** `express-rate-limit`
+*   **API Documentation:** (Described in this README, curl examples)
 
----
+## 3. Features
 
-## 4. Setup and Local Development
+*   **User Management:** Register, Login, User Profiles.
+*   **Project Management:** Create, Read, Update, Delete Projects.
+*   **Task Management:** Create, Read, Update, Delete Tasks, assign tasks to projects.
+*   **Authentication & Authorization:** Secure JWT-based access control for protected routes.
+*   **Robust Error Handling:** Centralized middleware for consistent error responses.
+*   **Structured Logging:** Winston integration for better observability.
+*   **API Rate Limiting:** Protects API endpoints from abuse.
+*   **Caching Layer:** Redis integration for improved performance on frequently accessed data.
+*   **Database Migrations:** TypeORM for schema evolution.
+*   **Comprehensive Testing:** Unit, Integration, API, and Performance tests.
+*   **Containerized Environment:** Full Docker and Docker Compose setup.
+*   **Automated CI/CD:** GitHub Actions for continuous integration and delivery.
+*   **Responsive UI:** Built with React and Tailwind CSS.
+
+## 4. Local Development Setup
 
 ### Prerequisites
 
-*   Docker Desktop (includes Docker Engine and Docker Compose)
+*   Node.js (v18+)
+*   npm or Yarn
+*   Docker & Docker Compose (Recommended for full stack setup)
 *   Git
 
-### Clone the Repository
+### Backend Setup (Without Docker - for individual component development)
 
-```bash
-git clone https://github.com/your-username/projectflow.git # Replace with your repo URL
-cd projectflow
-```
-
-### Environment Variables
-
-Create a `.env` file in the root directory of the project based on `.env.example`.
-**Remember to change the placeholder secret keys and passwords!**
-
-```bash
-cp .env.example .env
-# Open .env and customize the values
-```
-
-### Docker Compose Setup
-
-Build and start the services (PostgreSQL, Redis, and Flask app):
-
-```bash
-docker-compose up --build -d
-```
-This command will:
-*   Build the `app` service Docker image based on the `Dockerfile`.
-*   Pull `postgres` and `redis` images.
-*   Create and start containers for `db`, `redis`, and `app`.
-*   The `app` container will wait for `db` and `redis` to be healthy before running `flask db upgrade` and `python scripts/seed_db.py`.
-
-Check the status of your services:
-```bash
-docker-compose ps
-```
-You should see all services running and healthy.
-
-### Database Migrations
-
-The `docker-compose.yml` automatically runs `flask db upgrade` on `app` startup.
-If you need to generate new migrations after model changes:
-
-1.  Stop the `app` container: `docker-compose stop app`
-2.  Start just `db` and `redis`: `docker-compose up -d db redis`
-3.  Manually run migrations, ensuring `FLASK_APP` and `FLASK_CONFIG` are set:
+1.  **Navigate to backend directory:**
     ```bash
-    docker-compose run --rm app flask db migrate -m "Description of changes"
-    docker-compose run --rm app flask db upgrade
+    cd backend
     ```
-    Then restart the app: `docker-compose restart app`
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or yarn install
+    ```
+3.  **Create `.env` file:** Copy `.env.example` to `.env` and fill in your PostgreSQL and JWT details.
+    ```bash
+    cp .env.example .env
+    # Example .env content:
+    # PORT=5000
+    # NODE_ENV=development
+    # DATABASE_URL=postgresql://user:password@localhost:5432/project_management_db
+    # JWT_SECRET=your_super_secret_jwt_key
+    # JWT_EXPIRES_IN=1h
+    # REDIS_HOST=localhost
+    # REDIS_PORT=6379
+    ```
+4.  **Start PostgreSQL and Redis:** Ensure your PostgreSQL and Redis instances are running locally.
+5.  **Run database migrations:**
+    ```bash
+    npm run typeorm migration:run
+    ```
+6.  **Seed data (optional):**
+    ```bash
+    npm run typeorm seed:run # (Implement a seed script if needed, currently not provided)
+    ```
+7.  **Start the backend server:**
+    ```bash
+    npm run dev
+    ```
+    The backend should be running on `http://localhost:5000` (or your specified `PORT`).
 
-### Seeding Initial Data
+### Frontend Setup (Without Docker - for individual component development)
 
-The `docker-compose.yml` also runs `python scripts/seed_db.py` on `app` startup for development. This script populates the database with some sample users, projects, and tasks.
+1.  **Navigate to frontend directory:**
+    ```bash
+    cd frontend
+    ```
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    # or yarn install
+    ```
+3.  **Create `.env` file:** Copy `.env.example` to `.env` and configure the backend API URL.
+    ```bash
+    cp .env.example .env
+    # Example .env content:
+    # VITE_API_URL=http://localhost:5000/api
+    ```
+4.  **Start the frontend development server:**
+    ```bash
+    npm run dev
+    ```
+    The frontend should be running on `http://localhost:5001` (or a port chosen by Vite).
 
-*   **Admin User:** `username: admin`, `password: admin_password`
-*   **Regular User:** `username: johndoe`, `password: password123`
+### Running with Docker Compose (Recommended)
 
-You can manually re-run seeding if needed (e.g., after `flask db upgrade` on an empty DB):
-```bash
-docker-compose run --rm app python scripts/seed_db.py
-```
+This is the easiest way to get the entire application stack (backend, frontend, PostgreSQL, Redis, Nginx) up and running.
 
-### Running the Application
+1.  **Ensure Docker and Docker Compose are installed.**
+2.  **Create `.env` files:**
+    *   `backend/.env`: Copy from `backend/.env.example`.
+        ```bash
+        cd backend
+        cp .env.example .env
+        # Ensure DATABASE_URL, REDIS_HOST, REDIS_PORT are correctly set for Docker Compose:
+        # DATABASE_URL=postgresql://user:password@db:5432/project_management_db
+        # REDIS_HOST=redis
+        # REDIS_PORT=6379
+        ```
+    *   `frontend/.env`: Copy from `frontend/.env.example`.
+        ```bash
+        cd ../frontend
+        cp .env.example .env
+        # Ensure VITE_API_URL is correctly set for Nginx proxy:
+        # VITE_API_URL=http://localhost/api
+        ```
+    *   `cd ..` back to the project root.
+3.  **Build and start all services:**
+    ```bash
+    docker-compose up --build -d
+    ```
+    *   `--build`: Rebuilds images (useful after code changes).
+    *   `-d`: Runs services in detached mode.
 
-Once `docker-compose up -d` is complete, the application should be running.
+4.  **Run database migrations (after services are up):**
+    ```bash
+    docker-compose exec backend npm run typeorm migration:run
+    ```
+5.  **Access the application:**
+    *   Frontend: `http://localhost` (served by Nginx, proxying API requests to backend).
+    *   Backend API (if you want to hit it directly): `http://localhost:5000/api`
 
-### Accessing the Application
+6.  **Stop services:**
+    ```bash
+    docker-compose down
+    ```
+    *   `docker-compose down -v`: Also removes volumes (useful for a clean database restart).
 
-*   **Backend API:** `http://localhost:5000/api/v1/`
-*   **Frontend (basic demo):** `http://localhost:5000/`
-*   **Health Check:** `http://localhost:5000/health`
+## 5. API Documentation
 
-You can use the basic frontend to register, login, and interact with the API, or use tools like Postman/Insomnia.
+The backend API is designed as a RESTful service. All endpoints are prefixed with `/api`.
 
----
-
-## 5. API Endpoints Documentation
-
-All endpoints are prefixed with `/api/v1`.
+**Base URL:** `http://localhost:5000/api` (or `http://localhost/api` when using Nginx/Docker Compose)
 
 ### Authentication
 
-*   **`POST /auth/register`**
-    *   Registers a new user.
-    *   **Body:** `{"username": "string", "email": "string", "password": "string"}`
-    *   **Response:** `{"message": "User registered successfully", "user_id": 1}`
-    *   **Errors:** `400` (Bad Request), `409` (Conflict - username/email exists)
-*   **`POST /auth/login`**
-    *   Authenticates a user and returns JWT tokens.
-    *   **Body:** `{"username": "string", "password": "string"}`
-    *   **Response:** `{"access_token": "jwt_token", "refresh_token": "jwt_token", "user": {user_details}}`
-    *   **Errors:** `400` (Bad Request), `401` (Unauthorized - invalid credentials)
-*   **`POST /auth/refresh`**
-    *   Refreshes an expired access token using a refresh token.
-    *   **Requires:** `Authorization: Bearer <refresh_token>` header.
-    *   **Response:** `{"access_token": "new_jwt_token"}`
-    *   **Errors:** `401` (Unauthorized)
-*   **`POST /auth/logout`**
-    *   Revokes the current access token.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Response:** `{"message": "Successfully logged out"}`
-    *   **Errors:** `401` (Unauthorized)
-*   **`GET /auth/me`**
-    *   Gets details of the currently authenticated user.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Response:** `{user_details}`
-    *   **Errors:** `401` (Unauthorized)
+*   **`POST /api/auth/register`**
+    *   **Description:** Registers a new user.
+    *   **Request Body:**
+        ```json
+        {
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "password123"
+        }
+        ```
+    *   **Response:**
+        ```json
+        {
+            "message": "User registered successfully",
+            "user": {
+                "id": "uuid",
+                "username": "testuser",
+                "email": "test@example.com"
+            }
+        }
+        ```
+*   **`POST /api/auth/login`**
+    *   **Description:** Logs in a user and returns a JWT token.
+    *   **Request Body:**
+        ```json
+        {
+            "email": "test@example.com",
+            "password": "password123"
+        }
+        ```
+    *   **Response:**
+        ```json
+        {
+            "token": "eyJhbGciOiJIUzI1Ni...",
+            "user": {
+                "id": "uuid",
+                "username": "testuser",
+                "email": "test@example.com"
+            }
+        }
+        ```
 
-### Users
+### Users (Requires Authentication)
 
-*   **`GET /users/`**
-    *   Lists all users.
-    *   **Requires:** `Authorization: Bearer <access_token>` header, **Admin access**.
-    *   **Query Params:** `page`, `per_page`, `is_admin`
-    *   **Response:** `{"users": [{user_details}], "total": int, "pages": int, "current_page": int, "per_page": int}`
-    *   **Errors:** `401` (Unauthorized), `403` (Forbidden)
-*   **`GET /users/<int:user_id>`**
-    *   Gets details of a specific user.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** User can view their own profile, or Admin can view any.
-    *   **Response:** `{user_details}`
-    *   **Errors:** `401`, `403`, `404` (Not Found)
-*   **`PUT /users/<int:user_id>`**
-    *   Updates user details.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** User can update their own profile, or Admin can update any. Admin can change `is_admin` or `is_active` status.
-    *   **Body:** `{"username": "string", "email": "string", "password": "string", "is_admin": bool, "is_active": bool}` (fields are optional, 'password' only settable by self)
-    *   **Response:** `{updated_user_details}`
-    *   **Errors:** `401`, `403`, `404`, `400` (Bad Request), `409` (Conflict), `422` (Validation Error)
-*   **`DELETE /users/<int:user_id>`**
-    *   Deletes a user.
-    *   **Requires:** `Authorization: Bearer <access_token>` header, **Admin access**.
-    *   **Authorization:** Admin only, and cannot delete own account.
-    *   **Response:** `{"message": "User deleted successfully"}`
-    *   **Errors:** `401`, `403`, `404`, `400` (Bad Request - cannot delete self)
+*   **`GET /api/users/profile`**
+    *   **Description:** Retrieves the profile of the authenticated user.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:**
+        ```json
+        {
+            "id": "uuid",
+            "username": "testuser",
+            "email": "test@example.com",
+            "projects": [...]
+        }
+        ```
 
-### Projects
+### Projects (Requires Authentication)
 
-*   **`POST /projects/`**
-    *   Creates a new project.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Body:** `{"name": "string", "description": "string"}`
-    *   **Response:** `{project_details}`
-    *   **Errors:** `401`, `400`, `409` (Conflict - project with same name by same owner exists)
-*   **`GET /projects/`**
-    *   Lists projects.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Regular users see their own projects. Admins see all projects. Filters `owner_id` (admin only for others), `is_completed`.
-    *   **Query Params:** `page`, `per_page`, `owner_id`, `is_completed`
-    *   **Response:** `{"projects": [{project_details}], ...}`
-    *   **Errors:** `401`, `403`
-*   **`GET /projects/<int:project_id>`**
-    *   Gets details of a specific project.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Project owner or Admin.
-    *   **Response:** `{project_details}`
-    *   **Errors:** `401`, `403`, `404`
-*   **`PUT /projects/<int:project_id>`**
-    *   Updates project details.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Project owner or Admin.
-    *   **Body:** `{"name": "string", "description": "string", "is_completed": bool}` (fields are optional)
-    *   **Response:** `{updated_project_details}`
-    *   **Errors:** `401`, `403`, `404`, `400`, `409`, `422`
-*   **`DELETE /projects/<int:project_id>`**
-    *   Deletes a project and all its associated tasks.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Project owner or Admin.
-    *   **Response:** `{"message": "Project deleted successfully"}`
-    *   **Errors:** `401`, `403`, `404`
+*   **`GET /api/projects`**
+    *   **Description:** Get all projects for the authenticated user.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `Array<Project>`
+*   **`GET /api/projects/:id`**
+    *   **Description:** Get a single project by ID.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `Project`
+*   **`POST /api/projects`**
+    *   **Description:** Create a new project.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Request Body:**
+        ```json
+        {
+            "name": "New Project",
+            "description": "Description of the new project."
+        }
+        ```
+    *   **Response:** `Project`
+*   **`PUT /api/projects/:id`**
+    *   **Description:** Update an existing project.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Request Body:**
+        ```json
+        {
+            "name": "Updated Project Name",
+            "description": "Updated description."
+        }
+        ```
+    *   **Response:** `Project`
+*   **`DELETE /api/projects/:id`**
+    *   **Description:** Delete a project.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `{ message: "Project deleted successfully" }`
 
-### Tasks
+### Tasks (Requires Authentication)
 
-*   **`POST /tasks/project/<int:project_id>`**
-    *   Creates a new task for a given project.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Project owner or Admin.
-    *   **Body:** `{"title": "string", "description": "string", "assignee_id": int, "status": "string", "priority": "string", "due_date": "ISO 8601 datetime string"}`
-    *   **Valid Statuses:** `todo`, `in-progress`, `completed`, `blocked`
-    *   **Valid Priorities:** `low`, `medium`, `high`, `critical`
-    *   **Response:** `{task_details}`
-    *   **Errors:** `401`, `403`, `404` (Project/Assignee not found), `400` (Bad Request), `422` (Validation Error)
-*   **`GET /tasks/project/<int:project_id>`**
-    *   Lists tasks for a specific project.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Project owner or Admin.
-    *   **Query Params:** `page`, `per_page`, `status`, `priority`, `assignee_id`
-    *   **Response:** `{"tasks": [{task_details}], ...}`
-    *   **Errors:** `401`, `403`, `404`
-*   **`GET /tasks/<int:task_id>`**
-    *   Gets details of a specific task.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Task assignee, project owner, or Admin.
-    *   **Response:** `{task_details}`
-    *   **Errors:** `401`, `403`, `404`
-*   **`PUT /tasks/<int:task_id>`**
-    *   Updates task details.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Task assignee, project owner, or Admin.
-    *   **Body:** `{"title": "string", "description": "string", "assignee_id": int, "status": "string", "priority": "string", "due_date": "ISO 8601 datetime string"}` (fields are optional)
-    *   **Response:** `{updated_task_details}`
-    *   **Errors:** `401`, `403`, `404`, `400`, `422`
-*   **`DELETE /tasks/<int:task_id>`**
-    *   Deletes a task.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Task assignee, project owner, or Admin.
-    *   **Response:** `{"message": "Task deleted successfully"}`
-    *   **Errors:** `401`, `403`, `404`
-*   **`GET /tasks/`**
-    *   Lists all tasks accessible by the current user.
-    *   **Requires:** `Authorization: Bearer <access_token>` header.
-    *   **Authorization:** Admin sees all tasks. Regular users see tasks they are assigned to or tasks belonging to projects they own.
-    *   **Query Params:** `page`, `per_page`, `status`, `priority`, `project_id`, `assignee_id` (admin only)
-    *   **Response:** `{"tasks": [{task_details}], ...}`
-    *   **Errors:** `401`, `400`
-
----
+*   **`GET /api/projects/:projectId/tasks`**
+    *   **Description:** Get all tasks for a specific project.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `Array<Task>`
+*   **`GET /api/tasks/:id`**
+    *   **Description:** Get a single task by ID.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `Task`
+*   **`POST /api/projects/:projectId/tasks`**
+    *   **Description:** Create a new task within a project.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Request Body:**
+        ```json
+        {
+            "title": "New Task",
+            "description": "Description of the task.",
+            "status": "pending",
+            "dueDate": "2024-12-31T23:59:59Z",
+            "assignedToId": "uuid_of_user"
+        }
+        ```
+    *   **Response:** `Task`
+*   **`PUT /api/tasks/:id`**
+    *   **Description:** Update an existing task.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Request Body:**
+        ```json
+        {
+            "title": "Updated Task Title",
+            "status": "in_progress"
+        }
+        ```
+    *   **Response:** `Task`
+*   **`DELETE /api/tasks/:id`**
+    *   **Description:** Delete a task.
+    *   **Headers:** `Authorization: Bearer <token>`
+    *   **Response:** `{ message: "Task deleted successfully" }`
 
 ## 6. Testing
 
-ProjectFlow includes a comprehensive testing suite.
+Comprehensive testing is implemented for both backend and frontend.
 
-### Unit and Integration Tests
+### Backend Tests
 
-Tests are written using `pytest`.
+Run all backend tests:
+```bash
+cd backend
+npm test
+```
+This command will execute unit, integration, and API tests.
+Expected coverage target: 80%+.
 
-*   **Unit Tests:** Focus on individual components like models, utility functions, etc. (e.g., `tests/unit/test_models.py`).
-*   **Integration Tests:** Test the interaction between multiple components, primarily API endpoints with a test database (e.g., `tests/integration/test_api.py`).
+### Frontend Tests
 
-**To run tests locally:**
+Run all frontend tests:
+```bash
+cd frontend
+npm test
+```
+This will execute unit tests for React components and utility functions.
 
-1.  Ensure your Docker Compose environment is running (`db` and `redis` are crucial).
-2.  Install test dependencies if running outside `docker-compose run`:
-    `pip install -r requirements.txt`
-3.  Execute pytest:
+### Performance Tests (Artillery)
+
+Performance tests are configured using Artillery.
+
+1.  **Install Artillery (if not already installed):**
     ```bash
-    docker-compose run --rm app pytest
+    npm install -g artillery
     ```
-    To generate coverage reports:
+2.  **Ensure your application (backend) is running.**
+3.  **Run the performance test:**
     ```bash
-    docker-compose run --rm app pytest --cov=app --cov-report=term-missing
+    artillery run artillery.yml
     ```
-    The coverage target is 80%+, which the provided code aims to achieve for critical paths.
+    This will simulate concurrent users hitting the API endpoints defined in `artillery.yml`.
 
-### Performance Tests (Locust)
+## 7. Architecture Documentation
 
-Basic load tests are provided using `Locust` to simulate user traffic.
+### High-Level Architecture
 
-**To run performance tests:**
+The system follows a typical microservices-oriented architecture, though implemented as a single monolithic backend service for simplicity in this comprehensive example. It consists of:
 
-1.  Ensure your Docker Compose environment (including `app`) is fully up and running.
-2.  Run Locust in a separate terminal:
-    ```bash
-    docker-compose run --rm -p 8089:8089 app locust -f tests/performance/locustfile.py --web-host 0.0.0.0
-    ```
-    This maps Locust's web UI to `http://localhost:8089`.
-3.  Open your browser to `http://localhost:8089`, enter the host (`http://localhost:5000`), number of users, and spawn rate, then start the test.
+1.  **Client (Frontend):** A React application providing the user interface.
+2.  **API Gateway / Reverse Proxy (Nginx):** Handles incoming requests, serves static frontend assets, and forwards API requests to the backend service.
+3.  **Backend Service:** A Node.js (Express.js) application written in TypeScript. It contains the business logic, interacts with the database, and exposes RESTful API endpoints.
+4.  **Database (PostgreSQL):** A relational database used for persistent storage of user, project, and task data.
+5.  **Cache (Redis):** An in-memory data store used for caching frequently accessed data to improve response times and reduce database load.
 
-The `locustfile.py` includes logic to register/login a unique user per Locust worker and perform various API operations (get projects, create projects, get tasks, create tasks).
+```mermaid
+graph TD
+    A[User Browser] --> B(Nginx - Reverse Proxy);
+    B -- Serve Static Files --> C(Frontend - React App);
+    B -- Proxy API Requests --> D(Backend - Node.js/Express);
+    D -- ORM (TypeORM) --> E(PostgreSQL Database);
+    D -- Caching --> F(Redis Cache);
+    D -- Logging --> G(Logging System - e.g., ELK Stack);
+    D -- Monitoring --> H(Monitoring System - e.g., Prometheus/Grafana);
+```
 
----
+### Backend Architecture
 
-## 7. CI/CD Pipeline (GitHub Actions)
+The backend follows a layered architecture:
 
-The CI/CD pipeline is defined in `.github/workflows/ci-cd.yml`. It automates the build, test, and (simulated) deployment processes whenever changes are pushed to `main` or pull requests are opened.
+*   **`server.ts`**: Entry point, initializes the Express `app` and starts the server.
+*   **`app.ts`**: Configures the Express application, sets up middleware (logging, error handling, rate limiting, authentication), and mounts routes.
+*   **`data-source.ts`**: TypeORM connection configuration.
+*   **`routes/`**: Defines API endpoints and maps them to controller methods.
+*   **`middlewares/`**: Contains Express middleware functions for cross-cutting concerns:
+    *   `authMiddleware.ts`: Verifies JWT tokens and attaches user info to requests.
+    *   `errorHandler.ts`: Centralized error handling.
+    *   `loggerMiddleware.ts`: Request logging.
+    *   `rateLimitMiddleware.ts`: API request rate limiting.
+*   **`controllers/`**: Handles HTTP requests, parses input, calls appropriate service methods, and sends HTTP responses.
+*   **`services/`**: Encapsulates business logic, interacts with entities/repositories, and performs data manipulation. This layer is decoupled from HTTP concerns.
+*   **`entities/`**: TypeORM entities defining the database schema (User, Project, Task). Includes relationships and validation.
+*   **`utils/`**: Helper functions for JWT generation/verification, password hashing, and structured logging (Winston).
 
-**`ci-cd.yml` Workflow:**
+### Frontend Architecture
 
-1.  **`on` Triggers:** Runs on `push` to `main` and `pull_request` to `main`.
-2.  **`jobs`:**
-    *   **`build-and-test`:**
-        *   **Checkout Code:** Clones the repository.
-        *   **Set up Python:** Installs Python 3.10.
-        *   **Install Dependencies:** Installs `pip` dependencies from `requirements.txt`.
-        *   **Set up Docker Compose Environment:** Starts PostgreSQL and Redis containers for testing.
-        *   **Wait for Services:** Uses a small script to wait until `db` and `redis` services are healthy within Docker Compose.
-        *   **Run Migrations:** Executes `flask db upgrade` on the test database.
-        *   **Run Pytest:** Executes unit and integration tests with coverage. Fails if tests don't pass or coverage requirements aren't met.
-        *   **Upload Coverage Report:** (Optional) Uploads coverage XML for external tools like Codecov.
-    *   **`build-and-push-docker-image`:** (Depends on `build-and-test` success)
-        *   **Login to DockerHub/Registry:** Authenticates with a Docker registry (e.g., Docker Hub).
-        *   **Build Docker Image:** Builds the application's Docker image using `Dockerfile`.
-        *   **Tag Image:** Tags the image with commit SHA and latest.
-        *   **Push Image:** Pushes the image to the configured Docker registry.
-    *   **`deploy`:** (Depends on `build-and-push-docker-image` success, runs only on `main` branch pushes)
-        *   **Simulated Deployment:** For a real enterprise project, this step would involve:
-            *   Connecting to a cloud provider (AWS, GCP, Azure) or Kubernetes cluster.
-            *   Updating a Kubernetes deployment, ECS service, or other infrastructure.
-            *   Performing rolling updates, health checks, etc.
-        *   **Placeholder:** In this demo, it simply prints a message indicating a successful deployment, demonstrating the stage in the pipeline.
+The frontend is a React application structured to promote maintainability and scalability:
 
-```yaml
+*   **`main.tsx`**: Entry point, initializes React app and wraps it with necessary providers (e.g., `BrowserRouter`, `AuthContext`).
+*   **`App.tsx`**: Defines application-level routing using React Router DOM.
+*   **`pages/`**: Top-level components representing distinct views or routes (e.g., `LoginPage`, `ProjectsPage`, `ProjectDetailPage`).
+*   **`components/`**: Reusable UI components (e.g., `Header`, `Forms`, `Cards`, `Buttons`). These are generally dumb/presentational components.
+*   **`contexts/`**: Manages global state (e.g., `AuthContext` for user authentication status and token).
+*   **`api/`**: Contains functions for interacting with the backend API using `axios`, centralizing API calls.
+*   **`utils/`**: Frontend-specific utility functions.
+
+## 8. CI/CD with GitHub Actions
+
+The project includes a GitHub Actions workflow (`.github/workflows/main.yml`) to automate the CI/CD process.
+
+**Workflow Triggers:**
+*   `push` to `main` branch
+*   `pull_request` to `main` branch
+
+**Pipeline Stages:**
+
+1.  **Checkout Code:** Clones the repository.
+2.  **Setup Node.js:** Installs Node.js for both backend and frontend.
+3.  **Backend - Install Dependencies & Lint:**
+    *   Installs backend `node_modules`.
+    *   Runs ESLint for code quality checks.
+4.  **Backend - Build:**
+    *   Compiles TypeScript code.
+5.  **Backend - Test:**
+    *   Runs all backend unit, integration, and API tests.
+    *   Generates coverage reports.
+6.  **Frontend - Install Dependencies & Lint:**
+    *   Installs frontend `node_modules`.
+    *   Runs ESLint for code quality checks.
+7.  **Frontend - Build:**
+    *   Builds the React application for production.
+8.  **Frontend - Test:**
+    *   Runs all frontend unit tests.
+9.  **Build and Push Docker Images (on `main` branch push):**
+    *   Logs into Docker Hub (requires `DOCKER_USERNAME` and `DOCKER_PASSWORD` GitHub Secrets).
+    *   Builds Docker images for backend and frontend.
+    *   Tags images with Git SHA and `latest`.
+    *   Pushes images to Docker Hub.
+10. **Deployment (Placeholder for `main` branch push):**
+    *   This step is a placeholder. In a real scenario, this would trigger a deployment to a cloud provider (e.g., Kubernetes, AWS ECS, Azure App Service, Google Cloud Run). Example: update Kubernetes deployment or trigger a blue/green deployment.
+
+## 9. Deployment Guide
+
+Refer to the separate [DEPLOYMENT.md](DEPLOYMENT.md) file for detailed production deployment instructions.
+
+## 10. Future Enhancements
+
+*   **Real-time Updates:** Implement WebSockets for real-time task/project updates.
+*   **Email Notifications:** Add email notifications for task assignments or deadlines.
+*   **File Uploads:** Allow attaching files to projects or tasks.
+*   **Advanced Search & Filtering:** More sophisticated search capabilities.
+*   **Role-Based Access Control (RBAC):** Implement more granular permissions.
+*   **Monitoring & Alerting:** Full integration with Prometheus/Grafana, Sentry for error tracking.
+*   **Distributed Caching:** More advanced Redis usage patterns.
+*   **GraphQL API:** Consider migrating to GraphQL for more flexible data fetching.
+*   **Container Orchestration:** Deploy to Kubernetes for better scalability and management.
+*   **Infrastructure as Code (IaC):** Use Terraform or Pulumi to manage cloud resources.
+
+## 11. License
+
+This project is open-sourced under the MIT License. See the `LICENSE` file for more details.
+```
