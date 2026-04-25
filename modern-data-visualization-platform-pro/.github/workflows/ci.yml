@@ -1,0 +1,349 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: data_viz_db_test
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Wait for PostgreSQL and Redis to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          sudo docker ps
+          sudo docker logs postgres || true # Try to get logs even if not fully up
+          while ! nc -z localhost 5432; do
+            sleep 1
+          done
+          echo "PostgreSQL is up!"
+          echo "Waiting for Redis..."
+          while ! nc -z localhost 6379; do
+            sleep 1
+          done
+          echo "Redis is up!"
+
+      - name: Set up .env for tests
+        run: |
+          echo "NODE_ENV=test" >> ./backend/.env
+          echo "PORT=5000" >> ./backend/.env
+          echo "API_PREFIX=/api/v1" >> ./backend/.env
+          echo "DB_HOST=localhost" >> ./backend/.env
+          echo "DB_PORT=5432" >> ./backend/.env
+          echo "DB_USER=testuser" >> ./backend/.env
+          echo "DB_PASSWORD=testpassword" >> ./backend/.env
+          echo "DB_NAME=data_viz_db_test" >> ./backend/.env
+          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env # Use GitHub Secret for JWT
+          echo "REDIS_HOST=localhost" >> ./backend/.env
+          echo "REDIS_PORT=6379" >> ./backend/.env
+        working-directory: ./backend
+
+      - name: Run backend tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }} # Pass secret as env variable for tests
+
+      - name: Build backend
+        run: npm run build
+        working-directory: ./backend
+
+      - name: Upload backend build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-build
+          path: backend/dist
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: ./frontend
+
+      - name: Run frontend tests
+        run: npm test -- --coverage --watchAll=false
+        working-directory: ./frontend
+        env:
+          CI: true # This makes react-scripts test run once and exit
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: ./frontend
+        env:
+          REACT_APP_API_BASE_URL: /api/v1 # Build with relative path for Nginx
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+
+  # Conceptual CD job (requires external deployment tools/cloud provider setup)
+  # deploy:
+  #   name: Deploy to Production
+  #   needs: [backend-ci, frontend-ci]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment: production # GitHub Environments for production deployments
+  #   steps:
+  #     - name: Download backend build artifact
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: backend-build
+  #         path: ./backend-dist
+  #
+  #     - name: Download frontend build artifact
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: frontend-build
+  #         path: ./frontend-build
+  #
+  #     - name: Deploy to Cloud Provider (e.g., AWS, GCP, Azure)
+  #       # This step would use specific cloud provider CLI commands or GitHub Actions for deployment
+  #       # Example for AWS ECS/ECR:
+  #       # - name: Login to ECR
+  #       #   uses: aws-actions/amazon-ecr-login@v1
+  #       # - name: Build & Push Docker image
+  #       #   run: |
+  #       #     docker build -t my-backend-repo:latest ./backend-dist
+  #       #     docker push my-backend-repo:latest
+  #       # - name: Deploy to ECS
+  #       #   uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+  #       #   with:
+  #       #     task-definition: my-task-definition.json
+  #       #     service: my-ecs-service
+  #       #     cluster: my-ecs-cluster
+  #       run: echo "Deploying to production environment..."
+  #     - name: Send Slack Notification (Example)
+  #       uses: rtCamp/action-slack-notify@v2
+  #       env:
+  #         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+  #         SLACK_COLOR: ${{ job.status }}
+  #         SLACK_MESSAGE: "Deployment to production ${{ job.status }}!"
+```
+
+## 11. Deployment Guide
+
+This guide outlines a general strategy for deploying the application to a production environment. For specific cloud providers (AWS, GCP, Azure), you would adapt these steps.
+
+**Assumptions:**
+*   You have a server/VM (e.g., EC2 instance, DigitalOcean Droplet) with Docker and Docker Compose installed.
+*   A domain name configured to point to your server's IP.
+*   An SSL certificate (e.g., Let's Encrypt) for HTTPS.
+*   `git` installed on the server.
+
+**Steps:**
+
+1.  **Prepare the Production Server:**
+    *   Provision a Linux server (e.g., Ubuntu).
+    *   Install Docker and Docker Compose.
+    *   Install Nginx (if not using Docker for reverse proxy).
+    *   Configure firewall (UFW) to allow SSH (22), HTTP (80), HTTPS (443).
+
+2.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/your-username/data-viz-system.git /opt/data-viz-system
+    cd /opt/data-viz-system
+    ```
+
+3.  **Configure Environment Variables:**
+    *   Create a `.env` file from `.env.example`.
+    *   **CRITICAL:** Update `DB_PASSWORD`, `JWT_SECRET` to strong, truly random values.
+    *   Ensure `NODE_ENV=production`.
+    *   Adjust `DB_HOST` to `db` (if running in the same Docker Compose network) and `REDIS_HOST` to `redis`.
+    *   `REACT_APP_API_BASE_URL` should point to your public API URL (e.g., `https://api.yourdomain.com/api/v1`).
+
+4.  **Database & Redis Setup:**
+    *   The `docker-compose.yml` includes `db` and `redis` services.
+    *   Ensure persistent volumes (`pgdata`) are correctly configured to prevent data loss when containers are recreated.
+
+5.  **Build Docker Images:**
+    ```bash
+    docker-compose build
+    ```
+    This builds optimized production images.
+
+6.  **Run Database Migrations & Seed (if needed):**
+    Before starting the services for the first time, you need to run migrations. The `docker-compose.yml` is configured to run `npm run migrate:run` as part of the backend service's startup command.
+    If you need to seed data (e.g., for initial admin users), you can temporarily modify the `backend` service `command` in `docker-compose.yml` to:
+    ```yaml
+    command: sh -c "npm install && npm run migrate:run && npm run seed:run && npm run build && npm start"
+    ```
+    Then `docker-compose up -d`. After seeding, revert the command to omit `seed:run` and restart to prevent re-seeding on every restart.
+
+7.  **Start the Services:**
+    ```bash
+    docker-compose up -d
+    ```
+    The `-d` flag runs containers in detached mode.
+
+8.  **Nginx Reverse Proxy & SSL (if not using Nginx Docker image in frontend):**
+    If you're serving the frontend directly with the Nginx Docker image (as provided in `Dockerfile.frontend`), Nginx will be running inside the container.
+    However, for a typical setup, you'd have a host-level Nginx to:
+    *   Act as a reverse proxy for both frontend and backend.
+    *   Handle SSL termination (HTTPS).
+    *   Serve static files.
+
+    **Example Nginx configuration (`/etc/nginx/sites-available/yourdomain.conf`):**
+    ```nginx
+    server {
+        listen 80;
+        server_name yourdomain.com www.yourdomain.com;
+        return 301 https://$host$request_uri; # Redirect HTTP to HTTPS
+    }
+
+    server {
+        listen 443 ssl http2;
+        server_name yourdomain.com www.yourdomain.com;
+
+        # SSL Configuration (replace with your certificate paths)
+        ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_timeout 10m;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+        ssl_prefer_server_ciphers on;
+
+        # Frontend (React App)
+        location / {
+            root /usr/share/nginx/html; # This path if using Dockerfile.frontend
+            index index.html index.htm;
+            try_files $uri $uri/ /index.html; # Essential for React Router
+        }
+
+        # Backend API
+        location /api/v1/ {
+            proxy_pass http://localhost:5000/api/v1/; # Or http://backend:5000/api/v1/ if Nginx is another docker container in the same network
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_read_timeout 600s;
+            send_timeout 600s;
+        }
+
+        # Health checks (optional)
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+    }
+    ```
+    *   Enable the site: `sudo ln -s /etc/nginx/sites-available/yourdomain.conf /etc/nginx/sites-enabled/`
+    *   Test Nginx config: `sudo nginx -t`
+    *   Restart Nginx: `sudo systemctl restart nginx`
+
+9.  **Monitoring:**
+    *   Set up external monitoring (e.g., UptimeRobot, Prometheus/Grafana) to keep an eye on your application's health and performance.
+    *   Review `backend/logs/` for error logs.
+
+## 12. Additional Features
+
+### Authentication & Authorization
+
+*   **JWT (JSON Web Tokens):** Used for secure, stateless authentication. Upon successful login, the server issues a token, which the client stores (e.g., in an HTTP-only cookie or local storage) and sends with subsequent requests in the `Authorization` header.
+*   **`authMiddleware`:** Verifies the JWT token on protected routes, extracts the user ID, and attaches it to the request object (`req.user`).
+*   **`authorizeOwner` Middleware:** A higher-order middleware function that checks if the authenticated user (`req.user.id`) is the `ownerId` of a requested resource (Dataset, Dashboard, Visualization). This ensures users can only access/modify their own data.
+    *   Example usage: `router.get('/:id', authMiddleware, authorizeOwner(Dataset), datasetController.getDatasetById);`
+
+### Logging & Monitoring
+
+*   **Winston:** A versatile logging library used in the backend.
+*   **Structured Logging:** Logs are formatted with timestamps, levels (info, error, debug), and error stacks, making them easy to parse and analyze by monitoring tools.
+*   **Log Files:** Configured to write errors to `logs/error.log` and all info/debug logs to `logs/combined.log` in production. Console logging is used for development.
+*   **Monitoring Strategy:** Combine server-level metrics (CPU, Memory) with application-level logs (Winston) and potentially API performance metrics to get a full view of the system's health.
+
+### Error Handling
+
+*   **Centralized Error Handling:** A dedicated Express middleware (`errorHandler`) catches all errors thrown by controllers and services.
+*   **`AppError` Class:** A custom error class (`@utils/app-error.ts`) is used to define operational errors with specific HTTP status codes, allowing for consistent and informative error responses to the client.
+*   **Unhandled Rejections/Exceptions:** Global listeners are set up in `server.ts` to catch unhandled promise rejections and uncaught exceptions, log them, and gracefully shut down the server to prevent zombie processes.
+
+### Caching Layer
+
+*   **Redis:** An in-memory data store used for caching API responses.
+*   **`cacheMiddleware`:** A custom Express middleware (`@middleware/cache.ts`) that intercepts `GET` requests.
+    *   **Cache Hit:** If a response for the requested URL is found in Redis, it's served immediately.
+    *   **Cache Miss:** If not found, the request proceeds to the controller. The controller's response is then cached in Redis before being sent to the client.
+*   **Invalidation:** Cache entries are explicitly invalidated (deleted from Redis) when the underlying data changes (e.g., updating or deleting a dashboard). This ensures data consistency.
+    *   Example: `await redisClient.del(req.originalUrl);` in `updateDashboard` controller.
+
+### Rate Limiting
+
+*   **`express-rate-limit`:** A robust middleware for rate limiting API requests.
+*   **Configuration:** Applied globally to all API routes (in `app.ts`) to limit requests from a single IP address over a specific time window.
+    *   Example: 100 requests per 15 minutes.
+*   **Protection:** Helps prevent brute-force attacks, denial-of-service (DoS) attacks, and API abuse.
+
+## 13. Future Enhancements
+
+*   **Advanced Data Sources:** Implement connectors for SQL databases, NoSQL databases, cloud storage (S3), and other external APIs.
+*   **Real-time Dashboards:** Integrate WebSocket (Socket.IO) for real-time data updates on dashboards.
+*   **User Roles & Permissions:** More granular access control beyond just owner (e.g., viewer, editor, admin, public/private dashboards).
+*   **Dashboard Layout Customization:** Drag-and-drop interface for arranging visualizations on a dashboard.
+*   **More Chart Types & Customization:** Expand charting capabilities with more advanced chart types, custom themes, and detailed configuration options.
+*   **Data Transformation & ETL:** Allow users to perform in-app transformations, joins, and aggregations on datasets.
+*   **Scheduling & Alerts:** Schedule dashboard refreshes and set up alerts based on data thresholds.
+*   **Collaboration:** Share dashboards and datasets with other users.
+*   **Multi-tenancy:** Support multiple isolated organizations within a single application instance.
+*   **Search & Filtering:** Enhanced search and filtering capabilities for datasets and dashboards.
+*   **Export Options:** Export charts and dashboards to various formats (PDF, PNG, CSV).
+*   **Improved UI/UX:** Further refine the user interface for better usability and aesthetics.
+
+## 14. License
+
+This project is licensed under the MIT License - see the [LICENSE](#license-file-content) file for details.
+```
