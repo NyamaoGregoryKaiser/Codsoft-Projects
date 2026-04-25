@@ -1,0 +1,51 @@
+// backend/src/utils/customErrors.js
+    class CustomError extends Error {
+      constructor(message, statusCode = 500, name = 'InternalServerError') {
+        super(message);
+        this.name = name;
+        this.statusCode = statusCode;
+        // This is important for proper error serialization and stack traces
+        if (Error.captureStackTrace) {
+          Error.captureStackTrace(this, this.constructor);
+        }
+      }
+    }
+
+    class BadRequestError extends CustomError {
+      constructor(message = 'Bad Request') {
+        super(message, 400, 'BadRequestError');
+      }
+    }
+
+    class UnauthorizedError extends CustomError {
+      constructor(message = 'Unauthorized') {
+        super(message, 401, 'UnauthorizedError');
+      }
+    }
+
+    class ForbiddenError extends CustomError {
+      constructor(message = 'Forbidden') {
+        super(message, 403, 'ForbiddenError');
+      }
+    }
+
+    class NotFoundError extends CustomError {
+      constructor(message = 'Not Found') {
+        super(message, 404, 'NotFoundError');
+      }
+    }
+
+    class ConflictError extends CustomError {
+      constructor(message = 'Conflict') {
+        super(message, 409, 'ConflictError');
+      }
+    }
+
+    module.exports = {
+      CustomError,
+      BadRequestError,
+      UnauthorizedError,
+      ForbiddenError,
+      NotFoundError,
+      ConflictError,
+    };

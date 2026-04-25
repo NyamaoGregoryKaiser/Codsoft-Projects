@@ -1,0 +1,100 @@
+```yaml
+# .github/workflows/main.yml
+name: Build and Test Web Scraper
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: ci_user
+      DB_PASSWORD: ci_password
+      DB_NAME: ci_scraper_db
+      JWT_SECRET: ci_secret
+      # Set a dummy executable path for Puppeteer, it won't actually run in CI
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      NODE_ENV: test
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_scraper_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Wait for PostgreSQL
+        run: |
+          # Give PostgreSQL time to start up and be ready
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432 -U ci_user; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+
+      - name: Run Backend Migrations and Seed
+        run: |
+          cd backend
+          npx sequelize-cli db:migrate
+          npx sequelize-cli db:seed:all
+
+      - name: Run Backend Tests
+        run: |
+          cd backend
+          npm test
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run Frontend Tests (Limited)
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false # Added --watchAll=false for CI
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Docker Build (Optional - for pushing to registry)
+        # This step would typically push to a container registry like Docker Hub or ECR
+        # For simplicity, we just build the image here to ensure it works.
+        run: |
+          docker build . -t web-scraper-app:latest
+```

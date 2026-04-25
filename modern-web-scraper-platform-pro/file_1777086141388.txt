@@ -1,0 +1,36 @@
+// backend/src/middleware/cache.middleware.js
+    const cacheService = require('../services/cache.service');
+    const logger = require('../services/logger.service');
+
+    /**
+     * Middleware to cache responses for GET requests.
+     * @param {string} keyPrefix - Prefix for the cache key (e.g., 'websites', 'jobs').
+     * @param {number} ttlSeconds - Time-to-live for the cache entry in seconds.
+     */
+    const cache = (keyPrefix, ttlSeconds) => (req, res, next) => {
+      // Only cache GET requests
+      if (req.method !== 'GET') {
+        logger.debug('Not a GET request, skipping cache.', { method: req.method, url: req.originalUrl });
+        return next();
+      }
+
+      // Generate a unique cache key based on the URL and query parameters
+      const cacheKey = `${keyPrefix}:${req.originalUrl}`;
+
+      const cachedData = cacheService.get(cacheKey);
+      if (cachedData) {
+        logger.debug(`Cache hit for key: ${cacheKey}`);
+        return res.status(200).json(cachedData);
+      } else {
+        logger.debug(`Cache miss for key: ${cacheKey}`);
+        // Monkey-patch res.json to cache the response before sending it
+        const originalJson = res.json;
+        res.json = (data) => {
+          cacheService.set(cacheKey, data, ttlSeconds);
+          originalJson.call(res, data);
+        };
+        next();
+      }
+    };
+
+    module.exports = cache;

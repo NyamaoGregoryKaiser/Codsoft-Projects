@@ -1,0 +1,17 @@
+---
+
+### **6. Additional Features**
+
+#### **Authentication & Authorization**
+
+*   **JWT Config:**
+    === backend/src/config/jwt.config.js ===
+    ```javascript
+    // backend/src/config/jwt.config.js
+    require('dotenv').config();
+
+    module.exports = {
+      secret: process.env.JWT_SECRET || 'fallbacksecretkey',
+      expiresIn: process.env.JWT_EXPIRATION_DAYS ? `${process.env.JWT_EXPIRATION_DAYS}d` : '7d',
+    };
+    ```
