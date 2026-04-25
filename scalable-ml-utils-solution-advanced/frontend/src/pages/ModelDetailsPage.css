@@ -1,0 +1,125 @@
+.model-details-page {
+  text-align: left;
+  padding-top: 20px;
+}
+
+.model-details-page h1 {
+  text-align: center;
+  color: #282c34;
+  margin-bottom: 20px;
+}
+
+.model-details-page h2 {
+  color: #333;
+  margin-top: 30px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+  text-align: center;
+}
+
+.model-details-page .model-description {
+  font-size: 1.1em;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  color: #555;
+  text-align: center;
+}
+
+.model-details-page p {
+  margin-bottom: 8px;
+  color: #666;
+  text-align: center;
+}
+
+.model-details-page .back-button {
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
+.model-details-page .back-button:hover {
+  background-color: #5a6268;
+}
+
+.model-details-page .versions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.model-details-page .version-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #f9f9f9;
+  position: relative;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.model-details-page .version-card.active-version {
+  border-color: #28a745;
+  background-color: #e6ffed;
+  box-shadow: 0 0 15px rgba(40, 167, 69, 0.2);
+}
+
+.model-details-page .version-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #007bff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.model-details-page .version-card .active-tag {
+  background-color: #28a745;
+  color: white;
+  font-size: 0.8em;
+  padding: 4px 8px;
+  border-radius: 12px;
+  margin-left: 10px;
+}
+
+.model-details-page .version-card p {
+  margin-bottom: 5px;
+  color: #555;
+  text-align: left;
+}
+
+.model-details-page .version-card .version-actions {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.model-details-page .version-card .action-button {
+  background-color: #007bff;
+}
+
+.model-details-page .version-card .action-button:hover {
+  background-color: #0056b3;
+}
+
+.model-details-page .version-card .delete-button {
+  background-color: #dc3545;
+}
+
+.model-details-page .version-card .delete-button:hover {
+  background-color: #c82333;
+}
+
+.model-details-page .version-card .warning-text {
+  font-size: 0.8em;
+  color: #6c757d;
+  margin-top: 10px;
+  text-align: center;
+}

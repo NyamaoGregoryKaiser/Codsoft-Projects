@@ -1,0 +1,134 @@
+.home-page {
+  text-align: left;
+  padding-top: 20px;
+}
+
+.home-page h1 {
+  text-align: center;
+  color: #282c34;
+  margin-bottom: 30px;
+}
+
+.home-page section {
+  background-color: white;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+}
+
+.home-page section h2 {
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.home-page .admin-actions .action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.home-page .action-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-page .action-card h3 {
+  margin-top: 0;
+  color: #007bff;
+}
+
+.home-page .action-card input,
+.home-page .action-card textarea,
+.home-page .action-card select {
+  margin-bottom: 10px;
+}
+
+.home-page .action-card button {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+.home-page .model-list .models-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.home-page .model-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-page .model-card h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.home-page .model-card h3 a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.home-page .model-card h3 a:hover {
+  text-decoration: underline;
+}
+
+.home-page .model-card p {
+  margin-bottom: 5px;
+  color: #555;
+}
+
+.home-page .model-card .delete-button {
+  background-color: #dc3545;
+  margin-top: auto; /* Push to bottom */
+  align-self: flex-start;
+}
+
+.home-page .model-card .delete-button:hover {
+  background-color: #c82333;
+}
+
+.home-page .prediction-section .prediction-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.home-page .prediction-result {
+  background-color: #e9ecef;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.home-page .prediction-result h3 {
+  color: #333;
+  margin-top: 0;
+}
+
+.home-page .prediction-result pre {
+  background-color: #fff;
+  padding: 15px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.home-page .prediction-result .message {
+  font-style: italic;
+  color: #666;
+  margin-top: 10px;
+}

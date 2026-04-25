@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ml_util_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ml_util_db}
+      POSTGRES_USER: ${DB_USER:-mluser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mlpassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ml_util_backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ml_util_db}
+      DB_USER: ${DB_USER:-mluser}
+      DB_PASSWORD: ${DB_PASSWORD:-mlpassword}
+      JWT_SECRET: ${JWT_SECRET:-thisisthesecretkeyforjwttokengenerationanditsveryverylongandsecure}
+      MODEL_STORAGE_PATH: /app/ml-models # Must match Dockerfile
+    volumes:
+      - model_data:/app/ml-models # Persist model files
+    depends_on:
+      db:
+        condition: service_healthy
+    # Ensure backend starts after database migrations are done
+    # For a production setup, consider an entrypoint script that waits for Flyway completion or a robust health check
+    command: ["sh", "-c", "java -jar app.jar"] # Default entrypoint
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ml_util_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # These variables are consumed by the frontend's build process
+      # REACT_APP_API_URL: http://localhost:8080/api/v1 # For local dev
+      REACT_APP_API_URL: http://backend:8080/api/v1 # For Docker internal communication
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
+  model_data:

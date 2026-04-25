@@ -1,0 +1,61 @@
+.app-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-header .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.app-header .logo {
+  color: #61dafb;
+  text-decoration: none;
+  font-size: 1.5em;
+  font-weight: bold;
+}
+
+.app-header .main-nav a {
+  color: white;
+  text-decoration: none;
+  margin-left: 20px;
+  font-size: 1em;
+  transition: color 0.2s ease;
+}
+
+.app-header .main-nav a:hover {
+  color: #61dafb;
+}
+
+.app-header .auth-section {
+  display: flex;
+  align-items: center;
+}
+
+.app-header .welcome-message {
+  margin-right: 15px;
+  font-size: 0.9em;
+}
+
+.app-header .login-link,
+.app-header .logout-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.9em;
+  transition: background-color 0.2s ease;
+}
+
+.app-header .login-link:hover,
+.app-header .logout-button:hover {
+  background-color: #0056b3;
+}

@@ -1,0 +1,67 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: ml-utilities-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:ml_util_db}
+    username: ${DB_USER:mluser}
+    password: ${DB_PASSWORD:mlpassword}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use validate with Flyway in production, update for dev
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false # Avoid N+1 issues in web layer
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  security:
+    jwt:
+      secret: ${JWT_SECRET:thisisthesecretkeyforjwttokengenerationanditsveryverylongandsecure} # Must be at least 256 bits for HS256
+      expiration-ms: 3600000 # 1 hour
+  cache:
+    cache-names: models, modelVersions
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+logging:
+  level:
+    com.mlutil: DEBUG
+    org.springframework: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE # Log bound parameters for prepared statements
+
+# Springdoc OpenAPI configuration
+springdoc:
+  api-docs:
+    path: /swagger-api
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    doc-expansion: none
+    disable-swagger-default-url: true
+    display-request-duration: true
+
+# Custom application properties
+app:
+  model-storage-path: ${MODEL_STORAGE_PATH:./ml-models}
+  rate-limit:
+    enabled: true
+    capacity: 100 # requests per period
+    tokens-per-second: 1 # refill rate
+    period-in-seconds: 60 # per minute
+```
