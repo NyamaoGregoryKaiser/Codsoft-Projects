@@ -1,0 +1,76 @@
+```yaml
+spring:
+  application:
+    name: task-manager-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskdb}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:admin}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Use 'none' if Flyway handles everything; 'validate' to check schema consistency
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    baseline-on-migrate: true # Recommended for existing databases without Flyway metadata
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080 # Not actually used for local JWT, but good practice
+  cache:
+    caffeine:
+      spec: maximumSize=100,expireAfterWrite=60s # Default cache settings
+
+# JWT configuration
+jwt:
+  secret: ${JWT_SECRET:aVerySecretKeyForTaskManagerApplicationThatIsLongEnoughAndSecure} # CHANGE THIS IN PRODUCTION
+  expiration: 3600000 # 1 hour (in milliseconds)
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG # Show SQL queries
+    org.hibernate.orm.jdbc.bind: TRACE # Show SQL parameters
+    com.example.taskmanager: DEBUG # Enable debug for our application
+
+# Server port
+server:
+  port: 8080
+
+# Springdoc OpenAPI configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  default-produces-media-type: application/json # Default response type
+
+# Actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus # Expose useful endpoints
+  metrics:
+    export:
+      prometheus:
+        enabled: true # Enable Prometheus format for metrics
+
+# Rate Limiting configuration
+app:
+  rate-limit:
+    enabled: true
+    max-requests: 5 # Max requests per minute per IP
+    time-window-seconds: 60 # Time window in seconds
+```
