@@ -1,0 +1,50 @@
+```yaml
+name: Frontend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: npm run lint # Assuming you have a lint script configured
+
+      - name: Run tests
+        working-directory: ./frontend
+        run: npm test -- --watchAll=false # Run tests without watch mode
+        env:
+          CI: true # Required for Create React App tests in CI environments
+
+      - name: Build React app
+        working-directory: ./frontend
+        run: npm run build
+        env:
+          REACT_APP_API_BASE_URL: /api/v1 # Important for production build in Docker
+```

@@ -1,0 +1,68 @@
+```json
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "standard": {
+      "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    },
+    "json_formatter": {
+      "class": "structlog.stdlib.ProcessorFormatter",
+      "processor": "structlog.processors.JSONRenderer"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "formatter": "json_formatter",
+      "level": "INFO"
+    },
+    "error_console": {
+      "class": "logging.StreamHandler",
+      "formatter": "json_formatter",
+      "level": "ERROR"
+    }
+  },
+  "loggers": {
+    "": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "handlers": ["error_console"],
+      "level": "ERROR",
+      "propagate": false
+    },
+    "uvicorn.access": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "sqlalchemy": {
+      "handlers": ["console"],
+      "level": "WARNING",
+      "propagate": false
+    },
+    "alembic": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    },
+    "app": {
+      "handlers": ["console"],
+      "level": "INFO",
+      "propagate": false
+    }
+  },
+  "root": {
+    "handlers": ["console"],
+    "level": "INFO"
+  }
+}
+```

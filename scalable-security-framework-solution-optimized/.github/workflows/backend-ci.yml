@@ -1,0 +1,115 @@
+```yaml
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    # Define services for the database and redis
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Wait for services
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in `seq 1 10`; do
+            nc -z localhost 5432 && echo "PostgreSQL is up!" && break
+            echo "Waiting for PostgreSQL..."
+            sleep 5
+          done
+          echo "Waiting for Redis..."
+          for i in `seq 1 10`; do
+            nc -z localhost 6379 && echo "Redis is up!" && break
+            echo "Waiting for Redis..."
+            sleep 5
+          done
+          
+      - name: Setup environment variables for tests
+        run: |
+          echo "POSTGRES_USER=testuser" >> $GITHUB_ENV
+          echo "POSTGRES_PASSWORD=testpassword" >> $GITHUB_ENV
+          echo "POSTGRES_DB=testdb" >> $GITHUB_ENV
+          echo "POSTGRES_HOST=localhost" >> $GITHUB_ENV
+          echo "POSTGRES_PORT=5432" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgresql+psycopg2://testuser:testpassword@localhost:5432/testdb" >> $GITHUB_ENV
+          echo "SECRET_KEY=supersecretkeyfortests" >> $GITHUB_ENV
+          echo "ALGORITHM=HS256" >> $GITHUB_ENV
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=1" >> $GITHUB_ENV
+          echo "REFRESH_TOKEN_EXPIRE_HOURS=1" >> $GITHUB_ENV
+          echo "JWT_AUDIENCE=test-audience" >> $GITHUB_ENV
+          echo "JWT_ISSUER=test-issuer" >> $GITHUB_ENV
+          echo "REDIS_HOST=localhost" >> $GITHUB_ENV
+          echo "REDIS_PORT=6379" >> $GITHUB_ENV
+          echo "REDIS_DB=1" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379/1" >> $GITHUB_ENV
+          echo "DEBUG=True" >> $GITHUB_ENV # Ensure debug is true for tests
+          echo "ENVIRONMENT=test" >> $GITHUB_ENV
+
+      - name: Run Alembic migrations
+        working-directory: ./backend
+        run: alembic upgrade head
+      
+      - name: Run tests with coverage
+        working-directory: ./backend
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term-missing tests/
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./backend/coverage.xml
+          flags: backend
+          name: codecov-backend
+          verbose: true
+```

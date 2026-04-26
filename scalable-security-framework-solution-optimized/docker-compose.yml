@@ -1,0 +1,98 @@
+```yaml
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: securesphere_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app_network
+
+  # Redis Cache for Rate Limiting
+  redis:
+    image: redis:7-alpine
+    container_name: securesphere_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
+  # FastAPI Backend Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: securesphere_backend
+    restart: always
+    # Use the start_backend.sh script as the entrypoint
+    entrypoint: ["/app/scripts/start_backend.sh"]
+    command: ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-config", "/app/uvicorn_log_config.json"]
+    environment:
+      # Pass all backend environment variables from .env
+      DEBUG: ${DEBUG}
+      ENVIRONMENT: ${ENVIRONMENT}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: db # Service name for the database container
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      REFRESH_TOKEN_EXPIRE_HOURS: ${REFRESH_TOKEN_EXPIRE_HOURS}
+      JWT_AUDIENCE: ${JWT_AUDIENCE}
+      JWT_ISSUER: ${JWT_ISSUER}
+      REDIS_HOST: redis # Service name for the redis container
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_DB: ${REDIS_DB}
+      REDIS_URL: redis://redis:${REDIS_PORT}/${REDIS_DB}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+    volumes:
+      - ./backend:/app # Mount for development, allows live reload (if using uvicorn directly)
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - app_network
+
+  # React Frontend Service (served by Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: securesphere_frontend
+    restart: always
+    environment:
+      # Pass REACT_APP_API_BASE_URL to the React build process
+      # Frontend serves from Nginx, Nginx proxies /api/ to backend
+      # So frontend client side should request /api/v1 directly, Nginx will handle routing
+      REACT_APP_API_BASE_URL: /api/v1 # This needs to be set during build stage for React env
+    volumes:
+      - ./frontend:/app # Mount for development, allows live reload (if using npm start directly)
+    ports:
+      - "3000:80" # Map host port 3000 to container's Nginx port 80
+    depends_on:
+      - backend # Frontend depends on backend for API calls (though Nginx acts as proxy)
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+```

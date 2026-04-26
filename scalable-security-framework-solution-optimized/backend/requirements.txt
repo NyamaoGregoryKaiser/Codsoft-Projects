@@ -1,0 +1,20 @@
+```
+fastapi[all]
+uvicorn
+sqlalchemy
+psycopg2-binary
+alembic
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+python-dotenv
+redis
+fastapi-limiter
+structlog
+gunicorn
+httpx[http2] # For testing
+pytest
+pytest-cov
+pytest-asyncio
+locust # For performance testing
+```

@@ -1,0 +1,37 @@
++-------------------+
+                                               |                   |
+                                               |    User Browser   |
+                                               |    (React App)    |
+                                               |                   |
+                                               +--------+----------+
+                                                        |
+                                                        | HTTPS (CORS)
+                                                        |
+                                               +--------V----------+
+                                               |                   |
+                                               |  Nginx/Load Balancer |
+                                               |  (Reverse Proxy, TLS) |
+                                               |                   |
+                                               +--------+----------+
+                                                        |
+                                                        | HTTP
+                                                        |
+                      +---------------------------------+---------------------------------+
+                      |                                 |                                 |
+           +----------V----------+             +--------V----------+             +--------V----------+
+           |                     |             |                     |             |                     |
+           |  FastAPI Backend 1  |             |  FastAPI Backend 2  |             |  FastAPI Backend N  |
+           |   (Python/Uvicorn)  |             |   (Python/Uvicorn)  |             |   (Python/Uvicorn)  |
+           |                     |             |    - Auth/JWT       |             |    - Rate Limiting  |
+           |    - API Endpoints  |             |    - RBAC           |             |    - Caching        |
+           |    - Business Logic |             |    - Logging        |             |    - Error Handling |
+           +----------+----------+             +----------+----------+             +----------+----------+
+                      |                                 |                                 |
+                      |                                 | DB Connections, Cache Reads/Writes
+                      |                                 |
+           +----------V----------+             +--------V----------+
+           |                     |             |                   |
+           | PostgreSQL Database |<----------->|     Redis Cache   |
+           |   (Persistent Data) |             |    (Ephemeral Data) |
+           |                     |             |                   |
+           +---------------------+             +-------------------+
