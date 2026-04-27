@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-nestjs_chat_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-nestjs_chat_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nestjs_chat_user} -d ${DB_NAME:-nestjs_chat_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache and Session Store Service
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # NestJS Backend Service
+  backend:
+    build:
+      context: ./backend # Path to backend Dockerfile
+      dockerfile: Dockerfile
+    container_name: chat_backend
+    restart: always
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgres://${DB_USER:-nestjs_chat_user}:${DB_PASSWORD:-password}@db:5432/${DB_NAME:-nestjs_chat_db}
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SESSION_SECRET: ${SESSION_SECRET:-supersecretsessionkey}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOGS_DIR: /app/logs # Inside container
+      THROTTLE_TTL: ${THROTTLE_TTL:-60}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-10}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend/logs:/app/logs # Mount host logs directory to container
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Command to run migrations and seeds on startup (for development/testing)
+    # In production, migrations should be run as a separate step.
+    command: >
+      sh -c "npm run migration:run && npm run seed && npm run start:prod"
+    # To run migrations manually:
+    # command: sh -c "npm run migration:run && npm run start:prod"
+    # To run just development:
+    # command: npm run start:dev
+
+
+  # Next.js Frontend Service
+  frontend:
+    build:
+      context: ./frontend # Path to frontend Dockerfile
+      dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
+    container_name: chat_frontend
+    restart: always
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3000}
+    ports:
+      - "3001:3001"
+    depends_on:
+      backend:
+        condition: service_started # Frontend needs backend to be up to make API calls
+
+volumes:
+  db_data:
+  redis_data:
+```

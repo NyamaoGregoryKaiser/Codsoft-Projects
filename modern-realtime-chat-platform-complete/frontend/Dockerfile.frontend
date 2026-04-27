@@ -1,0 +1,48 @@
+# Use a Node.js LTS image as the base for building
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy the rest of the frontend application
+COPY . .
+
+# Build the Next.js application
+# Ensure NEXT_PUBLIC_API_BASE_URL is passed during build or set in .env.production
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+RUN npm run build
+
+# --- Production Image ---
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Set environment variables for Next.js runtime (e.g., server-side code)
+# Frontend environment variables generally need to be prefixed with NEXT_PUBLIC_
+# and are baked into the build, but if you have runtime config, set it here.
+# For client-side, it's baked in during the `builder` stage.
+# For server-side rendering, you might need to set it for the 'runner' too.
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
+# Don't install dev dependencies here
+RUN npm install --only=production
+
+# Copy the production dependencies from the builder stage
+COPY --from=builder /app/node_modules ./node_modules
+# Copy the .next folder, public, and package.json from the builder stage
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/package.json ./package.json
+
+# Expose the port Next.js serves on
+EXPOSE 3001
+
+# Command to run the Next.js application
+CMD ["npm", "start"]
