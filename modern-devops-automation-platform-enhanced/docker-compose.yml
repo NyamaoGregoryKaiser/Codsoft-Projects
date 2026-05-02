@@ -1,0 +1,84 @@
+```yml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      # Use service names for inter-container communication
+      DB_HOST: db
+      REDIS_HOST: redis
+      DOCKER_CONTAINER: "true" # Flag for config.env.js
+      # Production env vars would come from secrets/env files in a real deploy
+      NODE_ENV: development
+      # Expose other .env variables here as needed, or use backend/.env directly
+      JWT_SECRET: super_secret_jwt_key_please_change_this_in_production
+      JWT_EXPIRES_IN: 1h
+      RATE_LIMIT_WINDOW_MS: 60000
+      RATE_LIMIT_MAX_REQUESTS: 100
+      # Use same DB credentials as in db service for connection
+      DB_NAME: ${DB_NAME:-devops_db}
+      DB_USER: ${DB_USER:-devops_user}
+      DB_PASSWORD: ${DB_PASSWORD:-devops_password}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-} # Or remove if no password
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Preserve node_modules from host
+    command: ["npm", "run", "dev"] # Use nodemon for development hot-reloads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80" # Nginx serves on port 80
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # For local frontend access, points to host's 5000
+      # When deployed, this should point to the actual backend public URL
+    volumes:
+      # Mount source code (except node_modules and build) to enable live reload if using react-scripts start,
+      # but for serving from nginx, `npm run build` is run inside container.
+      # For a development setup with hot-reloading:
+      # - ./frontend:/app
+      # - /app/node_modules
+      # - /app/build
+      # However, for a production-like serving using Nginx, it's better to build in the Dockerfile
+      # and only copy the build artifact. For local dev with Nginx, changes require rebuilding the frontend image.
+      # To enable hot-reloading for frontend locally, you would typically run `npm start` in the frontend
+      # service and change `REACT_APP_API_BASE_URL` to point to the backend service's exposed port.
+      # For simplicity and adhering to 'production-ready' format, build once in Dockerfile and serve static.
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-devops_db}
+      POSTGRES_USER: ${DB_USER:-devops_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devops_password}
+    ports:
+      - "5432:5432" # Expose for local DB tools access
+    volumes:
+      - devops_db_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - devops_redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-} # Optional: add password
+
+volumes:
+  devops_db_data:
+  devops_redis_data:
+```

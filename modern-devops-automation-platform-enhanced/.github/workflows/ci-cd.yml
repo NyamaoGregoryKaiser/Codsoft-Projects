@@ -1,0 +1,187 @@
+```yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    env:
+      # Set environment variables for testing
+      # In a real environment, these would be secrets or securely injected
+      DB_HOST: localhost
+      DB_NAME: test_db
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci_test_jwt_secret
+      # Ensure DOCKER_CONTAINER is false for CI/CD tests running directly on host or mock DB
+      DOCKER_CONTAINER: "false"
+
+    services:
+      # Spin up ephemeral PostgreSQL and Redis for testing
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ${{ env.DB_NAME }}
+          POSTGRES_USER: ${{ env.DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in `seq 1 10`; do
+            nc -z localhost 5432 && echo "Postgres is ready!" && break
+            echo "Waiting for Postgres..."
+            sleep 5
+          done
+      - name: Wait for Redis to be ready
+        run: |
+          for i in `seq 1 10`; do
+            nc -z localhost 6379 && echo "Redis is ready!" && break
+            echo "Waiting for Redis..."
+            sleep 5
+          done
+
+      - name: Install Backend Dependencies
+        run: npm install
+        working-directory: ./backend
+
+      - name: Run Backend Migrations
+        run: npm run migrate
+        working-directory: ./backend
+
+      - name: Run Backend Seeders
+        run: npm run seed
+        working-directory: ./backend
+
+      - name: Run Backend Lint
+        run: npm run lint
+        working-directory: ./backend
+
+      - name: Run Backend Tests
+        run: npm test -- --coverage
+        working-directory: ./backend
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./frontend
+
+      - name: Run Frontend Lint
+        run: npm run lint
+        working-directory: ./frontend
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false
+        working-directory: ./frontend
+
+      - name: Build Frontend
+        run: npm run build
+        working-directory: ./frontend
+
+      - name: Upload Backend Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage
+          path: backend/coverage
+
+      - name: Upload Frontend Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+
+  deploy:
+    name: Deploy
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/devops-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/devops-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Deployment Steps (Example - highly dependent on target environment) ---
+      # For demonstration purposes, we'll just indicate deployment.
+      # In a real scenario, this would involve SSHing to a server,
+      # running kubectl commands, terraform apply, or specific cloud provider CLI commands.
+
+      - name: Deploy to Staging/Production (Example)
+        run: |
+          echo "Simulating deployment to production environment..."
+          echo "Backend image: ${{ secrets.DOCKER_USERNAME }}/devops-backend:latest"
+          echo "Frontend image: ${{ secrets.DOCKER_USERNAME }}/devops-frontend:latest"
+          # Example:
+          # - SSH into server: ssh -i ~/.ssh/id_rsa user@your-server.com
+          # - Pull latest images: docker pull ${{ secrets.DOCKER_USERNAME }}/devops-backend:latest
+          # - Update Kubernetes deployment: kubectl set image deployment/backend backend=${{ secrets.DOCKER_USERNAME }}/devops-backend:latest
+          # - Run database migrations on server: ssh user@your-server.com "cd /path/to/backend && npm run migrate"
+          # This step would typically use cloud provider specific tools (e.g., AWS ECS, EKS, Azure AKS, GCP GKE, Heroku, Vercel)
+          # or a tool like Ansible, Terraform, or a custom deployment script.
+          # For a more complete example, you might use a separate action to deploy to a specific cloud.
+          echo "Deployment simulated successfully."
+```
