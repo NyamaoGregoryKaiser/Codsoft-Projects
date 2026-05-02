@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum DatasetStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum ModelStatus {
+  CREATED
+  TRAINING
+  READY
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// User Model
+model User {
+  id            String          @id @default(uuid())
+  username      String          @unique
+  email         String          @unique
+  password      String
+  role          Role            @default(USER)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  datasets      Dataset[]
+  models        Model[]
+  trainingJobs  TrainingJob[]
+  predictions   Prediction[]
+}
+
+// Dataset Model
+model Dataset {
+  id            String          @id @default(uuid())
+  name          String
+  fileName      String          @unique
+  filePath      String
+  fileSize      Int
+  fileMimeType  String
+  uploadedAt    DateTime        @default(now())
+  uploadedById  String
+  status        DatasetStatus   @default(UPLOADED)
+  metadata      Json?           // Store JSON metadata like column info, basic stats
+  description   String?
+
+  uploadedBy    User            @relation(fields: [uploadedById], references: [id])
+  trainingJobs  TrainingJob[]
+}
+
+// Model Definition
+model Model {
+  id            String          @id @default(uuid())
+  name          String
+  description   String?
+  algorithm     String          // e.g., 'LinearRegression', 'RandomForest', 'NeuralNetwork'
+  parameters    Json?           // Hyperparameters used for training
+  version       String          @default("1.0.0")
+  status        ModelStatus     @default(CREATED)
+  trainedAt     DateTime        @default(now())
+  trainedById   String
+  metrics       Json?           // Training metrics like accuracy, precision, recall
+  modelPath     String?         // Path to the serialized model file (e.g., .pkl, .h5)
+
+  trainedBy     User            @relation(fields: [trainedById], references: [id])
+  trainingJob   TrainingJob?    // Optional: Link to the specific training job that created it
+  predictions   Prediction[]
+}
+
+// Training Job Model (for asynchronous ML tasks)
+model TrainingJob {
+  id            String          @id @default(uuid())
+  name          String
+  description   String?
+  datasetId     String
+  modelId       String?         @unique // Link to the model created by this job, if successful
+  submittedById String
+  submittedAt   DateTime        @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  status        JobStatus       @default(PENDING)
+  logs          String?         @db.Text
+  results       Json?           // Store summary of results, or path to detailed results
+
+  dataset       Dataset         @relation(fields: [datasetId], references: [id])
+  model         Model?          @relation(fields: [modelId], references: [id])
+  submittedBy   User            @relation(fields: [submittedById], references: [id])
+}
+
+// Prediction Model (for storing inference results)
+model Prediction {
+  id            String          @id @default(uuid())
+  modelId       String
+  predictedById String
+  predictedAt   DateTime        @default(now())
+  inputData     Json            // The input data used for prediction
+  outputData    Json            // The prediction result
+  confidence    Float?
+  requestId     String          @unique @default(uuid()) // Unique request ID for tracking
+
+  model         Model           @relation(fields: [modelId], references: [id])
+  predictedBy   User            @relation(fields: [predictedById], references: [id])
+}

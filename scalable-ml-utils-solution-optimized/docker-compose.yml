@@ -1,89 +1,67 @@
-```yaml
 version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
-    container_name: postgres_db
+    image: postgres:13
+    container_name: ml-utilities-db
+    restart: always
     environment:
-      POSTGRES_DB: ml_utilities_db
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-ml_utilities}
+    volumes:
+      - ml-utilities-db:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d ml_utilities_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   redis:
-    image: redis:7-alpine
-    container_name: redis_cache
+    image: redis:6-alpine
+    container_name: ml-utilities-redis
+    restart: always
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: ml_utilities_backend
-    env_file:
-      - ./backend/.env
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: ml-utilities-backend
+    restart: always
     environment:
-      # Ensure these match .env, or override if needed for specific environments
-      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/ml_utilities_db
-      REDIS_URL: redis://redis:6379/0
-      # Adjust CORS origins if deploying to a different domain
-      BACKEND_CORS_ORIGINS: http://localhost:3000,http://localhost,http://127.0.0.1
-    ports:
-      - "8000:8000"
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-ml_utilities}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_here}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-10}
+      ORIGIN: ${ORIGIN:-http://localhost:80} # Frontend URL within docker network
+      UPLOAD_DIR: ./uploads
+      REDIS_URL: redis://redis:6379
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
     volumes:
-      - ./backend/data/storage:/app/data/storage # Persist uploaded files and models
-      - ./backend/logs:/app/logs # Persist logs
+      - ./server/uploads:/app/uploads # Persist uploaded files
+      - ./server/logs:/app/logs # Persist logs
+    ports:
+      - "5000:5000"
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    # Using entrypoint.sh to run migrations and seed data
-    entrypoint: /app/entrypoint.sh
-    # Replaced command with gunicorn for production deployment
-    # command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    restart: unless-stopped
+      - db
+      - redis
+    # Run migrations and seed on startup (for dev/test, use separate CI/CD step for prod)
+    # entrypoint: ["/bin/sh", "-c", "npx prisma migrate deploy && node scripts/seed.js && npm start"]
+    entrypoint: ["/bin/sh", "-c", "npx prisma migrate deploy && npm start"] # For production, seed might be run separately
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: ml_utilities_frontend
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: ml-utilities-frontend
+    restart: always
     environment:
-      # Pass backend API URL to React app
-      REACT_APP_API_BASE_URL: http://localhost:8000/api/v1
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Points to backend container directly
     ports:
-      - "3000:3000"
+      - "80:80"
     depends_on:
-      backend:
-        condition: service_started
-    # React dev server will watch for changes locally. For production,
-    # you'd serve the build folder with Nginx/similar.
-    command: ["npm", "start"]
-    restart: unless-stopped
+      - backend
 
 volumes:
-  postgres_data:
-  redis_data:
-  # Host-mounted volumes for file storage and logs in backend
-  # backend_data_storage: # Not needed with host mount
-  # backend_logs: # Not needed with host mount
-
-```
+  ml-utilities-db:

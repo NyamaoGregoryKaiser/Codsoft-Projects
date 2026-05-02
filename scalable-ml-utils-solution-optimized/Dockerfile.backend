@@ -1,0 +1,29 @@
+# Stage 1: Build production-ready backend
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and package-lock.json
+COPY server/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY server/src ./src
+COPY server/prisma ./prisma
+COPY server/scripts ./scripts
+COPY server/uploads ./uploads
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Create directory for uploads if it doesn't exist
+RUN mkdir -p uploads
+
+# Expose port
+EXPOSE 5000
+
+# Run the application
+CMD ["node", "src/server.js"]
