@@ -1,0 +1,19 @@
+# Use the same base image as the main app for consistency
+FROM python:3.10-slim-buster
+
+WORKDIR /app
+
+# Install system dependencies if worker needs them (e.g., psycopg2-binary)
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    netcat-traditional \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Entrypoint script for the worker
+ENTRYPOINT ["./worker_boot.sh"]
+```
