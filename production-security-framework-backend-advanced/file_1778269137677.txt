@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head th:replace="~{fragments/head :: common-head('Products')}"></head>
+<body>
+<div th:replace="~{fragments/navbar :: navbar}"></div>
+
+<div class="container mt-5">
+    <h2 class="mb-4">Product List</h2>
+
+    <div th:if="${products.isEmpty()}" class="alert alert-info">No products found.</div>
+
+    <table th:if="${!products.isEmpty()}" class="table table-striped table-hover">
+        <thead class="thead-dark">
+        <tr>
+            <th>ID</th>
+            <th>
+                <a th:href="@{/products(page=${currentPage}, size=${pageSize}, sort='name,' + (${sortField eq 'name' and sortDirection eq 'asc'} ? 'desc' : 'asc'))}">Name</a>
+            </th>
+            <th>Description</th>
+            <th>
+                <a th:href="@{/products(page=${currentPage}, size=${pageSize}, sort='price,' + (${sortField eq 'price' and sortDirection eq 'asc'} ? 'desc' : 'asc'))}">Price</a>
+            </th>
+            <th>Created At</th>
+            <th sec:authorize="hasRole('ADMIN')">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="product : ${products}">
+            <td th:text="${product.id}">1</td>
+            <td th:text="${product.name}">Laptop Pro</td>
+            <td th:text="${product.description}">High-performance laptop</td>
+            <td th:text="${#numbers.formatCurrency(product.price)}">$1200.00</td>
+            <td th:text="${#temporals.format(product.createdAt, 'yyyy-MM-dd HH:mm')}">2023-01-01 10:00</td>
+            <td sec:authorize="hasRole('ADMIN')">
+                <a th:href="@{/products/edit/{id}(id=${product.id})}" class="btn btn-sm btn-info">Edit</a>
+                <form th:action="@{/products/delete/{id}(id=${product.id})}" method="post" style="display:inline;"
+                      onsubmit="return confirm('Are you sure you want to delete this product?');">
+                    <button type="submit" class="btn btn-sm btn-danger ml-2">Delete</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <nav aria-label="Page navigation" th:if="${products.totalPages > 0}">
+        <ul class="pagination justify-content-center">
+            <li class="page-item" th:classappend="${products.first ? 'disabled' : ''}">
+                <a class="page-link" th:href="@{/products(page=${currentPage - 1}, size=${pageSize}, sort=${sortField} + ',' + ${sortDirection})}">Previous</a>
+            </li>
+            <li class="page-item" th:each="i : ${#numbers.sequence(0, products.totalPages - 1)}"
+                th:classappend="${currentPage == i ? 'active' : ''}">
+                <a class="page-link" th:href="@{/products(page=${i}, size=${pageSize}, sort=${sortField} + ',' + ${sortDirection})}" th:text="${i + 1}">1</a>
+            </li>
+            <li class="page-item" th:classappend="${products.last ? 'disabled' : ''}">
+                <a class="page-link" th:href="@{/products(page=${currentPage + 1}, size=${pageSize}, sort=${sortField} + ',' + ${sortDirection})}">Next</a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

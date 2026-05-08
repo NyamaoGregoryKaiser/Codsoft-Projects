@@ -1,0 +1,108 @@
+package com.example.securityapp.exception;
+
+import com.example.securityapp.dto.ErrorResponseDTO;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@ControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponseDTO> handleResourceNotFoundException(ResourceNotFoundException ex, HttpServletRequest request) {
+        log.warn("ResourceNotFoundException at {}: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getRequestURI(),
+                HttpStatus.NOT_FOUND,
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(UserAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponseDTO> handleUserAlreadyExistsException(UserAlreadyExistsException ex, HttpServletRequest request) {
+        log.warn("UserAlreadyExistsException at {}: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getRequestURI(),
+                HttpStatus.CONFLICT,
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponseDTO> handleBadCredentialsException(BadCredentialsException ex, HttpServletRequest request) {
+        log.warn("BadCredentialsException at {}: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getRequestURI(),
+                HttpStatus.UNAUTHORIZED,
+                "Invalid username or password.",
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.UNAUTHORIZED);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponseDTO> handleAccessDeniedException(AccessDeniedException ex, HttpServletRequest request) {
+        log.warn("AccessDeniedException at {}: {}", request.getRequestURI(), ex.getMessage());
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getRequestURI(),
+                HttpStatus.FORBIDDEN,
+                "You do not have permission to access this resource.",
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponseDTO> handleGlobalException(Exception ex, HttpServletRequest request) {
+        log.error("An unexpected error occurred at {}: {}", request.getRequestURI(), ex.getMessage(), ex);
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getRequestURI(),
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred. Please try again later.",
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    // Handle @Valid DTO validation errors
+    @Override
+    protected ResponseEntity<Object> handleMethodArgumentNotValid(
+            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach(error -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+
+        ErrorResponseDTO errorResponse = new ErrorResponseDTO(
+                request.getDescription(false).replace("uri=", ""),
+                HttpStatus.BAD_REQUEST,
+                "Validation Failed",
+                LocalDateTime.now(),
+                errors
+        );
+        log.warn("Validation failed for request {}: {}", request.getDescription(false), errors);
+        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+    }
+}

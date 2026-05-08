@@ -1,0 +1,32 @@
+INSERT INTO roles (name) VALUES ('ROLE_USER');
+INSERT INTO roles (name) VALUES ('ROLE_ADMIN');
+
+-- Password for 'admin' is 'adminpassword' (encoded with BCrypt)
+-- Password for 'user' is 'userpassword' (encoded with BCrypt)
+INSERT INTO users (username, password) VALUES ('admin', '$2a$10$wTf2fC8f3G/H0n/I9Z/A5uH/P7tC2b.J.S6o.Y8.Q5Z0F6Y8L6W0O'); -- adminpassword
+INSERT INTO users (username, password) VALUES ('user', '$2a$10$Hl.u.k7F3J4I.v2b.L9X1O/Q7o.R0T.E.F5Z0C4Y8L6W0O.P7tD');    -- userpassword
+
+INSERT INTO user_roles (user_id, role_id) VALUES (
+    (SELECT id FROM users WHERE username = 'admin'),
+    (SELECT id FROM roles WHERE name = 'ROLE_ADMIN')
+);
+INSERT INTO user_roles (user_id, role_id) VALUES (
+    (SELECT id FROM users WHERE username = 'admin'),
+    (SELECT id FROM roles WHERE name = 'ROLE_USER')
+);
+INSERT INTO user_roles (user_id, role_id) VALUES (
+    (SELECT id FROM users WHERE username = 'user'),
+    (SELECT id FROM roles WHERE name = 'ROLE_USER')
+);
+
+INSERT INTO products (name, description, price) VALUES
+('Laptop Pro', 'High-performance laptop for professionals with 16GB RAM and 512GB SSD.', 1200.00),
+('Wireless Mouse', 'Ergonomic wireless mouse with adjustable DPI.', 25.50),
+('Mechanical Keyboard', 'RGB Mechanical Keyboard with blue switches.', 85.99),
+('USB-C Hub', '7-in-1 USB-C Hub with HDMI, USB 3.0, and SD card reader.', 49.95),
+('External SSD 1TB', 'Portable 1TB SSD for fast data transfer.', 110.00),
+('Gaming Headset', 'Over-ear gaming headset with noise-canceling microphone.', 75.00),
+('Webcam Full HD', '1080p Full HD webcam for video conferencing.', 59.00),
+('Monitor 27-inch', '27-inch IPS Monitor with QHD resolution.', 320.00),
+('Desk Lamp LED', 'LED Desk Lamp with adjustable brightness and color temperature.', 35.00),
+('Smartwatch Series X', 'Fitness tracker and smartwatch with heart rate monitoring.', 199.99);
