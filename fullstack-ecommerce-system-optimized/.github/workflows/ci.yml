@@ -1,0 +1,166 @@
+```yaml
+name: CI/CD Pipeline for E-commerce System
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_ecommerce_db
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create .env file for backend tests
+        working-directory: ./backend
+        run: |
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+          echo "POSTGRES_SERVER=db" >> .env
+          echo "POSTGRES_USER=testuser" >> .env
+          echo "POSTGRES_PASSWORD=testpassword" >> .env
+          echo "POSTGRES_DB=test_ecommerce_db" >> .env
+          echo "FIRST_SUPERUSER_EMAIL=testadmin@example.com" >> .env
+          echo "FIRST_SUPERUSER_PASSWORD=testadminpassword" >> .env
+          echo "REDIS_SERVER=redis" >> .env
+          echo "REDIS_PORT=6379" >> .env
+          echo "REDIS_DB=1" >> .env # Use a different DB for tests
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=1" >> .env # Short expiration for tests
+
+      - name: Run Alembic migrations (Backend)
+        working-directory: ./backend
+        run: alembic upgrade head
+
+      - name: Run backend tests with coverage
+        working-directory: ./backend
+        run: |
+          pytest app/tests/ --cov=app --cov-report=xml --junitxml=pytest-report.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage-report
+          path: ./backend/coverage.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-pytest-results
+          path: ./backend/pytest-report.xml
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Frontend tests would typically involve client-side JavaScript testing
+      # (e.g., using Cypress, Jest, or Playwright for a modern SPA),
+      # or basic Flask route testing. For this Flask app consuming an API,
+      # we'll assume basic Python linting/static analysis or simple Flask unit tests.
+      # For now, just a placeholder.
+      - name: Run frontend linting/static analysis
+        working-directory: ./frontend
+        run: |
+          echo "Running basic frontend checks..."
+          # Example: pylint app.py
+          # Or more robust JS testing tools if a full SPA was included.
+          # For this example, no actual tests are implemented for Flask frontend due to API focus.
+          # If Flask has its own unit tests, they would go here.
+          ls -la app.py # Placeholder for a command to show it's working
+```
+
+---
+
+**4. Testing & Quality**
+
+*   **Unit Tests**: Implemented for `crud_user` and `security` modules (`backend/app/tests/unit/`). Aimed for common functions and edge cases.
+*   **Integration Tests**: Implemented for API endpoints (`backend/app/tests/integration/`) using `TestClient` from FastAPI, covering authentication, user management, categories, products, carts, orders, and reviews. This includes CRUD operations and authorization checks.
+*   **API Tests**: Covered by the integration tests which directly hit the FastAPI endpoints.
+*   **Performance Tests**:
+    *   **Concept**: For real-world performance testing, tools like `Locust` (Python-based), `JMeter`, or `k6` would be used.
+    *   **Setup Example (Conceptual, not executable code here)**:
+        ```python
+        # backend/locustfile.py (Example)
+        from locust import HttpUser, task, between
+
+        class EcommerceUser(HttpUser):
+            wait_time = between(1, 2.5)  # Users wait between 1 and 2.5 seconds between tasks
+            host = "http://localhost:8000" # Or your deployed API URL
+
+            # Assume a login scenario or public access
+            @task(3) # 30% chance to browse products
+            def browse_products(self):
+                self.client.get("/api/v1/products/", name="Browse Products")
+
+            @task(1) # 10% chance to view a specific product (requires a product ID)
+            def view_product_detail(self):
+                product_id = 1 # Example static ID, in real test, fetch dynamically
+                self.client.get(f"/api/v1/products/{product_id}", name="View Product Detail")
+
+            # More complex tasks would involve login, adding to cart, checkout etc.
+            # requiring storing state (e.g., user token)
+            # def on_start(self):
+            #     # self.login() # Example for user-specific actions
+            #     pass
+        ```
+    *   **Execution**: Run `locust -f backend/locustfile.py` and access the web UI at `http://localhost:8089`.
+
+**Coverage**: The provided unit and integration tests aim for a good coverage on critical paths and core logic, demonstrating the approach. Reaching 80%+ coverage for a full system of this scale in a single output is challenging without exhaustive testing of every line and permutation, but the structure facilitates it.
+
+---
+
+**5. Documentation**
+
+#### Comprehensive README

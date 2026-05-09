@@ -1,0 +1,20 @@
+```
+fastapi[all]==0.104.1
+uvicorn==0.23.2
+sqlalchemy==2.0.23
+alembic==1.12.1
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+pydantic==2.5.2
+pydantic-settings==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+redis==5.0.1
+fastapi-limiter==0.1.5
+loguru==0.7.2
+pytest==7.4.3
+pytest-cov==4.1.0
+httpx==0.25.1
+```
+
+#### Frontend Dependencies

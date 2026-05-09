@@ -1,0 +1,39 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}Products{% endblock %}
+
+{% block content %}
+    <h2>All Products</h2>
+
+    <div class="product-filter">
+        <form action="{{ url_for('products') }}" method="GET">
+            <input type="text" name="search" placeholder="Search products..." value="{{ search_query if search_query }}">
+            <select name="category_id">
+                <option value="">All Categories</option>
+                {% for category in categories %}
+                    <option value="{{ category.id }}" {% if category.id|string == selected_category_id %}selected{% endif %}>{{ category.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn-primary">Filter</button>
+            <a href="{{ url_for('products') }}" class="btn-primary" style="background-color: #6c757d;">Reset Filters</a>
+        </form>
+    </div>
+
+    {% if products %}
+        <div class="product-list">
+            {% for product in products %}
+            <div class="product-card">
+                <img src="{{ product.image_url if product.image_url else 'https://via.placeholder.com/150' }}" alt="{{ product.name }}">
+                <h3><a href="{{ url_for('product_detail', product_id=product.id) }}">{{ product.name }}</a></h3>
+                <p class="price">${{ "%.2f"|format(product.price) }}</p>
+                <a href="{{ url_for('product_detail', product_id=product.id) }}" class="btn-detail">View Details</a>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No products found matching your criteria.</p>
+    {% endif %}
+{% endblock %}
+
+```

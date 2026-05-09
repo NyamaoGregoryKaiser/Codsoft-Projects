@@ -1,0 +1,103 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ecommerce_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-} # Use password if set
+    volumes:
+      - redis_data:/data/
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecommerce_backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend # Mount for live code changes (dev only, use --no-volumes for production build)
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecommerce_frontend
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./frontend:/app/frontend # Mount for live code changes (dev only)
+    depends_on:
+      backend:
+        condition: service_started # Wait for backend to start before frontend attempts to connect
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
+
+```
+
+**Frontend Dockerfile (frontend/Dockerfile)**
+```dockerfile
+# Use an official Python runtime as a parent image
+FROM python:3.11-slim-bullseye
+
+# Set environment variables
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
+
+# Set the working directory in the container
+WORKDIR /app/frontend
+
+# Copy requirements file and install dependencies
+COPY ./requirements.txt /app/frontend/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY . /app/frontend
+
+# Expose the port the app runs on
+EXPOSE 8001
+
+# Command to run the application
+CMD ["flask", "run", "--host=0.0.0.0", "--port=8001"]
+
+```
+
+#### CI/CD Pipeline Configuration (Example with GitHub Actions)

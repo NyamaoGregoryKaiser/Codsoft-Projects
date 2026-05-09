@@ -1,0 +1,81 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+    {% if product %}
+    <div class="product-detail">
+        <div class="product-detail-image">
+            <img src="{{ product.image_url if product.image_url else 'https://via.placeholder.com/400x300' }}" alt="{{ product.name }}">
+        </div>
+        <div class="product-detail-info">
+            <h2>{{ product.name }}</h2>
+            <p class="price">${{ "%.2f"|format(product.price) }}</p>
+            <p class="description">{{ product.description }}</p>
+            <p class="stock {% if product.stock == 0 %}out-of-stock{% endif %}">
+                {% if product.stock > 0 %}
+                    In Stock: {{ product.stock }}
+                {% else %}
+                    Out of Stock
+                {% endif %}
+            </p>
+
+            {% if user_email %}
+                {% if product.stock > 0 %}
+                <form action="{{ url_for('add_to_cart', product_id=product.id) }}" method="POST" class="add-to-cart-form">
+                    <label for="quantity">Quantity:</label>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1" max="{{ product.stock }}">
+                    <button type="submit" class="btn-primary">Add to Cart</button>
+                </form>
+                {% else %}
+                    <button class="btn-primary" disabled>Out of Stock</button>
+                {% endif %}
+            {% else %}
+                <p><a href="{{ url_for('login') }}">Login</a> to add to cart.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="reviews-section">
+        <h3>Customer Reviews</h3>
+        {% if reviews %}
+            {% for review in reviews %}
+                <div class="review-item">
+                    <p class="rating">Rating: {{ '⭐' * review.rating }}</p>
+                    <p class="user-date">By {{ review.user.full_name or review.user.email }} on {{ review.created_at.strftime('%Y-%m-%d') }}</p>
+                    <p class="comment">{{ review.comment }}</p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>No reviews yet. Be the first to review this product!</p>
+        {% endif %}
+
+        {% if user_email %}
+            <h4>Submit Your Review</h4>
+            <form action="{{ url_for('submit_review', product_id=product.id) }}" method="POST" class="review-form">
+                <label for="rating">Rating:</label>
+                <select id="rating" name="rating" required>
+                    <option value="">Select a rating</option>
+                    <option value="5">5 Stars - Excellent</option>
+                    <option value="4">4 Stars - Very Good</option>
+                    <option value="3">3 Stars - Good</option>
+                    <option value="2">2 Stars - Fair</option>
+                    <option value="1">1 Star - Poor</option>
+                </select>
+
+                <label for="comment">Comment (optional):</label>
+                <textarea id="comment" name="comment" rows="4"></textarea>
+
+                <button type="submit" class="btn-primary">Submit Review</button>
+            </form>
+        {% else %}
+            <p><a href="{{ url_for('login') }}">Login</a> to submit a review.</p>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <p>Product not found.</p>
+    {% endif %}
+{% endblock %}
+```

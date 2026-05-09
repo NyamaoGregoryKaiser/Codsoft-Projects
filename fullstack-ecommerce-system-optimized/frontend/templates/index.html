@@ -1,0 +1,31 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+    <h2>Welcome to Our E-commerce Store!</h2>
+    <p>Discover amazing products at unbeatable prices.</p>
+
+    <h3>Featured Products</h3>
+    {% if products %}
+        <div class="product-list">
+            {% for product in products[:4] %} {# Show top 4 products as featured #}
+            <div class="product-card">
+                <img src="{{ product.image_url if product.image_url else 'https://via.placeholder.com/150' }}" alt="{{ product.name }}">
+                <h3><a href="{{ url_for('product_detail', product_id=product.id) }}">{{ product.name }}</a></h3>
+                <p class="price">${{ "%.2f"|format(product.price) }}</p>
+                <a href="{{ url_for('product_detail', product_id=product.id) }}" class="btn-detail">View Details</a>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No products available yet. Check back soon!</p>
+    {% endif %}
+
+    <div style="text-align: center; margin-top: 30px;">
+        <a href="{{ url_for('products') }}" class="btn-primary">Browse All Products</a>
+    </div>
+{% endblock %}
+
+```

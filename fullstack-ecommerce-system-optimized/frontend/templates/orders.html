@@ -1,0 +1,47 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}Your Orders{% endblock %}
+
+{% block content %}
+    <h2>Your Orders</h2>
+
+    {% if orders %}
+        {% for order in orders %}
+        <div class="order-card">
+            <h3>Order #{{ order.id }}</h3>
+            <p><strong>Order Date:</strong> {{ order.order_date.strftime('%Y-%m-%d %H:%M') }}</p>
+            <p><strong>Status:</strong> <span class="highlight">{{ order.status|capitalize }}</span></p>
+            <p><strong>Total Amount:</strong> ${{ "%.2f"|format(order.total_amount) }}</p>
+            <p><strong>Payment Status:</strong> {{ order.payment_status|capitalize }}</p>
+
+            <h4>Order Items:</h4>
+            <table class="order-items-table">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Price at Order</th>
+                        <th>Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in order.items %}
+                    <tr>
+                        <td><a href="{{ url_for('product_detail', product_id=item.product.id) }}">{{ item.product.name }}</a></td>
+                        <td>{{ item.quantity }}</td>
+                        <td>${{ "%.2f"|format(item.price_at_order) }}</td>
+                        <td>${{ "%.2f"|format(item.quantity * item.price_at_order) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p>You have no orders yet.</p>
+        <p><a href="{{ url_for('products') }}" class="btn-primary">Start Shopping</a></p>
+    {% endif %}
+{% endblock %}
+
+```
