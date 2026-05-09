@@ -1,0 +1,176 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_auth_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Wait for PostgreSQL to be ready
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+      
+      - name: Wait for Redis to be ready
+        run: |
+          until nc -z localhost 6379; do
+            echo "Waiting for redis..."
+            sleep 2
+          done
+
+      - name: Configure .env for backend tests
+        run: |
+          cp backend/.env.example backend/.env
+          echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/test_auth_db" >> backend/.env
+          echo "REDIS_URL=redis://localhost:6379/0" >> backend/.env
+          echo "SECRET_KEY=supersecretkeyfortestingpurposes" >> backend/.env
+          echo "MAIL_USERNAME=test@example.com" >> backend/.env
+          echo "MAIL_PASSWORD=testpassword" >> backend/.env
+          echo "MAIL_FROM_EMAIL=test@example.com" >> backend/.env
+          echo "MAIL_SERVER=localhost" >> backend/.env
+          echo "MAIL_PORT=25" >> backend/.env
+          echo "MAIL_USE_TLS=False" >> backend/.env
+          echo "FRONTEND_URL=http://localhost:3000" >> backend/.env
+
+      - name: Run Alembic migrations
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Seed database (optional, for test data)
+        run: |
+          cd backend
+          python -m app.utils.seed_db
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest --cov=app --cov-report=xml
+
+      - name: Upload backend coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: codecov-backend
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Configure .env for frontend tests
+        run: |
+          echo "REACT_APP_API_BASE_URL=http://localhost:8000/api/v1" > frontend/.env
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --coverage --watchAll=false
+
+      - name: Upload frontend coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: codecov-frontend
+
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #
+  #     - name: Build and push backend image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./backend
+  #         file: ./backend/Dockerfile
+  #         push: true
+  #         tags: yourdockerhubusername/auth-backend:latest,yourdockerhubusername/auth-backend:${{ github.sha }}
+  #
+  #     - name: Build and push frontend image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./frontend
+  #         file: ./frontend/Dockerfile
+  #         push: true
+  #         tags: yourdockerhubusername/auth-frontend:latest,yourdockerhubusername/auth-frontend:${{ github.sha }}
+  #
+  #     - name: Deploy to Server (e.g., via SSH or Kubernetes)
+  #       run: |
+  #         echo "Deployment steps go here. E.g., SSH into server and run docker-compose pull/up, or apply K8s manifests."
+  #         # Example: ssh user@your_server "cd /path/to/app && docker-compose pull && docker-compose up -d"
+  #         # Example: kubectl apply -f k8s/backend.yaml -f k8s/frontend.yaml
+```

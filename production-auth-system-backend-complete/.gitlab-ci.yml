@@ -1,0 +1,143 @@
+# This is a basic .gitlab-ci.yml template for a full-stack Python/React application
+# It includes stages for building, testing, and a placeholder for deployment.
+
+# Define common variables
+variables:
+  PYTHON_VERSION: 3.9
+  NODE_VERSION: 18
+  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: "" # Disable TLS for Docker-in-Docker
+
+stages:
+  - build
+  - test
+  - deploy
+
+# --- Docker-in-Docker service for building and testing Docker images ---
+.dind_service:
+  image: docker:20.10.16-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: "" # Disable TLS for Docker-in-Docker
+
+# --- Backend Jobs ---
+.backend_base:
+  image: python:$PYTHON_VERSION-slim-buster
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-backend"
+    paths:
+      - backend/.pytest_cache/
+      - backend/__pycache__/
+      - backend/.venv/
+  before_script:
+    - python -m venv backend/.venv
+    - source backend/.venv/bin/activate
+    - pip install -r backend/requirements.txt
+
+build_backend_image:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA -f backend/Dockerfile backend
+    - docker push $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA
+  tags:
+    - docker
+
+backend_unit_test:
+  stage: test
+  extends: .backend_base
+  script:
+    - cd backend
+    - pytest unit/
+  coverage: '/(?i)total.*? ([\d.]+%)'
+
+backend_integration_test:
+  stage: test
+  extends: .backend_base
+  services:
+    - postgres:15-alpine
+    - redis:7-alpine
+  variables:
+    # Use service names defined in .gitlab-ci.yml for DATABASE_URL
+    DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/test_auth_db
+    REDIS_URL: redis://redis:6379/0
+    SECRET_KEY: this-is-a-test-secret-key-for-ci
+    ALGORITHM: HS256
+    ACCESS_TOKEN_EXPIRE_MINUTES: 1
+    REFRESH_TOKEN_EXPIRE_DAYS: 1
+    MAIL_USERNAME: test@example.com
+    MAIL_PASSWORD: test
+    MAIL_FROM_EMAIL: test@example.com
+    MAIL_FROM_NAME: Test Auth
+    MAIL_SERVER: localhost
+    MAIL_PORT: 25
+    MAIL_USE_TLS: False
+    FRONTEND_URL: http://localhost:3000
+  script:
+    - apt-get update && apt-get install -y postgresql-client
+    - cd backend
+    - alembic upgrade head # Apply migrations to the test DB
+    - python -m app.utils.seed_db # Seed test data
+    - pytest integration/
+  needs: ["backend_unit_test"]
+  coverage: '/(?i)total.*? ([\d.]+%)'
+
+# --- Frontend Jobs ---
+.frontend_base:
+  image: node:$NODE_VERSION-alpine
+  cache:
+    key: "$CI_COMMIT_REF_SLUG-frontend"
+    paths:
+      - frontend/node_modules/
+  before_script:
+    - cd frontend
+    - npm install --prefer-offline --ci
+
+build_frontend_image:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA -f frontend/Dockerfile frontend
+    - docker push $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA
+  tags:
+    - docker
+
+frontend_unit_test:
+  stage: test
+  extends: .frontend_base
+  script:
+    - cd frontend
+    - npm test -- --coverage --watchAll=false
+  coverage: '/^All files[^|]*\|\s*([\d.]+)/' # Adjust regex if needed for npm test output
+
+# --- Deployment Job ---
+# This is a placeholder. Real deployment depends on your infrastructure.
+deploy_production:
+  stage: deploy
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - echo "Deploying to production (Placeholder)"
+    # Example for deploying with docker-compose on a remote server
+    # - ssh user@your_server "cd /path/to/app && docker-compose pull && docker-compose up -d --remove-orphans"
+    # Or for Kubernetes:
+    # - kubectl apply -f kubernetes/deployment.yaml
+  environment:
+    name: production
+    url: https://your-app.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  needs:
+    - "build_backend_image"
+    - "backend_integration_test"
+    - "build_frontend_image"
+    - "frontend_unit_test"
+  tags:
+    - docker # Use a runner with docker capabilities
+```
