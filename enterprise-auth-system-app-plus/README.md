@@ -1,243 +1,495 @@
-# Enterprise-Grade Authentication System
+```markdown
+# SecureAuthService: A Comprehensive Full-Stack Authentication System
 
-This project is a comprehensive, production-ready full-stack authentication system designed to demonstrate enterprise-grade development practices. It features a robust Spring Boot backend, a responsive React frontend, and a PostgreSQL database, all orchestrated with Docker Compose for easy local setup.
+This project is a full-scale, production-ready authentication and authorization system built with FastAPI (Python) for the backend and React for the frontend. It emphasizes security, scalability, and maintainability, providing a robust foundation for enterprise-grade web applications.
 
-## Features
+## Table of Contents
 
-**Core Application (Backend - Java/Spring Boot):**
-*   **User Management:** Registration, login, profile retrieval.
-*   **Role-Based Authorization:** `ROLE_USER` and `ROLE_ADMIN`.
-*   **CRUD for Notes:** Demonstrates secure data operations tied to users and roles.
-*   **RESTful API:** Clear and consistent API endpoints.
-*   **Data Validation:** Using Jakarta Bean Validation.
-
-**Core Application (Frontend - React):**
-*   **User Interface:** Intuitive UI for login, registration, dashboard, profile, and note management.
-*   **Authentication Flow:** Handles JWT tokens, redirects for unauthorized access.
-*   **React Router:** For single-page application navigation.
-*   **Context API:** For global authentication state management.
-*   **API Integration:** Uses Axios for seamless backend communication.
-
-**Database Layer (PostgreSQL & Flyway):**
-*   **Schema Definitions:** Users, Roles, User_Roles, Notes tables.
-*   **Migration Scripts:** Managed by Flyway for version-controlled schema evolution.
-*   **Seed Data:** Initial admin user, regular user, and roles are automatically populated.
-*   **Query Optimization:** Leverages Spring Data JPA for efficient data access, with indexing on foreign keys.
-
-**Configuration & Setup:**
-*   **Dependency Management:** Maven for Java, npm for React.
-*   **Environment Configuration:** `application.yml` for Spring Boot, `.env` for React.
-*   **Docker Setup:** `Dockerfile`s for backend and frontend, `docker-compose.yml` for multi-container orchestration (PostgreSQL, Spring Boot, Nginx/React).
-*   **CI/CD Configuration:** GitHub Actions workflow described for automated builds and tests.
-
-**Testing & Quality:**
-*   **Unit Tests:** JUnit 5 and Mockito for isolated component testing (e.g., services, mappers).
-*   **Integration Tests:** `@DataJpaTest` with Testcontainers for repository layer, `@SpringBootTest` for full application context.
-*   **API Tests:** `@WebMvcTest` for controller layer testing, simulating HTTP requests.
-*   **Performance Tests:** Description of tools and approach (JMeter/Gatling).
-
-**Additional Features:**
-*   **Authentication/Authorization:** JWT-based authentication with Spring Security. Role-based access control using `@PreAuthorize`.
-*   **Logging & Monitoring:** SLF4J with Logback configured for structured logging. Spring Boot Actuator for health checks (integrated with Docker healthchecks).
-*   **Error Handling:** Global `@ControllerAdvice` for consistent error responses (400, 401, 403, 404, 409, 500).
-*   **Caching Layer:** Spring Cache with Caffeine for improving performance (e.g., user details lookup).
-*   **Rate Limiting:** Implemented with Bucket4j on authentication endpoints to prevent abuse.
-*   **API Documentation:** Integrated Springdoc OpenAPI (Swagger UI) for interactive API documentation.
-
-## Getting Started
-
-Follow these steps to set up and run the project locally using Docker Compose.
-
-### Prerequisites
-
-*   Docker Desktop (includes Docker Engine and Docker Compose)
-*   Git
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/your-username/auth-system.git # Replace with your actual repo
-cd auth-system
-```
-
-### 2. Configure Frontend Environment (Optional, for local `npm start` development)
-
-Create a `.env` file in the `frontend/` directory with the following content:
-```
-REACT_APP_API_BASE_URL=http://localhost:8080/api/v1
-```
-This is only needed if you plan to run the frontend separately using `npm start`. When using `docker-compose up`, the API URL is handled by Nginx proxy or Docker environment variables.
-
-### 3. Build and Run with Docker Compose
-
-Navigate to the root directory of the project (where `docker-compose.yml` is located) and run:
-
-```bash
-docker-compose up --build -d
-```
-
-*   `--build`: Builds the Docker images from the `Dockerfile`s before starting containers.
-*   `-d`: Runs the containers in detached mode (in the background).
-
-This command will:
-1.  Build the `db` (PostgreSQL) image.
-2.  Build the `backend` (Spring Boot) image.
-3.  Build the `frontend` (React + Nginx) image.
-4.  Start all three services, ensuring the database is healthy before the backend starts, and the backend is healthy before the frontend starts.
-5.  Run Flyway migrations on the `db` container, populating initial schema and seed data.
-
-Wait a few minutes for all services to start up completely. You can check their status with:
-```bash
-docker-compose ps
-docker-compose logs -f
-```
-
-### 4. Access the Applications
-
-*   **Frontend (React App):** Open your browser and go to `http://localhost:3000`
-*   **Backend (Spring Boot API):**
-    *   API Endpoints: `http://localhost:8080/api/v1/...`
-    *   Swagger UI (API Docs): `http://localhost:8080/swagger-ui.html`
-    *   Actuator Health: `http://localhost:8080/actuator/health`
-
-### 5. Default Credentials
-
-The `V2__Add_Seed_Data.sql` migration script creates the following default users:
-
-*   **Admin User:**
-    *   Username: `adminuser`
-    *   Email: `admin@example.com`
-    *   Password: `admin123`
-    *   Roles: `ROLE_USER`, `ROLE_ADMIN`
-*   **Regular User:**
-    *   Username: `testuser`
-    *   Email: `test@example.com`
-    *   Password: `user123`
-    *   Roles: `ROLE_USER`
-
-You can use these credentials to log in via the frontend.
-
-### 6. Stop and Clean Up
-
-To stop and remove all services and their associated networks/volumes:
-```bash
-docker-compose down --volumes
-```
-*   `--volumes`: Removes the named volumes declared in the `docker-compose.yml` (e.g., `auth_db_data`), which will delete your database data. Use with caution! If you want to keep the data, remove this flag.
+1.  [Features](#features)
+2.  [Architecture](#architecture)
+3.  [Technologies Used](#technologies-used)
+4.  [Setup and Installation](#setup-and-installation)
+    *   [Prerequisites](#prerequisites)
+    *   [Local Development Setup (without Docker)](#local-development-setup-without-docker)
+    *   [Dockerized Setup (Recommended)](#dockerized-setup-recommended)
+    *   [Database Migrations](#database-migrations)
+    *   [Initial Seed Data](#initial-seed-data)
+5.  [Running the Application](#running-the-application)
+6.  [API Documentation](#api-documentation)
+7.  [Testing](#testing)
+    *   [Backend Tests](#backend-tests)
+    *   [Frontend Tests](#frontend-tests)
+    *   [Performance Tests](#performance-tests)
+8.  [CI/CD](#cicd)
+9.  [Deployment Guide](#deployment-guide)
+10. [Future Enhancements](#future-enhancements)
+11. [License](#license)
 
 ---
 
-## Architecture Documentation
+## 1. Features
 
-### Backend (Spring Boot)
+**Authentication & Authorization:**
+*   User Registration with email and password.
+*   User Login with JWT (JSON Web Tokens).
+*   Access Tokens (short-lived) for API authorization.
+*   Refresh Tokens (long-lived, HttpOnly cookies) for seamless token renewal.
+*   Refresh token rotation and revocation (database and Redis-backed).
+*   Password Hashing (Bcrypt).
+*   Password Reset (via email link, token-based).
+*   Role-Based Access Control (RBAC): `user` and `admin` roles.
+*   Ownership-based authorization for resources (e.g., `Post` CRUD).
 
-*   **Layered Architecture:**
-    *   **Controllers:** Handle HTTP requests, delegate to services, and return responses. Annotated with `@RestController`, `@RequestMapping`.
-    *   **Services:** Contain business logic, orchestrate repository calls, apply validation. Annotated with `@Service`, `@Transactional`.
-    *   **Repositories:** Interact with the database using Spring Data JPA. Extend `JpaRepository`.
-    *   **Entities:** JPA annotated classes representing database tables. Use `AuditModel` for common auditing fields.
-    *   **DTOs (Data Transfer Objects):** Used for data transfer between layers and external clients, ensuring separation of concerns from entities.
-    *   **Mappers:** MapStruct interfaces (`@Mapper`) for efficient and type-safe conversion between entities and DTOs.
-*   **Security (Spring Security & JWT):**
-    *   `SecurityConfig`: Main configuration for Spring Security, defining filter chain, authentication manager, password encoder, and CORS.
-    *   `JwtAuthenticationFilter`: Custom filter that intercepts requests, extracts JWT, validates it, and sets `Authentication` in `SecurityContextHolder`.
-    *   `JwtTokenProvider`: Utility for generating and validating JWT tokens.
-    *   `CustomUserDetailsService`: Loads user details from the database during authentication, implementing Spring Security's `UserDetailsService`.
-    *   `JwtAuthenticationEntryPoint`: Handles authentication failures (e.g., invalid/missing token) by sending 401 Unauthorized response.
-    *   `@PreAuthorize`: Used on service methods and controller endpoints for method-level role-based authorization.
-*   **Database Integration:**
-    *   **JPA:** Spring Data JPA for ORM.
-    *   **PostgreSQL:** Relational database.
-    *   **Flyway:** Database migration tool for schema version control (`/db/migration` scripts).
-*   **Additional Features:**
-    *   **Error Handling:** `GlobalExceptionHandler` (`@ControllerAdvice`) provides consistent, standardized JSON error responses for various exceptions.
-    *   **Logging:** Configured with Logback (`logback-spring.xml`) for detailed, categorized logging to console and file.
-    *   **Caching:** Spring Cache with Caffeine (`CacheConfig`) for performance optimization (e.g., caching `UserDetails` objects).
-    *   **Rate Limiting:** `RateLimitingConfig` with Bucket4j applied to authentication endpoints (`AuthController`) to prevent brute-force attacks.
-    *   **API Documentation:** Springdoc OpenAPI integration (`OpenApiConfig`) generates interactive Swagger UI documentation at `/swagger-ui.html`.
+**User Management:**
+*   User profile retrieval (`/me`).
+*   User profile update (`/me`).
+*   Admin-only endpoints for listing, creating, updating, and deleting any user.
 
-### Frontend (React)
+**Example Resource (Posts):**
+*   CRUD operations for `Post` resources to demonstrate authorization.
+*   Any authenticated user can view all posts and create their own.
+*   Users can only update/delete their own posts.
+*   Administrators can update/delete any post.
 
-*   **Component-Based:** Organized into reusable React components (e.g., `Header`, `Footer`, `PrivateRoute`) and pages (`LoginPage`, `DashboardPage`).
-*   **State Management:** `AuthContext.js` uses React Context API for global authentication state (`user`, `isAuthenticated`).
-*   **Routing:** React Router DOM handles navigation (`App.js`, `PrivateRoute.js`).
-*   **API Communication:** `api.js` configures Axios for HTTP requests, including interceptors for adding JWT tokens to headers and handling global error responses (e.g., 401 redirect to login).
-*   **Services:** `auth.service.js`, `user.service.js`, `note.service.js` encapsulate API calls related to specific resources.
-*   **UI/UX:** Basic CSS styling for a clean and functional interface.
+**Security & Robustness:**
+*   Comprehensive Error Handling middleware with standardized JSON responses.
+*   Logging (via Loguru) for all requests and application events.
+*   Rate Limiting on sensitive endpoints (e.g., login, password reset).
+*   CORS Configuration.
+*   Environment Variable-based Configuration.
+*   SQLAlchemy ORM with AsyncPG for asynchronous database operations.
+*   PostgreSQL Database.
+*   Redis for refresh token invalidation and password reset tokens.
 
-## API Documentation
+**Developer Experience:**
+*   Dockerized setup for easy local development and deployment.
+*   Alembic for database migrations.
+*   API Documentation (Swagger UI/OpenAPI) automatically generated by FastAPI.
+*   Comprehensive Testing suite (Unit, Integration, API, Performance examples).
+*   CI/CD pipeline configuration (GitHub Actions example).
+*   Clean, modular codebase with clear separation of concerns (API, Services, CRUD, DB, Schemas).
 
-The backend exposes a comprehensive RESTful API, fully documented with Swagger UI.
+## 2. Architecture
 
-**Access Swagger UI at:** `http://localhost:8080/swagger-ui.html`
+The project follows a standard three-tier architecture:
 
-Here's a summary of key endpoints:
+*   **Client (Frontend)**: A React.js single-page application (SPA) providing the user interface. It communicates with the backend via RESTful API calls.
+*   **API Gateway / Backend (FastAPI)**: A Python FastAPI application that handles all business logic, authentication, authorization, and data persistence. It exposes RESTful API endpoints.
+*   **Data Store**:
+    *   **PostgreSQL**: The primary relational database for storing application data (users, posts, refresh tokens, password reset tokens).
+    *   **Redis**: Used as a fast, in-memory data store for temporary data like refresh token blacklisting and password reset token lookup.
 
-**Authentication (`/api/v1/auth`)**
-*   `POST /login`: Authenticate user, returns JWT token.
-    *   Request Body: `LoginRequest` (usernameOrEmail, password)
-    *   Response: `JwtAuthenticationResponse`
-*   `POST /register`: Register new user.
-    *   Request Body: `RegisterRequest` (username, email, password)
-    *   Response: String message
+**Request Flow:**
+1.  **Client Request**: The React app sends an HTTP request to the Nginx server.
+2.  **Nginx Proxy**: Nginx acts as a reverse proxy, serving the React static files and routing API requests (`/api/*`) to the FastAPI backend.
+3.  **FastAPI Backend**:
+    *   **Middleware**: Requests pass through logging, error handling, and rate limiting middleware.
+    *   **Authentication**: JWTs are extracted from the `Authorization` header (access tokens) or HttpOnly cookies (refresh tokens) and verified.
+    *   **Authorization**: Role-based and ownership-based checks determine if the authenticated user has permission for the requested action.
+    *   **API Endpoints**: The request is routed to the appropriate endpoint.
+    *   **Service Layer**: Business logic is executed.
+    *   **CRUD Layer**: Database operations are performed via SQLAlchemy.
+    *   **Redis Integration**: Redis is consulted for token blacklisting, password reset token validity, or caching.
+4.  **Database Interaction**: Data is read from or written to PostgreSQL.
+5.  **Response**: The FastAPI backend sends a response back through Nginx to the React client.
 
-**User Management (`/api/v1/users`)**
-*   `GET /me`: Get current authenticated user's profile. (Requires JWT, `ROLE_USER` or `ROLE_ADMIN`)
-    *   Response: `UserProfileDTO`
-*   `GET /{userId}`: Get user details by ID. (Requires JWT, `ROLE_ADMIN`)
-    *   Response: `UserDTO`
-*   `GET /`: Get all users. (Requires JWT, `ROLE_ADMIN`)
-    *   Response: List of `UserDTO`
+```
++------------------------------------+          +------------------------------------+
+|             Client (React)         |          |          Backend (FastAPI)         |
+|                                    |          |                                    |
+|  Login, Register, Dashboard, Profile |<------->|  API Endpoints (/auth, /users, /posts) |
+|                                    |          |  - Authentication (JWT)            |
++------------------------------------+          |  - Authorization (RBAC, Ownership) |
+            ^                                   |  - Business Logic (Services)       |
+            | HTTP/S (with JWT/Cookies)         |  - Error Handling Middleware       |
+            |                                   |  - Logging, Rate Limiting          |
+            v                                   +------------------------------------+
++------------------------------------+                       ^
+|          Nginx (Proxy)             |                       | SQLAlchemy (AsyncPG)
+|  - Serves React Static Files       |<--------------------->|
+|  - Proxies /api/* to FastAPI       |                       |
++------------------------------------+                       v
+                                                   +--------------------------------+
+                                                   |       Database (PostgreSQL)    |
+                                                   | - Users, Posts, RefreshTokens  |
+                                                   | - PasswordResetTokens          |
+                                                   +--------------------------------+
+                                                               ^
+                                                               | Redis Client (asyncio)
+                                                               v
+                                                   +--------------------------------+
+                                                   |        Cache (Redis)           |
+                                                   | - Refresh Token Blacklist      |
+                                                   | - Password Reset Tokens        |
+                                                   +--------------------------------+
+```
 
-**Note Management (`/api/v1/notes`)**
-*   `POST /`: Create a new note. (Requires JWT, `ROLE_USER` or `ROLE_ADMIN`)
-    *   Request Body: `CreateNoteRequest` (title, content, userId)
-    *   Response: `NoteDTO`
-*   `GET /{noteId}`: Get note by ID. (Requires JWT, `ROLE_USER` (owner only) or `ROLE_ADMIN`)
-    *   Response: `NoteDTO`
-*   `GET /my-notes`: Get all notes for the authenticated user. (Requires JWT, `ROLE_USER` or `ROLE_ADMIN`)
-    *   Response: List of `NoteDTO`
-*   `GET /all`: Get all notes in the system. (Requires JWT, `ROLE_ADMIN`)
-    *   Response: List of `NoteDTO`
-*   `PUT /{noteId}`: Update an existing note. (Requires JWT, `ROLE_USER` (owner only) or `ROLE_ADMIN`)
-    *   Request Body: `UpdateNoteRequest` (title, content)
-    *   Response: `NoteDTO`
-*   `DELETE /{noteId}`: Delete a note. (Requires JWT, `ROLE_USER` (owner only) or `ROLE_ADMIN`)
-    *   Response: 204 No Content
+## 3. Technologies Used
 
-## Testing and Quality
+**Backend:**
+*   **Python 3.10+**
+*   **FastAPI**: High-performance, easy-to-use web framework.
+*   **SQLAlchemy 2.0+ (Async)**: Asynchronous ORM for database interaction.
+*   **Asyncpg**: Asynchronous PostgreSQL driver.
+*   **Alembic**: Database migrations.
+*   **Pydantic**: Data validation and serialization.
+*   **Passlib**: Password hashing.
+*   **Python-jose**: JWT (JSON Web Token) handling.
+*   **Loguru**: Robust logging.
+*   **Redis**: In-memory data store.
+*   **FastAPI-Limiter**: Rate limiting.
+*   **Gunicorn/Uvicorn**: ASGI server for production deployment.
+
+**Frontend:**
+*   **React 18+**: JavaScript library for building user interfaces.
+*   **React Router DOM**: Declarative routing for React.
+*   **Axios**: HTTP client for API requests.
+*   **JS-Cookie**: For managing cookies (though refresh token is HttpOnly).
+*   **JWT-decode**: For decoding JWTs client-side (not for verification).
+
+**Infrastructure & DevOps:**
+*   **PostgreSQL**: Relational database.
+*   **Redis**: In-memory database.
+*   **Docker / Docker Compose**: Containerization and orchestration.
+*   **Nginx**: Reverse proxy and static file server.
+*   **GitHub Actions**: CI/CD pipeline.
+*   **Pytest / Jest**: Testing frameworks.
+*   **Locust**: Performance testing tool.
+
+## 4. Setup and Installation
+
+### Prerequisites
+
+*   **Git**: For cloning the repository.
+*   **Python 3.10+**: For backend development.
+*   **Node.js 18+ and npm**: For frontend development.
+*   **Docker and Docker Compose**: **Highly Recommended** for simplified setup.
+*   **Alembic**: `pip install alembic` (if running migrations manually).
+
+### Local Development Setup (without Docker)
+
+This method requires you to manually install and run PostgreSQL and Redis, and manage environment variables.
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-repo/secureauthservice.git
+    cd secureauthservice
+    ```
+
+2.  **Backend Setup:**
+    ```bash
+    cd backend
+    python -m venv venv
+    source venv/bin/activate # On Windows: .\venv\Scripts\activate
+    pip install -r requirements.txt
+
+    # Create .env file from example
+    cp .env.example .env
+    # IMPORTANT: Fill in `SECRET_KEY` with a strong, random string in .env
+    # Ensure DB_HOST and REDIS_HOST point to your local PostgreSQL/Redis instances (e.g., localhost)
+    # Ensure DB_NAME points to your actual database name (e.g., secureauth_db)
+    ```
+
+3.  **Frontend Setup:**
+    ```bash
+    cd ../frontend
+    npm install
+
+    # Create .env file from example
+    cp .env.example .env
+    # Update REACT_APP_API_BASE_URL to point directly to your backend if not using Nginx:
+    # REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+    ```
+
+4.  **Database (PostgreSQL & Redis):**
+    *   Install and run PostgreSQL (e.g., via Homebrew, apt, or Docker desktop for just the DB).
+    *   Create a database (e.g., `secureauth_db`) and a user/password matching your `.env` configuration.
+    *   Install and run Redis.
+
+### Dockerized Setup (Recommended)
+
+This method uses Docker Compose to set up all services (PostgreSQL, Redis, Backend, Frontend, Nginx) with a single command.
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-repo/secureauthservice.git
+    cd secureauthservice
+    ```
+
+2.  **Create `.env` file for Docker Compose:**
+    ```bash
+    cp .env.example .env
+    # IMPORTANT: Fill in `SECRET_KEY` with a strong, random string in .env
+    # Make sure DB_HOST=db and REDIS_HOST=redis as these are the service names within Docker Compose network.
+    # Set REACT_APP_API_BASE_URL=http://localhost:80/api/v1 if you're using Nginx as the entry point.
+    ```
+
+3.  **Build and run all services:**
+    ```bash
+    docker-compose up --build -d
+    ```
+    *   `--build`: Builds images if they don't exist or if Dockerfile has changed.
+    *   `-d`: Runs containers in detached mode (in the background).
+
+    Wait for a few minutes for all services to start and for the database to initialize. You can check the status with `docker-compose ps`.
+
+### Database Migrations
+
+The `docker-compose.yml` file includes a command to run `alembic upgrade head` before starting the backend, so migrations should be applied automatically on first boot.
+
+If running without Docker or needing to create new migrations:
+1.  **Initialize Alembic (once per project, already done in repo):**
+    ```bash
+    cd backend
+    alembic init migrations
+    ```
+2.  **Generate a new migration:**
+    ```bash
+    alembic revision --autogenerate -m "Add new field to User model"
+    ```
+    Review the generated script in `backend/migrations/versions/`.
+3.  **Apply migrations:**
+    ```bash
+    alembic upgrade head
+    ```
+
+### Initial Seed Data
+
+The backend's `app/db/session.py` includes a `seed_db()` function that creates an initial admin user if one doesn't already exist. This runs automatically when the backend starts up (via `init_db()` in `main.py`).
+
+**Default Admin User (from `.env`):**
+*   **Email:** `admin@example.com`
+*   **Password:** `admin_password`
+(Change these in your `.env` file!)
+
+## 5. Running the Application
+
+**With Docker Compose (Recommended):**
+*   Ensure Docker Compose services are up: `docker-compose up -d`.
+*   **Frontend:** Accessible at `http://localhost:80` (via Nginx).
+*   **Backend API (Swagger UI):** Accessible at `http://localhost:80/api/v1/docs` (via Nginx).
+
+**Without Docker (Manual):**
+1.  **Start Backend:**
+    ```bash
+    cd backend
+    source venv/bin/activate
+    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    Backend API (Swagger UI) will be at `http://localhost:8000/api/v1/docs`.
+2.  **Start Frontend:**
+    ```bash
+    cd frontend
+    npm start
+    ```
+    Frontend will be at `http://localhost:3000`. Remember to adjust `REACT_APP_API_BASE_URL` in `frontend/.env` accordingly.
+
+## 6. API Documentation
+
+The FastAPI backend automatically generates OpenAPI documentation (Swagger UI).
+*   **Swagger UI:** Access at `http://localhost:80/api/v1/docs` (if using Docker Compose/Nginx) or `http://localhost:8000/api/v1/docs` (if running backend directly).
+*   **Redoc:** Access at `http://localhost:80/api/v1/redoc` or `http://localhost:8000/api/v1/redoc`.
+
+The documentation provides details for all endpoints, including:
+*   Endpoint paths and HTTP methods.
+*   Request body schemas (Pydantic models).
+*   Response schemas.
+*   Authentication requirements (indicated by "Bearer" security).
+*   Descriptions for each endpoint and its parameters.
+
+## 7. Testing
 
 ### Backend Tests
 
-*   **Unit Tests:** Located in `backend/src/test/java/...`
-    *   Examples: `AuthServiceTest.java`
-    *   Focus: Isolated testing of individual components (services, mappers) using Mockito.
-*   **Integration Tests:**
-    *   `UserRepositoryTest.java`: Uses `@DataJpaTest` and Testcontainers to test repository interactions with a real database.
-    *   Full `@SpringBootTest` examples would test the entire application context, including embedded web server and real database. (Not provided in full here due to length, but `Testcontainers` is configured for it).
-*   **API Tests (Controller Tests):**
-    *   `AuthControllerTest.java`: Uses `@WebMvcTest` and `MockMvc` to test controller endpoints without starting a full HTTP server, mocking service layer.
-    *   For end-to-end API testing, tools like **RestAssured** or **Postman/Newman** could be used.
+Backend tests use `pytest`, `pytest-asyncio`, and `httpx`.
+1.  **Ensure you are in the `backend` directory.**
+2.  **Install test dependencies (if not already done):**
+    ```bash
+    pip install pytest pytest-asyncio httpx pytest-cov
+    ```
+3.  **Run tests:**
+    ```bash
+    pytest tests/
+    ```
+    To generate coverage report:
+    ```bash
+    pytest --cov=app --cov-report=term-missing tests/
+    ```
+    *Note*: Backend tests will automatically use a separate `test_db` as configured in `backend/tests/conftest.py`. Ensure your `docker-compose.yml` or local PostgreSQL setup supports this.
 
 ### Frontend Tests
 
-*   **Unit Tests:** Located in `frontend/src/...test.js`
-    *   Example: `App.test.js`
-    *   Focus: Testing individual React components and functions using `@testing-library/react` and Jest. Mocking API calls and local storage to isolate component logic.
-*   **End-to-End Tests:**
-    *   For a production-grade application, frameworks like **Cypress** or **Playwright** would be used to simulate user interactions across the entire stack.
+Frontend tests use `Jest` and `@testing-library/react`.
+1.  **Ensure you are in the `frontend` directory.**
+2.  **Run tests:**
+    ```bash
+    npm test
+    ```
+    This will run tests in watch mode. To run once with coverage:
+    ```bash
+    npm test -- --coverage --watchAll=false
+    ```
 
 ### Performance Tests
 
-*   **Tools:** **Apache JMeter** or **Gatling** are recommended.
-*   **Strategy:**
-    1.  Define realistic user scenarios (e.g., concurrent logins, registration spikes, frequent note CRUD operations).
-    2.  Simulate varying load levels (number of concurrent users, ramp-up time).
-    3.  Monitor key metrics: response times, throughput, error rates, server resource utilization (CPU, memory, database connections).
-    4.  Identify bottlenecks and areas for optimization (e.g., cache tuning, query optimization, scaling).
+Performance tests use `Locust`.
+1.  **Ensure all services are running via Docker Compose (`docker-compose up -d`).**
+2.  **Install Locust (if not already done, outside container):**
+    ```bash
+    pip install locust
+    ```
+3.  **Run Locust:**
+    ```bash
+    locust -f locustfile.py
+    ```
+4.  Open your browser to `http://localhost:8089` to access the Locust web UI.
+5.  Enter the host (e.g., `http://localhost:80`) and desired number of users/spawn rate to start the test.
 
-## CI/CD Pipeline Configuration (Conceptual using GitHub Actions)
+The `locustfile.py` simulates user login, fetching profiles, listing and creating/deleting posts, and refreshing tokens to provide a realistic load test scenario.
 
-The `.github/workflows/ci-cd.yml` file defines a basic CI/CD pipeline.
+## 8. CI/CD
 
-```yaml
+A basic CI/CD pipeline is configured using **GitHub Actions** (`.github/workflows/main.yml`).
+It includes:
+*   **Backend Tests**: Runs `pytest` against a temporary test database (PostgreSQL and Redis services spun up by GitHub Actions).
+*   **Frontend Tests**: Runs `npm test`.
+*   **Build & Push Docker Images**: On pushes to `main` or `develop` branches, it builds Docker images for the backend, frontend, and pushes them to Docker Hub. (Requires `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets in GitHub).
+*   **Deploy**: On pushes to `main`, it deploys the latest images to a remote server via SSH. (Requires `SSH_HOST`, `SSH_USERNAME`, `SSH_PRIVATE_KEY` secrets).
+
+**To enable CI/CD:**
+1.  Fork this repository.
+2.  Set up the necessary GitHub Secrets in your repository settings:
+    *   `DOCKER_USERNAME`
+    *   `DOCKER_PASSWORD`
+    *   `SSH_HOST`
+    *   `SSH_USERNAME`
+    *   `SSH_PRIVATE_KEY`
+3.  Adjust the deployment script in `.github/workflows/main.yml` to match your server setup (`/path/to/your/app/directory`, `docker-compose.prod.yml`).
+
+## 9. Deployment Guide
+
+This project is designed for containerized deployment using Docker.
+
+1.  **Server Setup:**
+    *   A Linux server (e.g., Ubuntu) with Docker and Docker Compose installed.
+    *   Nginx already configured as a reverse proxy (if not using the `docker-compose.yml` Nginx service).
+    *   (Optional but Recommended) Certbot for HTTPS with Let's Encrypt.
+
+2.  **Environment Variables:**
+    *   Create a production `.env` file on your server (e.g., in `/path/to/your/app/.env`).
+    *   **Crucially**, generate a new, strong `SECRET_KEY` for production.
+    *   Set `ENV=production`.
+    *   Adjust `DB_HOST`, `REDIS_HOST`, `REACT_APP_API_BASE_URL` to point to your container names or internal IPs if not using the provided `docker-compose.yml`.
+
+3.  **Docker Compose (Production):**
+    *   You might want a separate `docker-compose.prod.yml` that uses pre-built images from Docker Hub instead of building them locally. This improves deployment speed.
+    *   Example `docker-compose.prod.yml` (assuming images are pushed to Docker Hub):
+        ```yaml
+        version: '3.8'
+        services:
+          db:
+            image: postgres:16-alpine
+            restart: always
+            env_file:
+              - ./.env
+            volumes:
+              - secureauth_db_data:/var/lib/postgresql/data
+            healthcheck:
+              test: ["CMD-HEALTCHECK", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
+              interval: 5s
+              timeout: 5s
+              retries: 5
+
+          redis:
+            image: redis:7-alpine
+            restart: always
+            volumes:
+              - secureauth_redis_data:/data
+            healthcheck:
+              test: ["CMD", "redis-cli", "ping"]
+              interval: 5s
+              timeout: 3s
+              retries: 5
+
+          backend:
+            image: your_docker_username/secureauth-backend:main # Use your image and tag
+            restart: always
+            env_file:
+              - ./.env
+            depends_on:
+              db:
+                condition: service_healthy
+              redis:
+                condition: service_healthy
+            command: sh -c "alembic upgrade head && gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 app.main:app"
+
+          frontend:
+            image: your_docker_username/secureauth-frontend:main # Use your image and tag
+            restart: always
+            env_file:
+              - ./.env
+
+          nginx:
+            image: nginx:alpine
+            restart: always
+            ports:
+              - "80:80"
+              - "443:443" # If using HTTPS
+            volumes:
+              - ./nginx.conf:/etc/nginx/nginx.conf:ro
+              # Mount Let's Encrypt certificates if using HTTPS
+              # - /etc/letsencrypt/live/yourdomain.com/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+              # - /etc/letsencrypt/live/yourdomain.com/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+            depends_on:
+              backend:
+                condition: service_started
+              frontend:
+                condition: service_started
+
+        volumes:
+          secureauth_db_data:
+          secureauth_redis_data:
+        ```
+
+4.  **Deployment Steps (Manual on Server):**
+    ```bash
+    # 1. SSH into your server
+    ssh your_user@your_server_ip
+
+    # 2. Navigate to your application directory
+    cd /path/to/your/app/directory
+    # (Ensure your .env and nginx.conf files are present here, or symlinked)
+
+    # 3. Pull latest images (from Docker Hub if using `image:` in compose)
+    docker-compose pull
+
+    # 4. Deploy (using your production compose file)
+    docker-compose -f docker-compose.prod.yml up -d --remove-orphans
+
+    # 5. Check logs for issues
+    docker-compose logs -f
+    ```
+
+5.  **HTTPS (Recommended):**
+    *   Configure Nginx for SSL (e.g., using Certbot with Let's Encrypt). This typically involves modifying `nginx.conf` to listen on port 443 and specify SSL certificates.
+
+## 10. Future Enhancements
+
+*   **Email Verification**: Send email verification links upon registration.
+*   **Two-Factor Authentication (2FA)**: Implement TOTP or SMS-based 2FA.
+*   **Social Logins**: Integrate with Google, Facebook, etc.
+*   **User Roles/Permissions Management**: More granular control over roles beyond `admin/user`.
+*   **API Key Management**: For programmatic access by external services.
+*   **Audit Logging**: Detailed logging of sensitive actions.
+*   **Frontend UI/UX**: Enhance with a proper UI library (e.g., Material UI, Ant Design, Tailwind CSS).
+*   **Advanced Caching**: Implement caching for frequently accessed non-sensitive data (e.g., `FastAPI-Cache`).
+*   **Full-Text Search**: Implement search capabilities for posts.
+*   **Websockets**: For real-time notifications or chat.
+*   **More Robust Monitoring**: Integrate with Prometheus, Grafana for metrics and dashboards.
+*   **Health Dashboard**: A dedicated endpoint for deep health checks of all integrated services.
+*   **Database Transaction Management**: Explicit transaction handling in service layer.
+
+## 11. License
+
+This project is open-source and available under the [MIT License](LICENSE).
+```

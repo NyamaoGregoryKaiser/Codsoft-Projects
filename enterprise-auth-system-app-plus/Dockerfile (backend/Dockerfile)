@@ -1,0 +1,40 @@
+```dockerfile
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim-buster
+
+# Set environment variables
+ENV PYTHONUNBUFFERED 1
+ENV APP_HOME /app
+
+# Set the working directory in the container
+WORKDIR $APP_HOME
+
+# Install system dependencies
+# These are necessary for asyncpg (PostgreSQL client) and building certain python packages
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements file first to leverage Docker cache
+COPY requirements.txt .
+
+# Install Python dependencies
+# pip install --no-cache-dir ensures that pip does not store packages in a cache
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
+COPY . $APP_HOME
+
+# Expose port 8000
+EXPOSE 8000
+
+# Command to run the application using Gunicorn and Uvicorn workers
+# `gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 app.main:app`
+# This command is typically specified in docker-compose.yml for flexibility
+# or if running directly: CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "app.main:app"]
+# For development with auto-reload, you'd use:
+# CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+```

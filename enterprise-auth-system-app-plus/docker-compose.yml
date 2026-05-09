@@ -1,70 +1,115 @@
+```yaml
 version: '3.8'
 
 services:
   db:
-    image: postgres:15-alpine
-    container_name: auth_db
-    environment:
-      POSTGRES_DB: auth_db
-      POSTGRES_USER: auth_user
-      POSTGRES_PASSWORD: auth_password
+    image: postgres:16-alpine
+    container_name: secureauth_postgres
+    restart: unless-stopped
     ports:
       - "5432:5432"
+    env_files:
+      - ./.env # Uses env variables from the root .env for database
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
-      - auth_db_data:/var/lib/postgresql/data
+      - secureauth_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U auth_user -d auth_db"]
+      test: ["CMD-HEALTCHECK", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: secureauth_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - secureauth_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: auth_backend
-    ports:
-      - "8080:8080"
+    container_name: secureauth_backend
+    restart: unless-stopped
+    env_files:
+      - ./.env # Uses env variables from the root .env
     environment:
-      # Inject environment variables for Spring Boot
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/auth_db
-      SPRING_DATASOURCE_USERNAME: auth_user
-      SPRING_DATASOURCE_PASSWORD: auth_password
-      APP_JWT_SECRET: A_VERY_STRONG_SECRET_KEY_FOR_JWT_AUTHENTICATION_SYSTEM_THAT_IS_AT_LEAST_256_BITS_LONG_AND_SHOULD_BE_KEPT_SECRET_IN_PRODUCTION_ENV_VAR
-      APP_JWT_EXPIRATIONINMS: 3600000 # 1 hour
-      SPRING_PROFILES_ACTIVE: prod # Use 'prod' profile for container
+      # Ensure backend env variables are picked up, or explicitly passed
+      SECRET_KEY: ${SECRET_KEY}
+      DB_HOST: db # Service name within docker-compose network
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      REDIS_HOST: redis # Service name within docker-compose network
+      REDIS_PORT: ${REDIS_PORT}
+      # Set ENV for production to disable auto-reloads etc.
+      ENV: ${ENV}
+    ports:
+      - "8000:8000" # Expose backend directly for development, Nginx routes in prod
     depends_on:
       db:
-        condition: service_healthy # Wait for DB to be healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"] # Requires spring-boot-starter-actuator
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    # Optional: If you want to see logs from logback-spring.xml file appender inside the container
-    # volumes:
-    #   - ./backend/logs:/app/logs
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app # Mount code for live reloading in development
+    command: sh -c "alembic upgrade head && gunicorn -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 app.main:app" # Run migrations, then start Gunicorn with Uvicorn workers
+    # For development, you might prefer:
+    # command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: auth_frontend
-    ports:
-      - "3000:80" # Map host port 3000 to container port 80 (Nginx default)
+    container_name: secureauth_frontend
+    restart: unless-stopped
+    env_files:
+      - ./.env # Uses env variables from the root .env
     environment:
-      # Pass backend API URL to React app during build time (via .env file in React build context)
-      # For Docker, it's better to provide it at runtime if possible, or during build
-      # As Nginx is serving, we can proxy or set variable in Nginx config.
-      # For simplicity, we assume frontend builds with this env var.
-      REACT_APP_API_BASE_URL: http://localhost:8080/api/v1 # This will be built into the JS, use backend service name for internal calls
+      # Pass API base URL for React build
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    ports:
+      - "3000:3000" # Expose frontend directly for development
     depends_on:
       backend:
-        condition: service_healthy # Wait for backend to be healthy
+        condition: service_started # Frontend doesn't strictly need backend healthy, just started for development to access API
+    volumes:
+      - ./frontend:/app # Mount code for live reloading in development
+      - /app/node_modules # Avoid overwriting node_modules inside container
+    command: npm start
+    # For production build, command would be: npm run build && serve -s build -p 3000
+
+  nginx:
+    image: nginx:alpine
+    container_name: secureauth_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443" # For HTTPS (if configured with certs)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./certbot/conf:/etc/letsencrypt # For HTTPS with certbot
+      # - ./certbot/www:/var/www/certbot
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
 
 volumes:
-  auth_db_data:
-```
+  secureauth_db_data:
+  secureauth_redis_data:
 
-#### `backend/Dockerfile`
-```dockerfile
+```

@@ -1,0 +1,187 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create .env for backend tests
+        run: |
+          cp backend/.env.example backend/.env
+          echo "DB_HOST=localhost" >> backend/.env # Use localhost for services runner
+          echo "REDIS_HOST=localhost" >> backend/.env
+          echo "DB_NAME=test_db" >> backend/.env # Use the test DB name
+          echo "SECRET_KEY=test_secret_key_for_ci" >> backend/.env
+
+      - name: Wait for PostgreSQL and Redis to be ready
+        run: |
+          dockerize -wait tcp://localhost:5432 -timeout 1m
+          dockerize -wait tcp://localhost:6379 -timeout 1m
+        env:
+          PATH: /usr/local/bin:$PATH # Ensure dockerize is found
+
+      - name: Run backend tests
+        working-directory: ./backend
+        run: |
+          pytest --cov=app --cov-report=xml --cov-report=term-missing tests/
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./backend/coverage.xml
+          # token: ${{ secrets.CODECOV_TOKEN }} # Uncomment if using private repos and need a token
+          fail_ci_if_error: true
+          verbose: true
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci # Uses package-lock.json for consistent installs
+
+      - name: Create .env for frontend tests
+        run: |
+          cp frontend/.env.example frontend/.env
+          echo "REACT_APP_API_BASE_URL=http://localhost:8000/api/v1" >> frontend/.env # Mock or point to a test backend if needed
+
+      - name: Run frontend tests
+        working-directory: ./frontend
+        run: npm test -- --coverage --watchAll=false
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./frontend/coverage/lcov.info # Jest's default LCOV report
+          # token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          verbose: true
+
+  build-and-push-docker-images:
+    name: Build & Push Docker Images
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' # Only run on main/develop branch pushes
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test] # Ensure tests pass before building images
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-backend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-backend:${{ github.ref_name }} # e.g., main, develop
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-frontend:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-frontend:${{ github.ref_name }}
+
+      - name: Build and push Nginx image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.nginx # Create a separate Dockerfile for Nginx if not using Nginx from frontend build
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-nginx:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/secureauth-nginx:${{ github.ref_name }}
+        # If Nginx is built with frontend, this step is not needed.
+        # This example assumes Nginx might need its own Dockerfile if it's more complex than serving static files.
+        # For this project, Nginx is handled by docker-compose.yml directly, which uses a pre-built image.
+        # This step is illustrative. For this project, the nginx.conf is mounted, not built into an image.
+
+  deploy:
+    name: Deploy to Server
+    if: github.ref == 'refs/heads/main' # Only deploy main branch
+    runs-on: ubuntu-latest
+    needs: [build-and-push-docker-images]
+    environment: production # Use GitHub Environments for production secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: SSH to server and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/app/directory # Adjust this to your server path
+            docker-compose pull # Pull latest images based on tags
+            docker-compose -f docker-compose.prod.yml up -d --remove-orphans # Use a production specific compose file
+            # docker system prune -f # Clean up old images (optional, use with caution)
+```

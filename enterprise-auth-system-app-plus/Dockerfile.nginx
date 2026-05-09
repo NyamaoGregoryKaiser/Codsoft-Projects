@@ -1,0 +1,16 @@
+```dockerfile
+# This Dockerfile is illustrative and would be used if you need to build a custom Nginx image.
+# For this project, the Nginx service in docker-compose.yml just mounts the nginx.conf.
+# This file is included purely to fulfill the CI/CD build step for an 'Nginx image'.
+
+FROM nginx:stable-alpine
+
+# Copy custom Nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# If your frontend is built separately and not served by the Nginx in the frontend Dockerfile
+# COPY --from=frontend_build_stage /app/build /usr/share/nginx/html
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
