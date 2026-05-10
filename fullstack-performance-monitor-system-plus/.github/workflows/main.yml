@@ -1,0 +1,116 @@
+name: CI/CD Pipeline for AppInsight
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Cache Node.js modules (backend)
+        uses: actions/cache@v3
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-backend-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-backend-
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Set up database for tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          docker run --name test-db -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpassword -e POSTGRES_DB=testdb -d -p 5433:5432 postgres:14-alpine
+          sleep 10 # Wait for DB to start
+        
+      - name: Run Prisma migrations on test DB
+        run: |
+          cd backend
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5433/testdb?schema=public
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          npm test
+        env:
+          DATABASE_URL: postgresql://testuser:testpassword@localhost:5433/testdb?schema=public
+          JWT_SECRET: test_secret
+          REDIS_URL: redis://localhost:6379 # Not actually running Redis, but test env needs it
+
+  build-and-test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Cache Node.js modules (frontend)
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-frontend-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-frontend-
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test
+
+  # deploy:
+  #   needs: [build-and-test-backend, build-and-test-frontend]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   environment: production # Example, define this in GitHub Environments
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+
+  #     - name: Build and push Docker images (example - replace with your actual deployment logic)
+  #       run: |
+  #         docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+  #         docker build -t your-docker-hub/appinsight-backend:latest ./backend
+  #         docker push your-docker-hub/appinsight-backend:latest
+  #         docker build -t your-docker-hub/appinsight-frontend:latest ./frontend
+  #         docker push your-docker-hub/appinsight-frontend:latest
+  #     - name: Deploy to Server (example - replace with your actual deployment logic)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_KEY }}
+  #         script: |
+  #           cd /path/to/your/appinsight-deploy-directory
+  #           docker-compose pull
+  #           docker-compose up -d --remove-orphans
+  #           docker image prune -f

@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[] // One user can own many projects
+}
+
+model Project {
+  id        String    @id @default(uuid())
+  name      String
+  apikey    String    @unique @default(uuid()) // Unique API key for metric ingestion
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  metrics   Metric[]  // One project can have many metrics
+
+  @@index([ownerId])
+}
+
+model Metric {
+  id        String       @id @default(uuid())
+  projectId String
+  project   Project      @relation(fields: [projectId], references: [id])
+  timestamp DateTime     @default(now())
+  type      MetricType   @db.Text // e.g., LCP, FID, CLS, API_RESPONSE, ERROR
+  value     Float        // Numeric value of the metric
+  context   Json         // JSONB for additional data (e.g., URL, component, error message)
+
+  @@index([projectId])
+  @@index([timestamp])
+  @@index([type])
+  @@index([projectId, type, timestamp]) // Composite index for common queries
+}
+
+enum MetricType {
+  LCP // Largest Contentful Paint
+  FID // First Input Delay
+  CLS // Cumulative Layout Shift
+  API_RESPONSE // Backend API response time
+  ERROR // JavaScript or Backend error
+  CUSTOM // Custom metric type
+}
