@@ -1,0 +1,71 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake git libsqlite3-dev libssl-dev libargon2-dev
+
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build Application
+      run: cmake --build build --target AuthSystem
+
+    - name: Build and Run Tests
+      run: |
+        cmake --build build --target AuthSystemTests
+        ./build/AuthSystemTests
+
+    - name: Check Code Style (optional - requires clang-format or similar)
+      # For a real project, integrate clang-format-check
+      # run: find src -iname "*.h" -o -iname "*.cpp" | xargs clang-format -i -style=Google --dry-run --Werror
+
+    - name: Create Artifacts (optional)
+      uses: actions/upload-artifact@v3
+      with:
+        name: auth-system-executable
+        path: build/AuthSystem
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test # Ensure tests pass before building Docker image
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Build Docker Image
+      run: docker build -t your-dockerhub-username/auth-system:latest -t your-dockerhub-username/auth-system:${{ github.sha }} .
+
+    - name: Log in to Docker Hub (if pushing)
+      # Uncomment and configure if you want to push to Docker Hub
+      # uses: docker/login-action@v2
+      # with:
+      #   username: ${{ secrets.DOCKER_USERNAME }}
+      #   password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Push Docker Image (if pushing)
+      # Uncomment if you want to push to Docker Hub
+      # run: |
+      #   docker push your-dockerhub-username/auth-system:latest
+      #   docker push your-dockerhub-username/auth-system:${{ github.sha }}
+```

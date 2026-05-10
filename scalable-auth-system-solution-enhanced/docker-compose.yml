@@ -1,0 +1,59 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-system-app
+    ports:
+      - "8080:8080"
+    volumes:
+      - auth_data:/app/data # Persistent storage for SQLite DB
+    env_file:
+      - .env # Load environment variables from .env file
+    depends_on:
+      # If you were to add Redis for caching/rate limiting, uncomment this:
+      # - redis
+      - db_initializer # Ensure DB is initialized before the app starts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"] # Add a health endpoint to Crow app
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  db_initializer:
+    image: auth-system-app-db-initializer # A temporary image to run migrations
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth-system-db-initializer
+    volumes:
+      - auth_data:/app/data
+    env_file:
+      - .env
+    command: sh -c "sleep 5 && ./AuthSystem --init-db" # Run migration command. Ensure app is built.
+    # The --init-db flag will be handled in main.cpp
+
+volumes:
+  auth_data:
+    driver: local
+
+# If Redis for caching/rate limiting:
+#  redis:
+#    image: "redis:6-alpine"
+#    container_name: auth-system-redis
+#    command: redis-server --appendonly yes
+#    volumes:
+#      - redis_data:/data
+#    ports:
+#      - "6379:6379"
+#
+#volumes:
+#  auth_data:
+#    driver: local
+#  redis_data:
+#    driver: local
+```
