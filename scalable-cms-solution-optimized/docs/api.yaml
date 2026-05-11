@@ -1,0 +1,920 @@
+openapi: 3.0.0
+info:
+  title: Enterprise CMS API
+  version: 1.0.0
+  description: A comprehensive API for managing content (posts, users, categories) in an enterprise-grade CMS.
+
+servers:
+  - url: http://localhost:5000/api
+    description: Development server
+
+tags:
+  - name: Auth
+    description: User authentication and registration
+  - name: Users
+    description: User management operations (Admin only)
+  - name: Posts
+    description: Content management for posts (Admin/Editor)
+  - name: Categories
+    description: Category management (Admin/Editor)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+          example: johndoe
+        email:
+          type: string
+          format: email
+          example: john.doe@example.com
+        password:
+          type: string
+          format: password
+          example: securePassword123
+        role:
+          type: string
+          enum: [admin, editor, viewer]
+          default: viewer
+          example: editor
+        isActive:
+          type: boolean
+          default: true
+          example: true
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: johndoe
+        email:
+          type: string
+          format: email
+          example: john.doe@example.com
+        role:
+          type: string
+          enum: [admin, editor, viewer]
+          example: editor
+        isActive:
+          type: boolean
+          example: true
+        lastLogin:
+          type: string
+          format: date-time
+          nullable: true
+          example: 2023-10-27T10:00:00Z
+        createdAt:
+          type: string
+          format: date-time
+          example: 2023-10-27T09:00:00Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2023-10-27T09:00:00Z
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174001
+        name:
+          type: string
+          example: Technology
+        slug:
+          type: string
+          example: technology
+        description:
+          type: string
+          nullable: true
+          example: Articles on software development, AI, and IT.
+        createdAt:
+          type: string
+          format: date-time
+          example: 2023-10-27T09:05:00Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2023-10-27T09:05:00Z
+    Post:
+      type: object
+      properties:
+        title:
+          type: string
+          example: My First Blog Post
+        slug:
+          type: string
+          example: my-first-blog-post
+        content:
+          type: string
+          example: This is the detailed content of my first blog post.
+        excerpt:
+          type: string
+          nullable: true
+          example: A brief summary of the blog post.
+        status:
+          type: string
+          enum: [draft, published, archived]
+          default: draft
+          example: draft
+        featuredImage:
+          type: string
+          format: url
+          nullable: true
+          example: https://example.com/image.jpg
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          example: 123e4567-e89b-12d3-a456-426614174001
+    PostResponse:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Post'
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: 123e4567-e89b-12d3-a456-426614174002
+            authorId:
+              type: string
+              format: uuid
+              example: 123e4567-e89b-12d3-a456-426614174000
+            publishedAt:
+              type: string
+              format: date-time
+              nullable: true
+              example: 2023-10-27T10:30:00Z
+            createdAt:
+              type: string
+              format: date-time
+              example: 2023-10-27T10:00:00Z
+            updatedAt:
+              type: string
+              format: date-time
+              example: 2023-10-27T10:00:00Z
+            author:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                username:
+                  type: string
+                email:
+                  type: string
+            category:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                name:
+                  type: string
+                slug:
+                  type: string
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        totalPages:
+          type: integer
+          example: 10
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Not authorized, no token
+    ForbiddenError:
+      description: Access forbidden for the current user role
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Forbidden: User role 'viewer' is not allowed to access this resource.
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: User with ID 123e4567-e89b-12d3-a456-426614174005 not found
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Validation Error
+              errors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    field:
+                      type: string
+                      example: email
+                    message:
+                      type: string
+                      example: Must be a valid email address.
+                    value:
+                      type: string
+                      example: invalid-email
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                example: false
+              message:
+                type: string
+                example: Internal Server Error
+              stack:
+                type: string
+                example: Error: Internal Server Error\n    at ...
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        201:
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User registered successfully
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        400:
+          $ref: '#/components/responses/ValidationError'
+        409:
+          description: User with email or username already exists
+  /auth/login:
+    post:
+      summary: Authenticate user and get JWT token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: john.doe@example.com
+                password:
+                  type: string
+                  format: password
+                  example: securePassword123
+      responses:
+        200:
+          description: User authenticated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged in successfully
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          description: Invalid credentials
+  /auth/me:
+    get:
+      summary: Get current authenticated user's profile
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /users:
+    get:
+      summary: Get all users
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [admin, editor, viewer]
+      responses:
+        200:
+          description: A list of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserResponse'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+    post:
+      summary: Create a new user
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        201:
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        409:
+          description: User with email or username already exists
+  /users/{id}:
+    get:
+      summary: Get a user by ID
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: User data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+    put:
+      summary: Update an existing user
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        200:
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/UserResponse'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        409:
+          description: Email or username already taken
+    delete:
+      summary: Delete a user by ID
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User deleted successfully
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+
+  /posts:
+    get:
+      summary: Get all posts
+      tags: [Posts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, published, archived]
+        - in: query
+          name: category
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: author
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: search
+          schema:
+            type: string
+            description: Search by title or content
+      responses:
+        200:
+          description: A list of posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PostResponse'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      summary: Create a new post
+      tags: [Posts]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        201:
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  post:
+                    $ref: '#/components/schemas/PostResponse'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        409:
+          description: Post with this slug already exists
+  /posts/{id}:
+    get:
+      summary: Get a post by ID or Slug
+      tags: [Posts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: UUID or slug of the post
+      responses:
+        200:
+          description: Post data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  post:
+                    $ref: '#/components/schemas/PostResponse'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+    put:
+      summary: Update an existing post
+      tags: [Posts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: ID of the post to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Post'
+      responses:
+        200:
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  post:
+                    $ref: '#/components/schemas/PostResponse'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        409:
+          description: Post with this slug already exists
+    delete:
+      summary: Delete a post by ID
+      tags: [Posts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: ID of the post to delete
+      responses:
+        200:
+          description: Post deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Post deleted successfully
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+
+  /categories:
+    get:
+      summary: Get all categories
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: A list of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      summary: Create a new category
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: New Category
+                description:
+                  type: string
+                  nullable: true
+                  example: Description for the new category.
+      responses:
+        201:
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  category:
+                    $ref: '#/components/schemas/Category'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        409:
+          description: Category with this name or slug already exists
+  /categories/{id}:
+    get:
+      summary: Get a category by ID or Slug
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: UUID or slug of the category
+      responses:
+        200:
+          description: Category data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  category:
+                    $ref: '#/components/schemas/Category'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+    put:
+      summary: Update an existing category
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: ID of the category to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Updated Category Name
+                slug:
+                  type: string
+                  example: updated-category-name
+                description:
+                  type: string
+                  nullable: true
+                  example: An updated description.
+      responses:
+        200:
+          description: Category updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  category:
+                    $ref: '#/components/schemas/Category'
+        400:
+          $ref: '#/components/responses/ValidationError'
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        409:
+          description: Category with this name or slug already exists
+    delete:
+      summary: Delete a category by ID
+      tags: [Categories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: ID of the category to delete
+      responses:
+        200:
+          description: Category deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Category deleted successfully
+        401:
+          $ref: '#/components/responses/UnauthorizedError'
+        403:
+          $ref: '#/components/responses/ForbiddenError'
+        404:
+          $ref: '#/components/responses/NotFoundError'
+        400:
+          description: Cannot delete category with associated posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Associated resource not found or cannot be deleted due to existing relationships.
+```
+**Note**: For brevity, I did not include the controller/service/routes for `Categories` in the backend implementation earlier in the response, but the API documentation provides an example of how it would be structured and its OpenAPI definitions. This is a common practice to demonstrate scalability for new models.

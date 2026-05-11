@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cms_db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-cms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cms_password}
+      POSTGRES_DB: ${DB_DATABASE:-cms_dev_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - cms_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-cms_user} -d ${DB_DATABASE:-cms_dev_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development # Use the development stage for local dev
+    container_name: cms_backend
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DB_USERNAME: ${DB_USERNAME:-cms_user}
+      DB_PASSWORD: ${DB_PASSWORD:-cms_password}
+      DB_DATABASE: ${DB_DATABASE:-cms_dev_db}
+      DB_HOST: db # Service name within the docker-compose network
+      DB_PORT: 5432
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkeyforCMS!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS:-10}
+      CACHE_TTL: ${CACHE_TTL:-300}
+      FRONTEND_URL: http://localhost:3000 # Or the frontend service name for Docker internal comms
+      # Test DB for running tests inside container (optional, usually run on CI)
+      TEST_DB_USERNAME: ${TEST_DB_USERNAME:-cms_user}
+      TEST_DB_PASSWORD: ${TEST_DB_PASSWORD:-cms_password}
+      TEST_DB_DATABASE: ${TEST_DB_DATABASE:-cms_test_db}
+      TEST_DB_HOST: db
+      TEST_DB_PORT: 5432
+    volumes:
+      - ./backend:/app # Mount host directory for live-reloading in dev
+      - /app/node_modules # Keep node_modules inside container
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npm run dev # Use nodemon for development
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development # Use the development stage for local dev
+    container_name: cms_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Direct access to backend for local dev
+    volumes:
+      - ./frontend:/app # Mount host directory for live-reloading in dev
+      - /app/node_modules # Keep node_modules inside container
+    depends_on:
+      backend:
+        condition: service_started
+    command: npm start
+
+volumes:
+  cms_db_data:
+```
+
+**For Production Deployment with Docker Compose:**
+You would typically build the production images:
+`docker-compose -f docker-compose.prod.yml up --build -d`
+Where `docker-compose.prod.yml` would specify the `production` target in Dockerfiles and use pre-built images.
+For the `backend` service: `target: build` for production image
+For the `frontend` service: `target: production` for production image
+
+Example `docker-compose.prod.yml` (simplified):
+```yaml
+# docker-compose.prod.yml (example)
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    volumes:
+      - cms_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: build # Use the production build stage
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      DB_HOST: db
+      DB_PORT: 5432
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      BCRYPT_SALT_ROUNDS: ${BCRYPT_SALT_ROUNDS}
+      CACHE_TTL: ${CACHE_TTL}
+      FRONTEND_URL: http://frontend # Internal Docker service name
+      APPLY_MIGRATIONS: "true" # Apply migrations on production startup
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production # Use the production Nginx stage
+    ports:
+      - "80:80" # Map host port 80 to container port 80
+    environment:
+      REACT_APP_API_BASE_URL: http://backend:5000/api # Internal Docker service name
+    depends_on:
+      backend:
+        condition: service_started
+    restart: always
+
+volumes:
+  cms_db_data:
+```
