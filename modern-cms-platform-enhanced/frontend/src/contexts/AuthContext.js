@@ -1,96 +1,111 @@
 ```javascript
-import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
-import { login, register, getMe } from '../api/auth';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { login as apiLogin, register as apiRegister, logout as apiLogout } from '../api/auth';
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode'; // Import jwtDecode
+import { toast } from 'react-toastify';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const loadUser = useCallback(async () => {
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
     if (token) {
       try {
-        const userData = await getMe();
-        setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
+        const decodedToken = jwtDecode(token);
+        if (decodedToken.exp * 1000 > Date.now()) {
+          // Token is valid and not expired
+          setUser({
+            id: decodedToken.sub,
+            role: decodedToken.role,
+            username: decodedToken.username, // Assuming username is also in token
+            email: decodedToken.email // Assuming email is also in token
+          });
+        } else {
+          // Token expired, attempt refresh or clear
+          console.warn('Access token expired on load, attempting refresh or clearing.');
+          handleLogout(); // Force logout if token is expired on load
+        }
       } catch (error) {
-        console.error('Failed to fetch user:', error);
-        logout(); // Clear invalid token
-      } finally {
-        setLoading(false);
+        console.error('Error decoding token:', error);
+        handleLogout();
       }
-    } else {
-      setUser(null);
-      localStorage.removeItem('user');
-      setLoading(false);
     }
-  }, [token]); // token is a dependency here. loadUser should re-run if token changes.
+    setLoading(false);
+  }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    loadUser();
-  }, [loadUser]); // Ensure loadUser runs when component mounts or token changes
-
-  const userLogin = async (credentials) => {
-    const { user: userData, token: jwtToken } = await login(credentials);
-    localStorage.setItem('token', jwtToken);
-    setToken(jwtToken);
-    setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
-    navigate('/dashboard');
-    return userData;
+  const handleLogin = async (email, password) => {
+    try {
+      const data = await apiLogin(email, password);
+      localStorage.setItem('accessToken', data.tokens.access.token);
+      localStorage.setItem('refreshToken', data.tokens.refresh.token);
+      const decodedToken = jwtDecode(data.tokens.access.token);
+      setUser({
+        id: decodedToken.sub,
+        role: decodedToken.role,
+        username: data.user.username,
+        email: data.user.email
+      });
+      toast.success('Logged in successfully!');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Login failed');
+      throw error;
+    }
   };
 
-  const userRegister = async (userData) => {
-    const response = await register(userData);
-    return response;
+  const handleRegister = async (userData) => {
+    try {
+      const data = await apiRegister(userData);
+      localStorage.setItem('accessToken', data.tokens.access.token);
+      localStorage.setItem('refreshToken', data.tokens.refresh.token);
+      const decodedToken = jwtDecode(data.tokens.access.token);
+      setUser({
+        id: decodedToken.sub,
+        role: decodedToken.role,
+        username: data.user.username,
+        email: data.user.email
+      });
+      toast.success('Registration successful!');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Registration failed');
+      throw error;
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken(null);
-    setUser(null);
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await apiLogout(); // This just clears client-side tokens for this implementation
+      setUser(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      toast.info('Logged out.');
+      navigate('/login');
+    } catch (error) {
+      toast.error('Logout failed: ' + error.message);
+    }
   };
 
-  const isAuthenticated = !!user && !!token;
-  const isAdmin = user && user.role === 'admin';
-  const isAuthor = user && (user.role === 'admin' || user.role === 'author');
+  const isAuthenticated = !!user;
+  const userRole = user?.role;
 
-  const hasRole = (roles) => {
-    if (!user || !roles || roles.length === 0) return false;
-    return roles.includes(user.role);
+  const checkPermission = (requiredRoles) => {
+    if (!isAuthenticated) return false;
+    if (!requiredRoles || requiredRoles.length === 0) return true; // No specific roles required means anyone logged in can access
+    return requiredRoles.includes(userRole);
   };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      token,
-      loading,
-      isAuthenticated,
-      isAdmin,
-      isAuthor,
-      hasRole,
-      login: userLogin,
-      register: userRegister,
-      logout,
-      loadUser // Expose loadUser to allow components to manually refresh user data
-    }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, userRole, loading, login: handleLogin, register: handleRegister, logout: handleLogout, checkPermission }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
 ```

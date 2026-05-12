@@ -1,126 +1,111 @@
 ```markdown
-# CMS System Architecture
+# NimbusCMS Architecture Documentation
 
-This document provides a high-level overview of the architecture for the Comprehensive Production-Ready CMS.
+This document provides a high-level overview of the NimbusCMS architecture, its key components, and how they interact.
 
-## 1. High-Level Diagram
+## 1. System Overview
 
-```
-+------------------------------------+
-|            CMS Frontend            |
-|       (React Application)          |
-+-----------------+------------------+
-                  | (HTTP/S)
-                  | API Requests
-                  |
-+-----------------+------------------+
-|           Load Balancer            | (Optional, e.g., Nginx, AWS ALB)
-|    (Handles Traffic, SSL/TLS)      |
-+-----------------+------------------+
-                  |
-                  |
-+-----------------+------------------+
-|            CMS Backend             |
-|       (Node.js / Express API)      |
-|                                    |
-|   +--------------------------+     |
-|   |   Authentication (JWT)   |     |
-|   |   Authorization (RBAC)   |     |
-|   |   Rate Limiting          |     |
-|   |   Error Handling         |     |
-|   |   Logging (Winston)      |     |
-|   |   File Uploads (Multer)  |     |
-|   +--------------------------+     |
-+-----------------+------------------+
-                  |
-                  | API Data
-                  |
-+-----------------+------------------+      +------------------+
-|     Database (PostgreSQL)          |------|    Cache (Redis)   |
-| (Sequelize ORM, Migrations, Seeds) |      | (Session, API Resp)|
-+------------------------------------+      +------------------+
+NimbusCMS is a full-stack web application designed using a **monorepo** structure for both backend and frontend. It follows a **client-server architecture** with a RESTful API.
+
+```mermaid
+graph TD
+    A[User/Browser] -- HTTP Requests --> B(Frontend - React App)
+    B -- Authenticated HTTP Requests --> C(Backend - Node.js API)
+    C -- SQL Queries --> D(Database - PostgreSQL)
+
+    subgraph Infrastructure
+        E[Docker/Docker Compose]
+        F[CI/CD - GitHub Actions]
+    end
+
+    C -- Logs --> G[Winston Logger]
+    C -- Cache Management --> H[In-Memory Cache]
+
+    E --> B
+    E --> C
+    E --> D
+    F --> B & C
 ```
 
 ## 2. Component Breakdown
 
-### 2.1. CMS Frontend (React Application)
+### 2.1. Frontend (Client-side)
 
-*   **Technology**: React.js, React Router, Context API (for Auth).
-*   **Role**: Provides the user interface for interacting with the CMS. This includes:
-    *   Public-facing blog/content display.
-    *   User authentication (login, registration).
-    *   Admin/Author dashboard for content, user, category, and tag management.
-*   **Communication**: Communicates with the CMS Backend via RESTful API calls.
-*   **Deployment**: Can be served statically (e.g., via Nginx, S3 + CloudFront) or from a Node.js server.
+*   **Technology:** React.js, React Router DOM, Tailwind CSS.
+*   **Purpose:** Provides the administrative user interface (dashboard, content editors, user management, media library).
+*   **Key Responsibilities:**
+    *   **User Interface (UI):** Renders dynamic content and forms.
+    *   **Routing:** Manages client-side navigation and protected routes based on user roles.
+    *   **Authentication:** Handles user login/registration, stores JWT tokens (access & refresh) in `localStorage`, and sends them with API requests. Manages token refresh.
+    *   **API Interaction:** Communicates with the backend API using Axios for all data operations (CRUD).
+    *   **State Management:** Uses React Context API for global authentication state, local component state for forms and UI elements.
+    *   **Form Handling:** Utilizes `react-hook-form` for efficient form management and validation.
+    *   **Notifications:** Uses `react-toastify` for user feedback.
 
-### 2.2. CMS Backend (Node.js / Express API)
+### 2.2. Backend (Server-side)
 
-*   **Technology**: Node.js, Express.js, Sequelize (ORM), Winston (logging), Redis (caching), JWT (auth), Bcrypt (password hashing), Multer (file uploads).
-*   **Role**: The core business logic and data layer of the CMS.
-*   **Key Modules/Layers**:
-    *   **`server.js`**: Application entry point, initializes database/Redis connections, starts Express server.
-    *   **`app.js`**: Express application setup, global middlewares (CORS, Helmet, Morgan, Rate Limiting), static file serving, API routes, and centralized error handling.
-    *   **`config`**: Manages environment variables and database connection settings.
-    *   **`middlewares`**: Custom Express middlewares for authentication, authorization, error handling, and rate limiting.
-    *   **`models`**: Sequelize ORM definitions for database entities (User, Post, Category, Tag) and their associations.
-    *   **`migrations` / `seeders`**: Scripts for evolving database schema and populating initial data.
-    *   **`services`**: Contains the core business logic. Interacts directly with models (database) and abstracts data operations from controllers.
-    *   **`controllers`**: Handles incoming HTTP requests, validates input (implicitly through service calls or explicitly), calls appropriate service methods, and constructs HTTP responses.
-    *   **`routes`**: Defines API endpoints and maps them to controllers, applying relevant middlewares.
-    *   **`utils`**: Contains utility functions like custom logger, Redis cache client, etc.
-*   **Security**: Implements JWT for stateless authentication, RBAC for granular access control, `helmet` for common web vulnerabilities, and `express-rate-limit` to prevent brute-force attacks and abuse.
-*   **Observability**: Uses Winston for structured logging, allowing for easy monitoring and debugging.
+*   **Technology:** Node.js, Express.js.
+*   **Purpose:** Exposes a secure RESTful API for frontend and other clients to interact with, handles business logic, and manages data persistence.
+*   **Key Layers/Modules:**
 
-### 2.3. Database (PostgreSQL)
+    *   **`src/config`**: Global application configurations, database settings, environment variables.
+    *   **`src/middleware`**:
+        *   **Authentication (`auth.js`):** Validates JWT tokens, extracts user information, and enforces role-based access control (RBAC).
+        *   **Error Handling (`error.js`):** Centralized error conversion and handling, ensuring consistent error responses.
+        *   **Security (`helmet`, `xss-clean`, `hpp`):** Express middleware for various security enhancements.
+        *   **Rate Limiting (`rateLimiter.js`):** Protects API endpoints from abuse.
+        *   **Caching (`cache.js`):** In-memory caching for GET requests to improve performance.
+    *   **`src/models`**: Sequelize models (`User`, `ContentType`, `Entry`, `Media`) defining database schemas, relationships, and model-level hooks (e.g., password hashing).
+    *   **`src/validations`**: Joi schemas for robust input validation of all incoming API requests.
+    *   **`src/services`**: Contains the core business logic. Services interact directly with the database models and perform complex operations, ensuring separation of concerns from controllers.
+    *   **`src/controllers`**: Handles incoming HTTP requests, calls appropriate services, and constructs HTTP responses. Focuses on request/response handling.
+    *   **`src/routes`**: Defines API endpoints and maps them to controllers and middleware.
+    *   **`src/utils`**: Helper functions (logger, `ApiError` class, `catchAsync` wrapper, Joi validation utility, pagination utilities).
+    *   **`src/app.js`**: Main Express application setup, middleware registration, and routing.
+    *   **`src/server.js`**: Entry point for starting the Node.js server, connecting to the database, and handling graceful shutdown.
 
-*   **Technology**: PostgreSQL (Relational Database).
-*   **Role**: Persistent storage for all CMS data (users, posts, categories, tags, etc.).
-*   **ORM**: Sequelize is used to interact with PostgreSQL, providing an abstraction layer over raw SQL queries, managing associations, and enabling migrations.
-*   **Scalability**: PostgreSQL is a robust, production-grade database capable of handling large datasets and high transaction volumes.
+### 2.3. Database
 
-### 2.4. Cache (Redis)
+*   **Technology:** PostgreSQL.
+*   **ORM:** Sequelize.
+*   **Purpose:** Persistent storage for all application data.
+*   **Schema (Key Tables):**
+    *   **`users`**: Stores user authentication and authorization details (`username`, `email`, `password`, `role`).
+    *   **`content_types`**: Stores the definitions of dynamic content structures (`name`, `slug`, `description`, `fields` - JSONB array of field definitions).
+    *   **`entries`**: Stores instances of content based on `content_types` (`contentTypeId`, `userId`, `status`, `data` - JSONB object holding actual content).
+    *   **`media`**: Stores metadata about uploaded media files (`name`, `filename`, `path` (URL), `mimeType`, `size`, `userId`).
+*   **Migrations:** Managed by Sequelize CLI to evolve the database schema over time.
+*   **Seeders:** For populating initial data (e.g., admin user, default content types).
 
-*   **Technology**: Redis (In-memory Data Structure Store).
-*   **Role**: Used for caching frequently accessed data (e.g., public blog posts, categories list) to reduce database load and improve API response times. It can also be used for session management (though not fully implemented here for stateless JWT auth) or rate limiting storage.
-*   **Integration**: The backend interacts with Redis through a dedicated utility layer (`utils/cache.js`).
+## 3. Data Flow and Interactions
 
-### 2.5. Load Balancer (Optional but Recommended for Production)
-
-*   **Technology**: Nginx, HAProxy, AWS Elastic Load Balancer (ALB), etc.
-*   **Role**: Distributes incoming network traffic across multiple instances of the CMS Backend, improving availability and scalability. Handles SSL/TLS termination and potentially static file serving.
-
-## 3. Data Flow Example: Fetching Published Posts
-
-1.  **Frontend**: User navigates to the blog page. React component makes an HTTP GET request to `/api/posts/published`.
-2.  **Backend (Express)**:
-    *   Request hits the `/api/posts/published` route.
-    *   `cacheMiddleware` checks Redis for cached response for this URL.
-    *   **Cache Hit**: If found, cached data is returned immediately.
-    *   **Cache Miss**:
-        *   `postController.getPublishedPosts` is invoked.
-        *   `postService.findPublishedPosts` is called.
-        *   `Post` model (via Sequelize) queries the PostgreSQL database for posts with `status: 'published'`, including associated `author`, `category`, and `tags`.
-        *   Results are returned to the controller.
-        *   Controller sends the response.
-        *   Before sending, `cacheMiddleware` intercepts the response, stores it in Redis with an expiration, and then sends it to the client.
-3.  **Frontend**: Receives the data and renders the list of posts.
+1.  **User Request:** A user interacts with the Frontend (React App).
+2.  **Frontend Logic:** React components handle UI interactions, manage local state, and, if needed, dispatch actions that lead to API calls.
+3.  **API Call:** Axios sends an authenticated HTTP request to the Backend API. The JWT `access_token` is attached to the `Authorization` header.
+4.  **Backend Request Handling:**
+    *   Express routes receive the request.
+    *   Global middleware (security, rate limiting) processes the request.
+    *   `auth` middleware verifies the JWT and enforces RBAC based on the user's role.
+    *   `joiValidation` middleware validates request body/query/params against predefined schemas.
+    *   `cacheMiddleware` checks if a cached response exists for GET requests.
+    *   The request is passed to the appropriate controller.
+5.  **Business Logic:** The controller delegates to a service layer function, which encapsulates the core business logic.
+6.  **Database Interaction:** The service layer uses Sequelize models to query or modify data in the PostgreSQL database.
+7.  **Response Generation:**
+    *   The service returns data to the controller.
+    *   The controller formats the response and sends it back to the client.
+    *   `cacheMiddleware` might store the response before it's sent back.
+8.  **Frontend UI Update:** The Frontend receives the API response, updates its state, and re-renders the UI accordingly.
+9.  **Error Handling:** Any errors throughout this flow are caught by global error middleware in the backend, which logs the error and sends a standardized error response. Frontend handles these errors by displaying toasts or error messages.
 
 ## 4. Scalability Considerations
 
-*   **Horizontal Scaling**: Both the React frontend and Node.js backend are designed to be horizontally scalable, meaning you can run multiple instances behind a load balancer.
-*   **Database Scaling**: PostgreSQL can be scaled vertically (more powerful server) or horizontally (read replicas, sharding - more complex).
-*   **Caching**: Redis offloads database reads, critical for high-traffic endpoints.
-*   **Stateless Backend**: JWT authentication keeps the backend stateless, simplifying horizontal scaling.
+*   **Stateless Backend:** The use of JWTs makes the backend largely stateless, simplifying horizontal scaling.
+*   **Database:** PostgreSQL is highly scalable and supports various replication and clustering strategies.
+*   **Caching:** The in-memory cache can be replaced or augmented with external caching services like Redis for distributed caching.
+*   **Media Storage:** For production, `media.path` would point to a cloud object storage solution (AWS S3, Google Cloud Storage) instead of local storage, which can scale independently.
+*   **Load Balancing:** Deploying multiple instances of the backend and frontend behind a load balancer (e.g., Nginx, AWS ELB) to distribute traffic.
+*   **Queueing:** For long-running tasks (e.g., image processing, bulk data imports), a message queue (RabbitMQ, Kafka) could be introduced.
 
-## 5. Security Considerations
-
-*   **Authentication & Authorization**: JWT for identity, RBAC for permissions.
-*   **Input Validation**: Handled at the service and model (Sequelize validation) layers to prevent invalid data and SQL injection.
-*   **Password Hashing**: Bcrypt is used to store hashed passwords securely.
-*   **Helmet**: Protects against common web vulnerabilities (XSS, CSRF, etc.).
-*   **Rate Limiting**: Prevents brute-force attacks and API abuse.
-*   **CORS**: Configured to only allow requests from the specified frontend origin.
-*   **Environment Variables**: Sensitive information (database credentials, JWT secret) is stored in environment variables, not hardcoded.
-
-This architecture provides a solid foundation for a production-ready CMS, balancing functionality, performance, and maintainability.
+This architectural overview provides a foundation for understanding NimbusCMS. Each component is designed with modularity and extensibility in mind to facilitate future development and maintenance.
 ```

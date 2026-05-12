@@ -1,76 +1,45 @@
 ```javascript
+const httpStatus = require('http-status-codes');
+const pick = require('../utils/pick');
+const ApiError = require('../utils/ApiError');
+const catchAsync = require('../utils/catchAsync');
 const userService = require('../services/user.service');
-const logger = require('../utils/logger');
-const { deleteCache } = require('../utils/cache');
 
-// Cache key for all users
-const ALL_USERS_CACHE_KEY = '/api/users';
+const createUser = catchAsync(async (req, res) => {
+  const user = await userService.createUser(req.body);
+  res.status(httpStatus.CREATED).send(user.toJSON());
+});
 
-/**
- * Get all users. (Admin only)
- */
-exports.getAllUsers = async (req, res, next) => {
-    try {
-        const users = await userService.findAllUsers();
-        res.status(200).json(users);
-    } catch (error) {
-        logger.error('Error fetching all users:', error.message);
-        next(error);
-    }
-};
+const getUsers = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ['username', 'role']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page']);
+  const result = await userService.queryUsers(filter, options);
+  res.send(result);
+});
 
-/**
- * Get a single user by ID. (Admin only)
- */
-exports.getUserById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const user = await userService.findUserById(id);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        res.status(200).json(user);
-    } catch (error) {
-        logger.error(`Error fetching user by ID ${req.params.id}:`, error.message);
-        next(error);
-    }
-};
+const getUser = catchAsync(async (req, res) => {
+  const user = await userService.getUserById(req.params.userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  res.send(user.toJSON());
+});
 
-/**
- * Update a user. (Admin only)
- */
-exports.updateUser = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const updatedUser = await userService.updateUser(id, req.body);
-        if (!updatedUser) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        deleteCache(ALL_USERS_CACHE_KEY); // Invalidate cache
-        deleteCache(`/api/users/${id}`); // Invalidate specific user cache
-        res.status(200).json({ message: 'User updated successfully.', user: updatedUser });
-    } catch (error) {
-        logger.error(`Error updating user ${req.params.id}:`, error.message);
-        next(error);
-    }
-};
+const updateUser = catchAsync(async (req, res) => {
+  const user = await userService.updateUserById(req.params.userId, req.body);
+  res.send(user.toJSON());
+});
 
-/**
- * Delete a user. (Admin only)
- */
-exports.deleteUser = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const success = await userService.deleteUser(id);
-        if (!success) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-        deleteCache(ALL_USERS_CACHE_KEY); // Invalidate cache
-        deleteCache(`/api/users/${id}`); // Invalidate specific user cache
-        res.status(200).json({ message: 'User deleted successfully.' });
-    } catch (error) {
-        logger.error(`Error deleting user ${req.params.id}:`, error.message);
-        next(error);
-    }
+const deleteUser = catchAsync(async (req, res) => {
+  await userService.deleteUserById(req.params.userId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
+module.exports = {
+  createUser,
+  getUsers,
+  getUser,
+  updateUser,
+  deleteUser,
 };
 ```

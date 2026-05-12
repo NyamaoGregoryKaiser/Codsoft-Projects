@@ -1,110 +1,114 @@
 ```javascript
+const httpStatus = require('http-status-codes');
 const { User } = require('../models');
-const logger = require('../utils/logger');
+const ApiError = require('../utils/ApiError');
 
 /**
- * Find all users.
- * @returns {Promise<User[]>} An array of user objects, excluding passwords.
+ * Create a user
+ * @param {Object} userBody
+ * @returns {Promise<User>}
  */
-exports.findAllUsers = async () => {
-    try {
-        const users = await User.findAll({
-            attributes: { exclude: ['password'] }
-        });
-        logger.debug('Fetched all users.');
-        return users;
-    } catch (error) {
-        logger.error('Error in findAllUsers:', error);
-        throw new Error('Could not fetch users.');
-    }
+const createUser = async (userBody) => {
+  if (await User.findOne({ where: { email: userBody.email } })) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+  if (await User.findOne({ where: { username: userBody.username } })) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Username already taken');
+  }
+  return User.create(userBody);
 };
 
 /**
- * Find a user by ID.
- * @param {string} id - The UUID of the user.
- * @returns {Promise<User|null>} The user object (excluding password) or null if not found.
+ * Query for users
+ * @param {Object} filter - Sequelize filter
+ * @param {Object} options - Query options (limit, page, sortBy)
+ * @returns {Promise<QueryResult>}
  */
-exports.findUserById = async (id) => {
-    try {
-        const user = await User.findByPk(id, {
-            attributes: { exclude: ['password'] }
-        });
-        logger.debug(`Fetched user by ID: ${id}`);
-        return user;
-    } catch (error) {
-        logger.error(`Error in findUserById for ${id}:`, error);
-        throw new Error('Could not fetch user.');
-    }
+const queryUsers = async (filter, options) => {
+  const { limit = 10, page = 1, sortBy = 'createdAt:desc' } = options;
+  const offset = (page - 1) * limit;
+
+  const order = sortBy.split(',').map((sortOption) => {
+    const [field, sortOrder] = sortOption.split(':');
+    return [field, sortOrder.toUpperCase()];
+  });
+
+  const { count, rows } = await User.findAndCountAll({
+    where: filter,
+    limit: parseInt(limit, 10),
+    offset: parseInt(offset, 10),
+    order: order,
+  });
+
+  return {
+    results: rows,
+    page: parseInt(page, 10),
+    limit: parseInt(limit, 10),
+    totalPages: Math.ceil(count / limit),
+    totalResults: count,
+  };
 };
 
 /**
- * Update a user's information.
- * @param {string} id - The UUID of the user to update.
- * @param {Object} userData - Data to update (username, email, role, isActive).
- * @returns {Promise<User|null>} The updated user object (excluding password) or null if not found.
+ * Get user by ID
+ * @param {UUID} id
+ * @returns {Promise<User>}
  */
-exports.updateUser = async (id, userData) => {
-    try {
-        const user = await User.findByPk(id);
-        if (!user) {
-            return null;
-        }
-
-        // Prevent updating password through this route
-        if (userData.password) {
-            delete userData.password;
-        }
-
-        // Prevent self-demotion or changing own role to less privileged without specific logic
-        // For simplicity, admin can change any role.
-        if (userData.role && !['admin', 'author', 'viewer'].includes(userData.role)) {
-            const error = new Error('Invalid role specified.');
-            error.status = 400;
-            throw error;
-        }
-
-        await user.update(userData);
-        logger.info(`User ${id} updated.`);
-
-        // Return the updated user without the password
-        const updatedUser = await User.findByPk(id, {
-            attributes: { exclude: ['password'] }
-        });
-        return updatedUser;
-    } catch (error) {
-        logger.error(`Error in updateUser for ${id}:`, error);
-        if (error.name === 'SequelizeValidationError') {
-            const validationError = new Error(error.errors.map(e => e.message).join(', '));
-            validationError.status = 400;
-            throw validationError;
-        }
-        if (error.name === 'SequelizeUniqueConstraintError') {
-            const uniqueError = new Error(`The ${error.fields ? Object.keys(error.fields)[0] : 'field'} is already taken.`);
-            uniqueError.status = 409;
-            throw uniqueError;
-        }
-        throw new Error('Could not update user.');
-    }
+const getUserById = async (id) => {
+  return User.findByPk(id);
 };
 
 /**
- * Delete a user.
- * @param {string} id - The UUID of the user to delete.
- * @returns {Promise<boolean>} True if user was deleted, false if not found.
+ * Get user by email
+ * @param {string} email
+ * @returns {Promise<User>}
  */
-exports.deleteUser = async (id) => {
-    try {
-        const user = await User.findByPk(id);
-        if (!user) {
-            return false;
-        }
+const getUserByEmail = async (email) => {
+  return User.findOne({ where: { email } });
+};
 
-        await user.destroy();
-        logger.info(`User ${id} deleted.`);
-        return true;
-    } catch (error) {
-        logger.error(`Error in deleteUser for ${id}:`, error);
-        throw new Error('Could not delete user.');
-    }
+/**
+ * Update user by ID
+ * @param {UUID} userId
+ * @param {Object} updateBody
+ * @returns {Promise<User>}
+ */
+const updateUserById = async (userId, updateBody) => {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  if (updateBody.email && (await User.findOne({ where: { email: updateBody.email } })) && (await User.findOne({ where: { email: updateBody.email } })).id !== userId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+  if (updateBody.username && (await User.findOne({ where: { username: updateBody.username } })) && (await User.findOne({ where: { username: updateBody.username } })).id !== userId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Username already taken');
+  }
+  Object.assign(user, updateBody);
+  await user.save();
+  return user;
+};
+
+/**
+ * Delete user by ID
+ * @param {UUID} userId
+ * @returns {Promise<User>}
+ */
+const deleteUserById = async (userId) => {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  await user.destroy();
+  return user;
+};
+
+module.exports = {
+  createUser,
+  queryUsers,
+  getUserById,
+  getUserByEmail,
+  updateUserById,
+  deleteUserById,
 };
 ```

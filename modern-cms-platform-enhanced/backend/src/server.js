@@ -1,47 +1,59 @@
 ```javascript
-require('dotenv').config();
 const app = require('./app');
-const sequelize = require('./config/database');
+const sequelize = require('./config/sequelize');
+const config = require('./config/config');
 const logger = require('./utils/logger');
-const redisClient = require('./utils/cache').client;
+const { User, ContentType } = require('./models'); // Import models to ensure they are loaded
 
-const PORT = process.env.PORT || 5000;
+let server;
 
 const startServer = async () => {
-    try {
-        // Test database connection
-        await sequelize.authenticate();
-        logger.info('Database connection has been established successfully.');
-
-        // Sync models (only in development/testing, migrations for production)
-        // await sequelize.sync({ force: false }); 
-        // logger.info('Database models synced.');
-
-        // Connect to Redis
-        await redisClient.connect();
-        logger.info('Redis client connected successfully.');
-        
-        app.listen(PORT, () => {
-            logger.info(`Server running on port ${PORT}`);
-        });
-
-    } catch (error) {
-        logger.error('Unable to connect to the database or start server:', error);
-        process.exit(1); // Exit process with failure
+  try {
+    // Sync models and apply migrations (recommended for dev, use `db:migrate` for prod)
+    // For production, ensure migrations are run separately
+    if (config.env === 'development') {
+      await sequelize.sync({ force: false }); // `force: true` drops tables
+      logger.info('Database synchronized (no force).');
+    } else {
+      // In production, migrations should be run explicitly: `npm run db:migrate`
+      logger.info('Database synchronization skipped for production. Run migrations manually.');
     }
+
+    server = app.listen(config.port, () => {
+      logger.info(`Listening to requests on http://localhost:${config.port}`);
+      logger.info(`Environment: ${config.env}`);
+    });
+  } catch (error) {
+    logger.error('Failed to connect to DB or start server:', error);
+    process.exit(1);
+  }
 };
 
-startServer();
+const exitHandler = () => {
+  if (server) {
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
+};
 
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-    logger.info('SIGTERM signal received: closing HTTP server');
-    if (redisClient.isOpen) {
-        await redisClient.quit();
-        logger.info('Redis client disconnected.');
-    }
-    await sequelize.close();
-    logger.info('Database connection closed.');
-    process.exit(0);
+const unexpectedErrorHandler = (error) => {
+  logger.error('Unhandled error:', error);
+  exitHandler();
+};
+
+process.on('uncaughtException', unexpectedErrorHandler);
+process.on('unhandledRejection', unexpectedErrorHandler);
+
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received');
+  if (server) {
+    server.close();
+  }
 });
+
+startServer();
 ```

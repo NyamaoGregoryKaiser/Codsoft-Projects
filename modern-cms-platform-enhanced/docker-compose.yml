@@ -3,94 +3,73 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:13
-    container_name: cms_postgres_db
+    image: postgres:15-alpine
+    restart: always
     environment:
+      POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - nimbus-db-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:6-alpine
-    container_name: cms_redis_cache
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: cms_backend_app
-    ports:
-      - "5000:5000"
+    restart: always
     environment:
       NODE_ENV: ${NODE_ENV}
-      PORT: 5000
-      CLIENT_URL: ${CLIENT_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      PORT: ${PORT}
       DB_DIALECT: ${DB_DIALECT}
-      DB_HOST: db # Service name for Docker Compose
+      DB_HOST: db
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
-      REDIS_HOST: redis # Service name for Docker Compose
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION_MINUTES: ${JWT_ACCESS_EXPIRATION_MINUTES}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS}
       LOG_LEVEL: ${LOG_LEVEL}
-      UPLOAD_DIR: ${UPLOAD_DIR}
-    volumes:
-      - ./backend/src:/app/src # Live reload for development
-      - ./backend/uploads:/app/uploads # Persist uploaded files
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS}
+    ports:
+      - "${PORT}:${PORT}"
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: sh -c "npm install && npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && npm run dev"
-    # In production, use "npm start" and run migrations separately/carefully.
-    # The 'npm install' ensures local dev dependencies are available for 'npm run dev'
-    # db:migrate and db:seed:all are for convenient initial setup;
-    # in production, manage migrations more carefully (e.g., pre-deploy script).
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Prevent host node_modules from overwriting container's
+    command: ["sh", "-c", "npm run db:migrate && npm run db:seed && npm start"] # Run migrations and seeds before starting
+    # For development, use nodemon: command: ["npm", "run", "dev"]
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: cms_frontend_app
-    ports:
-      - "3000:80" # Map host port 3000 to container's port 80 (Nginx)
+    restart: always
     environment:
-      # These env vars are primarily for the React app's build process.
-      # Nginx config handles API proxying without needing REACT_APP_API_BASE_URL here
-      # if we're proxying /api from frontend's nginx to backend.
-      # If running React dev server directly (not Nginx), you'd use REACT_APP_API_BASE_URL
-      # during 'npm start' or build.
-      REACT_APP_API_BASE_URL: http://localhost:5000/api # Used by client-side JS.
-                                                        # When deployed with Nginx, Nginx proxies /api to backend:5000/api
+      REACT_APP_API_BASE_URL: http://localhost:${PORT}/v1 # Connects to backend on host machine
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80
     depends_on:
       backend:
-        condition: service_started # Frontend only needs backend to be started, not necessarily healthy DB access yet
+        condition: service_started
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Prevent host node_modules from overwriting container's
+    # For production, serving static files directly: command: ["nginx", "-g", "daemon off;"]
+    # For development, use react-scripts: command: ["npm", "start"]
 
 volumes:
-  postgres_data:
-  redis_data:
+  nimbus-db-data:
 ```

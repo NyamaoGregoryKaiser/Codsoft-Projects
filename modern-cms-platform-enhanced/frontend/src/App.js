@@ -1,43 +1,67 @@
 ```javascript
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import PostDetailPage from './pages/PostDetailPage';
-import PostFormPage from './pages/PostFormPage';
-import UserManagementPage from './pages/UserManagementPage';
-import CategoryTagManagementPage from './pages/CategoryTagManagementPage';
-import Header from './components/Header';
-import Footer from './components/Footer';
-import PrivateRoute from './components/PrivateRoute';
-import AdminRoute from './components/AdminRoute';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import ContentTypes from './pages/ContentTypes';
+import ContentTypeForm from './pages/ContentTypeForm';
+import EntriesList from './pages/EntriesList';
+import EntryForm from './pages/EntryForm';
+import MediaLibrary from './pages/MediaLibrary';
+import Users from './pages/Users';
+import NotFound from './pages/NotFound'; // Create a simple 404 page
+import Unauthorized from './pages/Unauthorized'; // Create a simple 403 page
+import { ToastContainer } from 'react-toastify';
 
 function App() {
   return (
-    <div className="app-container">
-      <Header />
-      <main className="content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/posts/:slug" element={<PostDetailPage />} />
-          
-          {/* Protected Routes */}
-          <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
-          <Route path="/dashboard/posts/new" element={<PrivateRoute roles={['admin', 'author']}><PostFormPage /></PrivateRoute>} />
-          <Route path="/dashboard/posts/edit/:id" element={<PrivateRoute roles={['admin', 'author']}><PostFormPage /></PrivateRoute>} />
+    <Router>
+      <AuthProvider>
+        <Layout>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
 
-          {/* Admin Specific Routes */}
-          <Route path="/dashboard/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
-          <Route path="/dashboard/taxonomy" element={<AdminRoute><CategoryTagManagementPage /></AdminRoute>} />
+            {/* Protected Routes */}
+            <Route element={<ProtectedRoute roles={['admin', 'editor', 'viewer']} />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/entries" element={<EntriesList />} /> {/* Generic link, will navigate to a specific type */}
+            </Route>
 
-          {/* Fallback for unknown routes */}
-          <Route path="*" element={<h1>404 - Page Not Found</h1>} />
-        </Routes>
-      </main>
-      <Footer />
-    </div>
+            <Route element={<ProtectedRoute roles={['admin', 'editor', 'viewer']} />}>
+              <Route path="/media" element={<MediaLibrary />} />
+            </Route>
+
+            <Route element={<ProtectedRoute roles={['admin']} />}>
+              <Route path="/content-types" element={<ContentTypes />} />
+              <Route path="/content-types/new" element={<ContentTypeForm />} />
+              <Route path="/content-types/:contentTypeId" element={<ContentTypeForm />} />
+              <Route path="/users" element={<Users />} />
+            </Route>
+
+            <Route element={<ProtectedRoute roles={['admin', 'editor', 'viewer']} />}>
+              <Route path="/content-types/:contentTypeId/entries" element={<EntriesList />} />
+            </Route>
+
+            <Route element={<ProtectedRoute roles={['admin', 'editor']} />}>
+              <Route path="/content-types/:contentTypeId/entries/new" element={<EntryForm />} />
+              <Route path="/content-types/:contentTypeId/entries/:entryId" element={<EntryForm />} />
+            </Route>
+
+            {/* 404 Not Found */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Layout>
+        <ToastContainer position="bottom-right" autoClose={3000} hideProgressBar newestOnTop closeOnClick pauseOnHover />
+      </AuthProvider>
+    </Router>
   );
 }
 

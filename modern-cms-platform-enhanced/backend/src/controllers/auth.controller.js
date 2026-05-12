@@ -1,69 +1,38 @@
 ```javascript
+const httpStatus = require('http-status-codes');
+const catchAsync = require('../utils/catchAsync');
 const authService = require('../services/auth.service');
-const logger = require('../utils/logger');
+const userService = require('../services/user.service');
 
-/**
- * Register a new user.
- */
-exports.register = async (req, res, next) => {
-    try {
-        const user = await authService.registerUser(req.body);
-        res.status(201).json({ 
-            message: 'User registered successfully. Please log in.',
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role
-            }
-        });
-    } catch (error) {
-        logger.error('Registration failed:', error.message);
-        next(error);
-    }
-};
+const register = catchAsync(async (req, res) => {
+  const user = await userService.createUser(req.body); // Use userService for creation
+  const tokens = await authService.generateAuthTokens(user);
+  res.status(httpStatus.CREATED).send({ user: user.toJSON(), tokens });
+});
 
-/**
- * Log in a user and return a JWT token.
- */
-exports.login = async (req, res, next) => {
-    try {
-        const { email, password } = req.body;
-        const { user, token } = await authService.loginUser(email, password);
-        res.status(200).json({
-            message: 'Login successful',
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role
-            },
-            token
-        });
-    } catch (error) {
-        logger.error('Login failed:', error.message);
-        next(error);
-    }
-};
+const login = catchAsync(async (req, res) => {
+  const { email, password } = req.body;
+  const user = await authService.loginUserWithEmailAndPassword(email, password);
+  const tokens = await authService.generateAuthTokens(user);
+  res.send({ user: user.toJSON(), tokens });
+});
 
-/**
- * Get the currently authenticated user's profile.
- */
-exports.getMe = async (req, res, next) => {
-    try {
-        // req.user is set by the authenticate middleware
-        res.status(200).json({
-            id: req.user.id,
-            username: req.user.username,
-            email: req.user.email,
-            role: req.user.role,
-            isActive: req.user.isActive,
-            createdAt: req.user.createdAt,
-            updatedAt: req.user.updatedAt
-        });
-    } catch (error) {
-        logger.error('Error fetching user profile:', error.message);
-        next(error);
-    }
+const refreshTokens = catchAsync(async (req, res) => {
+  const tokens = await authService.refreshAuthTokens(req.body.refreshToken);
+  res.send({ ...tokens });
+});
+
+const logout = catchAsync(async (req, res) => {
+  // For JWT, logout is typically client-side by discarding tokens.
+  // If we had a database to store refresh tokens, we'd invalidate them here.
+  // For this simplified setup, we just acknowledge.
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
+module.exports = {
+  register,
+  login,
+  refreshTokens,
+  logout,
 };
 ```

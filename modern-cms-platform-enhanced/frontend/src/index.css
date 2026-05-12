@@ -1,0 +1,11 @@
+```css
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+@import 'react-toastify/dist/ReactToastify.css';
+
+/* Custom global styles if needed */
+body {
+  @apply bg-gray-100 text-gray-900 font-sans;
+}
+```

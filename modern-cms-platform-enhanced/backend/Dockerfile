@@ -1,38 +1,25 @@
 ```dockerfile
-# Stage 1: Build dependencies for faster builds (optional but good practice)
-FROM node:18-alpine AS builder
+# Stage 1: Build dependencies
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
-
-# Install dependencies
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev # Install production dependencies only
 
 # Stage 2: Production image
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy dependencies from the builder stage
+# Copy production dependencies from builder stage
 COPY --from=builder /app/node_modules ./node_modules
-
-# Copy the rest of the application code
+COPY .env.example ./
 COPY . .
 
-# Create uploads directory if it doesn't exist
-RUN mkdir -p /app/uploads
-
-# Expose the port the app runs on
+# Expose port (ensure it matches your config.port)
 EXPOSE 5000
 
-# Run database migrations and seed data
-# This is for initial setup. In production, migrations should be run carefully.
-# For demo purposes, we run them here.
-# ENV DATABASE_URL="postgres://user:password@host:port/database" # Use this if not using DB_ env vars
-# RUN npm run migrate && npm run seed
-
-# Command to run the application
-CMD ["npm", "start"]
+# Run migrations and seeds, then start the application
+CMD ["sh", "-c", "npm run db:migrate && npm run db:seed && npm start"]
 ```

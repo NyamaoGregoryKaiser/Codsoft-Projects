@@ -1,56 +1,56 @@
 ```javascript
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
-const path = require('path');
-
-const apiRoutes = require('./routes');
-const { errorHandler } = require('./middlewares/error.middleware');
-const { requestLogger } = require('./utils/logger');
+const xss = require('xss-clean');
+const hpp = require('hpp');
+const cors = require('cors');
+const compression = require('compression');
+const httpStatus = require('http-status-codes');
 const config = require('./config/config');
-const { apiLimiter } = require('./middlewares/rateLimit.middleware');
+const morgan = require('./config/morgan');
+const { errorConverter, errorHandler } = require('./middleware/error');
+const ApiError = require('./utils/ApiError');
+const routes = require('./routes/v1');
 
 const app = express();
 
-// Security Middlewares
+if (config.env !== 'test') {
+  app.use(morgan.successHandler);
+  app.use(morgan.errorHandler);
+}
+
+// Set security HTTP headers
 app.use(helmet());
-app.use(cors({
-    origin: config.clientUrl, // Configure allowed origins
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-}));
 
-// Request logging (using custom logger and morgan for HTTP access logs)
-app.use(morgan('combined', { stream: requestLogger.stream }));
-
-// Apply rate limiting to all API requests
-app.use('/api/', apiLimiter);
-
-// Body Parsers
+// Parse json request body
 app.use(express.json());
+
+// Parse urlencoded request body
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (e.g., uploaded media)
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+// Sanitize request data
+app.use(xss());
+app.use(hpp()); // Prevent HTTP Parameter Pollution
 
-// API Routes
-app.use('/api', apiRoutes);
+// Gzip compression
+app.use(compression());
 
-// Basic route for health check
-app.get('/', (req, res) => {
-    res.status(200).json({ message: 'CMS Backend is operational!' });
-});
+// Enable cors
+app.use(cors());
+app.options('*', cors());
 
-// Catch 404 and forward to error handler
+// v1 api routes
+app.use('/v1', routes);
+
+// send back a 404 error for any unknown api request
 app.use((req, res, next) => {
-    const error = new Error(`Not Found - ${req.originalUrl}`);
-    error.status = 404;
-    next(error);
+  next(new ApiError(httpStatus.NOT_FOUND, 'Not found'));
 });
 
-// Centralized Error Handling Middleware
+// convert error to ApiError, if needed
+app.use(errorConverter);
+
+// handle error
 app.use(errorHandler);
 
 module.exports = app;

@@ -1,39 +1,55 @@
 ```javascript
-const { Sequelize, DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
-const logger = require('../utils/logger');
+const fs = require('fs');
+const path = require('path');
+const Sequelize = require('sequelize');
+const basename = path.basename(__filename);
+const env = process.env.NODE_ENV || 'development';
+const config = require(__dirname + '/../config/config.js'); // Adjusted path
 
-// Import models
-const User = require('./user.model')(sequelize, DataTypes);
-const Post = require('./post.model')(sequelize, DataTypes);
-const Category = require('./category.model')(sequelize, DataTypes);
-const Tag = require('./tag.model')(sequelize, DataTypes);
+const db = {};
 
-// Define associations
-// User - Post: One-to-Many
-User.hasMany(Post, { foreignKey: 'authorId', as: 'posts' });
-Post.belongsTo(User, { foreignKey: 'authorId', as: 'author' });
+let sequelize;
+if (config.db) {
+  sequelize = new Sequelize(config.db.database, config.db.username, config.db.password, {
+    host: config.db.host,
+    port: config.db.port,
+    dialect: config.db.dialect,
+    logging: false, // Turn off logging for test environment by default
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
+  });
+} else {
+  // Fallback for test environment where config might be different or mocked
+  sequelize = new Sequelize('sqlite::memory:', { logging: false });
+}
 
-// Category - Post: One-to-Many
-Category.hasMany(Post, { foreignKey: 'categoryId', as: 'posts' });
-Post.belongsTo(Category, { foreignKey: 'categoryId', as: 'category' });
+fs
+  .readdirSync(__dirname)
+  .filter(file => {
+    return (
+      file.indexOf('.') !== 0 &&
+      file !== basename &&
+      file.slice(-3) === '.js' &&
+      file.indexOf('.test.js') === -1
+    );
+  })
+  .forEach(file => {
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+    db[model.name] = model;
+  });
 
-// Post - Tag: Many-to-Many
-// Create a join table 'PostTags' implicitly
-Post.belongsToMany(Tag, { through: 'PostTags', as: 'tags', foreignKey: 'postId' });
-Tag.belongsToMany(Post, { through: 'PostTags', as: 'posts', foreignKey: 'tagId' });
+Object.keys(db).forEach(modelName => {
+  if (db[modelName].associate) {
+    db[modelName].associate(db);
+  }
+});
 
-const db = {
-    sequelize,
-    Sequelize,
-    User,
-    Post,
-    Category,
-    Tag,
-};
-
-// Log model associations
-logger.info('Database models and associations defined.');
+db.sequelize = sequelize;
+db.Sequelize = Sequelize;
 
 module.exports = db;
 ```
