@@ -1,0 +1,11 @@
+{
+  "server_port": 8080,
+  "db_connection_string": "host=localhost port=5432 dbname=dataviz user=dataviz_user password=dataviz_password",
+  "redis_host": "localhost",
+  "redis_port": 6379,
+  "jwt_secret": "your_very_secret_jwt_key_here_at_least_32_chars_long",
+  "jwt_expiration_seconds": 3600,
+  "log_level": "info",
+  "rate_limit_max_requests": 100,
+  "rate_limit_window_seconds": 60
+}
