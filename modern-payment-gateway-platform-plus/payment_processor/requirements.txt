@@ -1,0 +1,48 @@
+# FastAPI and Uvicorn
+fastapi==0.104.1
+uvicorn[standard]==0.24.0.post1
+
+# Database
+asyncpg==0.28.0
+psycopg2-binary==2.9.9 # For Alembic's sync connection
+SQLAlchemy==2.0.23
+alembic==1.12.1
+
+# Pydantic (data validation)
+pydantic==2.5.2
+pydantic-settings==2.1.0
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Task Queue (Celery with Redis as broker/backend)
+celery==5.3.4
+redis==5.0.1
+greenlet==3.0.1 # Important for async contexts with SQLAlchemy
+
+# Caching and Rate Limiting
+fastapi-limiter==0.1.5 # Requires Redis
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.1
+coverage==7.3.2
+faker==20.0.0
+
+# Linting and Formatting (Dev Dependencies)
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
+mypy==1.7.0
+
+# Logging
+loguru==0.7.2 # Optional, for more advanced logging features, but we'll use standard logging + custom formatter for JSON.
+
+# Other utilities
+python-multipart==0.0.6
+```
+
+#### `payment_processor/.env.example`
+```ini
