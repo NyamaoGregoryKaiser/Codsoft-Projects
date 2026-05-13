@@ -1,0 +1,58 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mobile_app_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mobile_app_db}
+      POSTGRES_USER: ${DB_USER:-appuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d/migrations # Execute migration scripts on first run
+      - ./db/seed:/docker-entrypoint-initdb.d/seed # Execute seed data scripts after migrations
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mobile_backend_app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      # Pass environment variables to the app container
+      # Using ${VAR:-default} syntax for fallback values
+      DB_HOST: db # Connect to the 'db' service name within the Docker network
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-mobile_app_db}
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-secure_password}
+      APP_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_that_is_at_least_32_characters_long}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-300}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_BUCKET_CAPACITY: ${RATE_LIMIT_BUCKET_CAPACITY:-100}
+      RATE_LIMIT_BUCKET_REFILL_RATE: ${RATE_LIMIT_BUCKET_REFILL_RATE:-10}
+    depends_on:
+      - db
+    # Health check for the app (optional but good practice)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"] # Add a health endpoint
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Mount config for easier development without rebuilding docker image
+    # For production, config should be baked into the image or managed via env vars
+    volumes:
+      - ./config:/app/config
+
+volumes:
+  db_data:
+```

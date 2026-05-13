@@ -1,0 +1,28 @@
+```json
+{
+  "app": {
+    "name": "Mobile E-commerce Backend",
+    "port": 8080,
+    "logLevel": "info"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "mobile_app_db",
+    "user": "appuser",
+    "password": "secure_password"
+  },
+  "jwt": {
+    "secret": "super_secret_jwt_key_that_is_at_least_32_characters_long",
+    "expirationMinutes": 120
+  },
+  "cache": {
+    "ttlSeconds": 300
+  },
+  "rateLimit": {
+    "enabled": true,
+    "bucketCapacity": 100,
+    "bucketRefillRatePerSecond": 10
+  }
+}
+```

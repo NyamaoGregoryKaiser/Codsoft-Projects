@@ -1,0 +1,173 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build_and_test:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: test_db
+      DB_USER: test_user
+      DB_PASSWORD: test_password
+      JWT_SECRET: your_test_secret_for_jwt_validation
+      APP_PORT: 8080 # For API tests
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: ${{ env.DB_NAME }}
+          POSTGRES_USER: ${{ env.DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.DB_PASSWORD }}
+        ports:
+          - 5432:5432 # Map for the app and integration tests
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies (Drogon, spdlog, build tools)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake git libjson-c-dev libpq-dev uuid-dev zlib1g-dev libssl-dev wget pkg-config ninja-build lcov doxygen
+          
+          # Install Drogon
+          git clone --depth 1 -b master https://github.com/drogonframework/drogon.git /tmp/drogon
+          cd /tmp/drogon
+          git submodule update --init
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          sudo cmake --build build -j$(nproc) --target install
+          sudo ldconfig
+          
+          # Install spdlog
+          git clone --depth 1 -b v1.12.0 https://github.com/gabime/spdlog.git /tmp/spdlog
+          cd /tmp/spdlog
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          sudo cmake --build build -j$(nproc) --target install
+          sudo ldconfig
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DDB_LIB_VERSION=pq
+
+      - name: Build application
+        run: cmake --build build -j$(nproc)
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 10); do
+            sudo PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -c "\q" && break
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 5
+          done
+
+      - name: Run Database Migrations for Test DB
+        run: |
+          # Use psql to apply migration scripts
+          sudo PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -f db/migrations/001_create_tables.sql
+          sudo PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -f db/migrations/002_add_foreign_keys.sql
+          sudo PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -f db/migrations/003_add_order_items.sql
+          # Apply seed data
+          sudo PGPASSWORD=${DB_PASSWORD} psql -h ${DB_HOST} -U ${DB_USER} -d ${DB_NAME} -f db/seed/seed_data.sql
+
+      - name: Run Unit Tests
+        run: ./build/tests/unit/UnitTests
+
+      - name: Run Integration Tests
+        run: ./build/tests/integration/IntegrationTests
+
+      - name: Start the backend for API tests
+        run: |
+          ./build/bin/mobile_backend_app &
+          APP_PID=$!
+          echo "Started app with PID $APP_PID"
+          sleep 5 # Give the app a moment to start up
+          curl -f http://localhost:8080/api/v1/health || (echo "Health check failed"; kill $APP_PID; exit 1)
+          echo "App is healthy"
+        # API tests will run in the same step or a subsequent one,
+        # ensuring the server is running.
+        # This setup is a simplification; a more robust approach might use `wait-for-it` or similar.
+        env:
+          DB_HOST: ${{ env.DB_HOST }}
+          DB_PORT: ${{ env.DB_PORT }}
+          DB_NAME: ${{ env.DB_NAME }}
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          APP_PORT: ${{ env.APP_PORT }}
+          LOG_LEVEL: debug # For verbose logging during tests
+
+      - name: Run API Tests
+        run: ./build/tests/api/ApiTests
+        env:
+          DB_HOST: ${{ env.DB_HOST }}
+          DB_PORT: ${{ env.DB_PORT }}
+          DB_NAME: ${{ env.DB_NAME }}
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          APP_PORT: ${{ env.APP_PORT }} # Ensure API tests hit the correct port
+
+      # Optional: Code Coverage (requires gcov/lcov)
+      # - name: Generate Code Coverage Report
+      #   run: |
+      #     lcov --capture --directory . --output-file coverage.info
+      #     lcov --remove coverage.info '/usr/*' --output-file coverage.info
+      #     genhtml coverage.info --output-directory coverage_html
+      # - name: Upload coverage to Codecov (if using Codecov)
+      #   uses: codecov/codecov-action@v3
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+
+  # deploy:
+  #   name: Deploy to Production
+  #   needs: build_and_test
+  #   if: github.ref == 'refs/heads/main' # Deploy only from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v2
+  #     - name: Log in to Docker Hub
+  #       uses: docker/login-action@v2
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_TOKEN }}
+  #     - name: Build and push Docker image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: .
+  #         push: true
+  #         tags: your-docker-hub-username/mobile-backend-app:latest
+  #     - name: Deploy to Server (e.g., SSH, Kubernetes)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.SSH_HOST }}
+  #         username: ${{ secrets.SSH_USERNAME }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           docker pull your-docker-hub-username/mobile-backend-app:latest
+  #           docker stop mobile_backend_app || true
+  #           docker rm mobile_backend_app || true
+  #           # Ensure your docker-compose.yml on the server uses the pulled image
+  #           docker compose -f /path/to/your/docker-compose.yml up -d
+  #           docker system prune -f
+```
