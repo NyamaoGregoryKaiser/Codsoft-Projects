@@ -1,0 +1,169 @@
+name: TaskFlow CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        run: pip install poetry==1.8.2
+
+      - name: Cache Poetry dependencies
+        id: cache-poetry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('backend/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install Backend dependencies
+        working-directory: ./backend
+        run: poetry install --no-root
+
+      - name: Run Backend Linting
+        working-directory: ./backend
+        run: |
+          # poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+          echo "Placeholder for backend linting (e.g., flake8, black, isort)"
+          # Example: poetry run black --check .
+          # Example: poetry run isort --check .
+          # Example: poetry run ruff check .
+
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: |
+          poetry run pytest app/tests/ --cov=app --cov-report=xml
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+          POSTGRES_SERVER: localhost
+          SECRET_KEY: ${{ secrets.SECRET_KEY || 'super-secret-test-key-for-ci-only' }}
+          REDIS_URL: 'redis://localhost:6379/1' # Use a different Redis DB for tests
+          FIRST_SUPERUSER_EMAIL: test@example.com
+          FIRST_SUPERUSER_PASSWORD: testpassword
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: backend/coverage.xml
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache Node modules
+        id: cache-npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json', 'frontend/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Frontend dependencies
+        working-directory: ./frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Run Frontend Linting
+        working-directory: ./frontend
+        run: yarn lint # or `npm run lint`
+
+      - name: Run Frontend Tests
+        working-directory: ./frontend
+        run: yarn test --coverage --watchAll=false
+        env:
+          CI: true # Required for Jest to run tests and exit on GitHub Actions
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: yarn build
+        env:
+          REACT_APP_API_BASE_URL: ${{ secrets.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1' }}
+
+  # Deploy job (example for a simple deployment to a hosting service or Docker Hub)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend, build-and-test-frontend]
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    environment: Production # Optional: for environment-specific secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Example: Login to Docker Hub
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_TOKEN }}
+
+      # Example: Build and push Docker images
+      # - name: Build and push backend image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ./backend
+      #     push: true
+      #     tags: your_docker_username/taskflow-backend:latest
+      # - name: Build and push frontend image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ./frontend
+      #     file: ./frontend/Dockerfile
+      #     push: true
+      #     tags: your_docker_username/taskflow-frontend:latest
+
+      # Example: Deploy to a cloud provider (e.g., using SSH and docker-compose)
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /path/to/your/deployment/directory # e.g., /opt/taskflow
+            git pull origin main
+            docker compose -f docker-compose.prod.yml down --remove-orphans
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --build
+            echo "Deployment complete!"
+```
+
+---
+
+## 4. Testing & Quality
+
+### Backend Tests
+
+#### `backend/app/tests/conftest.py`
+```python

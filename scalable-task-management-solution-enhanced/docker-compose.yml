@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-task_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-task_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/backend/app # Mount source for hot-reloading in dev
+      - ./backend/alembic:/app/backend/alembic
+      - ./backend/alembic.ini:/app/backend/alembic.ini
+      - ./backend/seed_db.py:/app/backend/seed_db.py
+      - ./backend/run.sh:/app/backend/run.sh
+      - ./backend/pyproject.toml:/app/backend/pyproject.toml
+      - ./backend/poetry.lock:/app/backend/poetry.lock
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["./run.sh"] # Use the script to run migrations and start the server
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:80" # Map host port 3000 to container's port 80
+    depends_on:
+      backend:
+        condition: service_started
+    # For development, you might want to run the React dev server
+    # command: ["npm", "start"]
+    # volumes:
+    #   - ./frontend/src:/app/frontend/src
+    #   - ./frontend/public:/app/frontend/public
+    #   - ./frontend/package.json:/app/frontend/package.json
+    #   - ./frontend/postcss.config.js:/app/frontend/postcss.config.js
+    #   - ./frontend/tailwind.config.js:/app/frontend/tailwind.config.js
+
+
+volumes:
+  postgres_data:
