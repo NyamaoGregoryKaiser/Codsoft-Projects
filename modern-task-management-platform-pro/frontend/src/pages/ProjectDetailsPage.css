@@ -1,0 +1,104 @@
+```css
+.project-details-page-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.project-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.project-details-header h1 {
+  font-size: 2.8rem;
+  color: var(--primary-color);
+  margin-bottom: 10px;
+}
+
+.project-details-header p {
+  font-size: 1.1rem;
+  color: var(--light-text-color);
+  margin-bottom: 5px;
+}
+
+.tasks-list {
+  margin-top: 40px;
+}
+
+.tasks-list h2 {
+  font-size: 2rem;
+  color: var(--secondary-color);
+  margin-bottom: 25px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.tasks-list > div { /* Grid for task cards */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 25px;
+}
+
+.task-form {
+  padding: 20px 0;
+}
+
+.task-form .form-group {
+  margin-bottom: 15px;
+}
+
+.task-form .form-group label {
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: var(--light-text-color);
+}
+
+.task-form input,
+.task-form textarea,
+.task-form select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.task-form textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.task-form .btn {
+  width: auto;
+  min-width: 150px;
+  padding: 10px 20px;
+  margin-top: 15px;
+  font-size: 1.05rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .project-details-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .project-details-header h1 {
+    font-size: 2.2rem;
+  }
+  .project-details-header p {
+    font-size: 1rem;
+  }
+  .tasks-list h2 {
+    font-size: 1.8rem;
+  }
+  .tasks-list > div {
+    grid-template-columns: 1fr;
+  }
+}
+```
