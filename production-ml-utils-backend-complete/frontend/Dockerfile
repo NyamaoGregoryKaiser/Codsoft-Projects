@@ -1,30 +1,44 @@
+```dockerfile
 # Stage 1: Build the React application
-FROM node:18-alpine AS build
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
-COPY yarn.lock ./  # If you use yarn, otherwise remove this line
-COPY tsconfig.json ./
-COPY .env.example ./.env # Copy .env.example to .env for build process to pick up env vars
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
 
-RUN npm install # Or yarn install
+COPY .env.example .env.production ./ # Copy env files for build, adjust as needed
+COPY tsconfig.json vite.config.ts ./
+COPY public ./public
+COPY src ./src
 
-COPY . .
+# Build the app for production
+RUN yarn build
 
-RUN npm run build # Or yarn build
+# Stage 2: Serve the application with Nginx (for production)
+# For simplicity, during development or demo, you can directly serve from Node,
+# but for production, a dedicated web server like Nginx is recommended.
+# This example uses a simple Node.js server for demonstration within Docker.
+FROM node:18-alpine
 
-# Stage 2: Serve the static files with Nginx
-FROM nginx:alpine
+WORKDIR /app
 
-# Copy the built React app from the build stage
-COPY --from=build /app/build /usr/share/nginx/html
+# Copy built application from builder stage
+COPY --from=builder /app/dist ./dist
 
-# Copy custom Nginx configuration
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+# Install a simple static server
+RUN yarn add serve
 
-# Expose port 80 (Nginx default)
-EXPOSE 80
+EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+# Use serve to host the static files
+CMD ["serve", "-s", "dist", "-l", "3000"]
+
+# Alternative using Nginx for production:
+# FROM nginx:stable-alpine
+# COPY --from=builder /app/dist /usr/share/nginx/html
+# # Custom Nginx config if needed
+# # COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+# EXPOSE 80
+# CMD ["nginx", "-g", "daemon off;"]
 ```

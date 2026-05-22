@@ -1,38 +1,35 @@
-# Use a C++ build image
-FROM gcc:10.2.0
+```dockerfile
+# Stage 1: Build the TypeScript application
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    cmake \
-    libsqlite3-dev \
-    git \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
 
-# Copy CMakeLists.txt and external dependencies first to leverage Docker cache
-COPY CMakeLists.txt .
-COPY extern extern
+COPY tsconfig.json ormconfig.json ./
+COPY src ./src
 
-# Build dependencies if they have build steps (e.g., Catch2)
-# For header-only libs like Crow, nlohmann/json, spdlog, jwt-cpp, sqlite_modern_cpp (if header-only),
-# this step might not be strictly necessary, but it's good practice for modules.
-# For example, if Catch2 requires a build:
-RUN cd extern/Catch2 && cmake . && make && cd ../..
+RUN yarn build
 
-# Copy source code
-COPY src src
-COPY data data
-COPY tests tests
+# Stage 2: Run the application
+FROM node:18-alpine
 
-# Configure and build the application
-RUN cmake .
-RUN make
+WORKDIR /app
 
-# Expose the port the app runs on
-EXPOSE 8080
+# Install production dependencies only
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production
 
-# Command to run the application
-CMD ["./ml_utilities_backend_app"]
+# Copy built application and static assets
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/uploads ./uploads # If you want to include initial uploads or ensure directory exists
+COPY --from=builder /app/ormconfig.json ./ormconfig.json # For TypeORM migrations/seeding
+
+# Create logs directory
+RUN mkdir -p logs
+
+EXPOSE 5000
+
+CMD ["node", "dist/server.js"]
 ```

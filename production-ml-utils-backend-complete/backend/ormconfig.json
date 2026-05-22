@@ -1,0 +1,24 @@
+```json
+[
+  {
+    "type": "postgres",
+    "host": "localhost",
+    "port": 5432,
+    "username": "user",
+    "password": "password",
+    "database": "ml_utilities_db",
+    "synchronize": false,
+    "logging": false,
+    "entities": [
+      "src/modules/**/*.entity.ts"
+    ],
+    "migrations": [
+      "src/database/migrations/*.ts"
+    ],
+    "subscribers": [],
+    "migrationsRun": false,
+    "seeds": ["src/database/seed/**/*.seed.ts"]
+  }
+]
+```
+*(Note: For Docker, `host` will be `db`)*

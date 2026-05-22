@@ -1,43 +1,54 @@
+```yaml
 version: '3.8'
 
 services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ml_utilities_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development/tools
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ml_utilities_backend
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./backend/data:/app/data # Mount data directory for SQLite DB persistence
+    restart: always
     env_file:
-      - ./backend/.env # Load environment variables for the backend
+      - ./backend/.env
+    environment:
+      DB_HOST: db # Link to the database service
+      DB_PORT: 5432
+      DB_USER: user
+      DB_PASSWORD: password
+      DB_NAME: ml_utilities_db
+      NODE_ENV: production # Set to production for prod build
+    volumes:
+      - ./backend/uploads:/app/uploads # Persist uploaded files
+    ports:
+      - "5000:5000"
     depends_on:
-      - db # Although SQLite is file-based, this can represent other databases like PostgreSQL
+      - db
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: ml_utilities_frontend
+    restart: always
+    env_file:
+      - ./frontend/.env
+    environment:
+      VITE_API_BASE_URL: http://localhost:5000/api/v1 # Direct backend access from frontend container
     ports:
-      - "3000:80" # Map host port 3000 to container's port 80 (Nginx)
-    volumes:
-      - ./frontend/src:/app/src # Optional: for live reload during development (bind mount source)
-      - ./frontend/public:/app/public
-      - ./frontend/nginx:/etc/nginx/conf.d # Mount custom nginx config
+      - "3000:3000"
     depends_on:
       - backend
 
-  # A dummy service to represent the database for docker-compose dependencies.
-  # For SQLite, the database file is inside the backend container's volume.
-  # If you were using PostgreSQL/MySQL, this would be a full database service.
-  db:
-    image: busybox/sqlite # Using a tiny image to represent a logical DB service
-    container_name: ml_utilities_db_placeholder
-    volumes:
-      - ./backend/data:/data # Ensure the data directory exists and is shared if needed
-
 volumes:
-  ml_util_db_data: # Define a named volume for the database if you want Docker to manage it
+  postgres_data:
 ```

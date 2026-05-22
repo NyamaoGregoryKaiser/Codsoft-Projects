@@ -1,133 +1,215 @@
-# ML Utilities System (C++ Backend + React Frontend)
+```markdown
+# ML Utilities System
 
-This project provides a comprehensive, production-ready Machine Learning Utilities system. It features a high-performance C++ backend for core logic and API services, paired with a modern React.js frontend for an intuitive user experience. The system is designed for enterprise-grade applications, focusing on robust architecture, testability, and deployability.
-
-## Architecture
-
-The system is built with a decoupled frontend and backend architecture:
-
-*   **Backend (C++)**: Developed using the `Crow` microframework, `sqlite_modern_cpp` for database interaction, `jwt-cpp` for authentication, `spdlog` for logging, and custom C++ implementations for ML utilities. It exposes a RESTful API.
-*   **Frontend (React.js with TypeScript)**: A single-page application built with React, TypeScript, and `Chakra UI` for a responsive and accessible user interface. It communicates with the C++ backend via `axios`.
-*   **Database**: `SQLite3` is used for simplicity and embeddability in this example. For larger deployments, it can be easily swapped for PostgreSQL or MySQL.
-*   **Containerization**: `Docker` and `Docker Compose` are used to package and orchestrate the backend and frontend services.
-*   **API Gateway/Reverse Proxy**: `Nginx` is used in the frontend Docker container to serve static files and proxy API requests to the backend service.
+A comprehensive, full-stack Machine Learning Utilities system designed for enterprise use. This platform allows users to manage ML projects, datasets, models, and experiments, providing core CRUD operations, authentication/authorization, and basic model inference capabilities.
 
 ## Features
 
-**Core Application (C++ Backend)**:
-*   **User Management**: Register, login, and retrieve user profiles.
-*   **Authentication & Authorization**: JWT-based authentication for secure API access.
-*   **Model Management**: CRUD operations for ML model metadata (e.g., name, description, version, status, associated files).
-*   **ML Data Transformations**: API endpoints to apply common preprocessing techniques like StandardScaler and MinMaxScaler to input data.
-*   **Mock Prediction Service**: An endpoint to simulate model inference using registered models.
-*   **Error Handling**: Centralized exception handling and standardized error responses.
-*   **Logging**: Structured logging using `spdlog`.
-*   **Middleware**: Custom middleware for Logging, Authentication, Caching, and Rate Limiting.
+**Core Functionality:**
+*   **Project Management:** Create, view, update, and delete ML projects.
+*   **Dataset Management:** Upload, list, view details, and download datasets. Associated with projects.
+*   **Model Management:** Upload, list, view details, download models, and run basic inference. Associated with projects.
+*   **Experiment Tracking:** Record and view ML experiment runs, linking to specific models and datasets, tracking parameters and metrics.
 
-**Frontend (React.js)**:
-*   User-friendly interface for registration and login.
-*   Dashboard overview.
-*   Dedicated pages for listing, viewing details, uploading, and editing ML models.
-*   Interactive page for applying data transformations.
-*   Interface to test mock prediction endpoints.
-*   Responsive UI/UX with `Chakra UI`.
+**Enterprise-Grade Features:**
+*   **Authentication & Authorization:** JWT-based user authentication, role-based access control (User, Admin).
+*   **Logging & Monitoring:** Centralized logging with Winston, capturing application events and errors.
+*   **Error Handling:** Global error handling middleware for consistent API error responses.
+*   **Rate Limiting:** Protects API endpoints against brute-force attacks and abuse.
+*   **Caching Layer (Conceptual):** Mentioned for future enhancement using Redis or similar.
+*   **File Uploads:** Secure handling of dataset and model files with Multer.
 
-**Database Layer**:
-*   SQLite3 schema definitions for `users` and `models` tables.
-*   Migration scripts for versioning database schema.
-*   Seed data for initial setup.
+**Technology Stack:**
+*   **Backend:** Node.js, Express, TypeScript, TypeORM, PostgreSQL
+*   **Frontend:** React, TypeScript, Material-UI, Axios
+*   **Database:** PostgreSQL
+*   **Containerization:** Docker, Docker Compose
+*   **Testing:** Jest, Supertest, React Testing Library
+*   **CI/CD:** GitHub Actions (configuration provided)
 
-**Configuration & Setup**:
-*   `.env` files for environment-specific configurations.
-*   `CMake` for C++ backend build management.
-*   `package.json` for Node.js dependencies.
-*   `Dockerfiles` for backend and frontend.
-*   `docker-compose.yml` for easy local development and deployment.
+## Project Structure
 
-**Testing & Quality**:
-*   **Unit Tests**:
-    *   C++ Backend: `Catch2` framework (80%+ coverage target for core logic).
-    *   React Frontend: `React Testing Library` and `Jest`.
-*   **Integration Tests**: API tests (can be run manually with `curl`/Postman or automated with a tool like Newman/Cypress against the running Docker setup).
-*   **Performance Tests**: (Described, not fully implemented with code for brevity, but can be done with tools like `JMeter` or `k6`).
+```
+ml-utilities-system/
+├── backend/                  # Node.js/Express/TypeScript API
+│   ├── src/                  # Source code for backend
+│   │   ├── auth/             # Authentication logic
+│   │   ├── config/           # Environment configuration
+│   │   ├── database/         # TypeORM setup, migrations, seeds
+│   │   ├── middleware/       # Global Express middleware (error handling, auth, rate limiting)
+│   │   ├── modules/          # Feature modules (users, projects, datasets, models, experiments)
+│   │   ├── routes/           # API route definitions
+│   │   ├── tests/            # Backend unit, integration, API tests
+│   │   ├── utils/            # Utility functions (logger, AppError, file uploads)
+│   │   ├── app.ts            # Express application setup
+│   │   └── server.ts         # Server entry point
+│   ├── .env.example          # Example environment variables
+│   ├── dockerfile            # Dockerfile for backend service
+│   ├── package.json          # Backend dependencies and scripts
+│   ├── tsconfig.json         # TypeScript configuration
+│   └── ormconfig.json        # TypeORM database configuration
+├── frontend/                 # React/TypeScript web application
+│   ├── public/               # Public assets
+│   ├── src/                  # Source code for frontend
+│   │   ├── api/              # Axios API client
+│   │   ├── components/       # Reusable UI components
+│   │   ├── contexts/         # React Contexts (e.g., AuthContext)
+│   │   ├── hooks/            # Custom React Hooks (e.g., useFetch)
+│   │   ├── pages/            # Application pages/views
+│   │   ├── router/           # React Router setup, protected routes
+│   │   ├── styles/           # Global styles
+│   │   ├── tests/            # Frontend unit tests
+│   │   ├── utils/            # Frontend utilities
+│   │   ├── App.tsx           # Main React App component
+│   │   └── index.tsx         # React entry point
+│   ├── .env.example          # Example environment variables
+│   ├── dockerfile            # Dockerfile for frontend service
+│   ├── package.json          # Frontend dependencies and scripts
+│   ├── tsconfig.json         # TypeScript configuration
+│   └── vite.config.ts        # Vite configuration
+├── .github/                  # GitHub Actions CI/CD workflows
+│   └── workflows/
+│       ├── ci.yml
+│       └── cd.yml
+├── docs/                     # Project documentation
+│   ├── architecture.md
+│   ├── api.md
+│   ├── deployment.md
+│   └── swagger.json          # OpenAPI/Swagger definition
+├── docker-compose.yml        # Orchestration for all services (backend, frontend, db)
+└── README.md                 # This README file
+```
 
 ## Setup and Installation
 
 ### Prerequisites
 
-*   Docker and Docker Compose
-*   Git
+*   Node.js (v18 or higher) & npm/yarn
+*   Docker & Docker Compose
+*   PostgreSQL client (optional, for direct DB access)
 
 ### 1. Clone the repository
 
 ```bash
-git clone --recurse-submodules https://github.com/your-username/ml-utilities-system.git
+git clone https://github.com/your-username/ml-utilities-system.git
 cd ml-utilities-system
 ```
-**Important**: `--recurse-submodules` is crucial to fetch all C++ dependencies (Crow, Catch2, etc.). If you cloned without it, run `git submodule update --init --recursive` from the root directory.
 
-### 2. Configure Environment Variables
+### 2. Environment Variables
 
-Create `.env` files based on the examples:
+Create `.env` files based on the provided `.env.example` for both `backend` and `frontend` directories.
 
-*   **Backend**: `cp backend/.env.example backend/.env`
-    *   Edit `backend/.env` with your desired `JWT_SECRET` (at least 32 characters long for security), `PORT`, `DATABASE_PATH`, etc.
-*   **Frontend**: `cp frontend/.env.example frontend/.env`
-    *   `REACT_APP_API_BASE_URL` is configured for local development by default (pointing to the backend service). For Docker deployment, Nginx will handle proxying automatically.
+**`backend/.env`**:
+```
+PORT=5000
+DATABASE_URL=postgresql://user:password@db:5432/ml_utilities_db # 'db' for Docker Compose, 'localhost' for local
+JWT_SECRET=your_strong_jwt_secret_key
+JWT_EXPIRES_IN=1d
+LOG_LEVEL=info
+STORAGE_PATH=./uploads
+```
+*(Note: For local development without Docker Compose, set `DATABASE_URL` host to `localhost` and ensure you have a local PostgreSQL running.)*
 
-### 3. Build and Run with Docker Compose
+**`frontend/.env`**:
+```
+VITE_API_BASE_URL=/api/v1 # For development with Vite proxy
+# For production/direct Docker access, change to: VITE_API_BASE_URL=http://localhost:5000/api/v1 (or backend service name in docker-compose)
+```
 
-From the root directory of the project:
+### 3. Build and Run with Docker Compose (Recommended)
+
+This method simplifies setup by running all services in containers.
 
 ```bash
+# 1. Build the Docker images
 docker-compose build
-docker-compose up
+
+# 2. Start the services (PostgreSQL, Backend, Frontend)
+docker-compose up -d
+
+# 3. Wait for the database and backend to be ready, then run migrations and seed data
+# You might need to wait a few seconds after `docker-compose up` for the DB to be fully ready.
+docker-compose exec backend npm run migration:run
+docker-compose exec backend npm run seed
 ```
 
-This will:
-1.  Build the C++ backend Docker image.
-2.  Build the React frontend Docker image.
-3.  Start both services, along with an Nginx proxy for the frontend.
+Once all services are up and running:
+*   **Backend API:** `http://localhost:5000/api/v1`
+*   **Frontend App:** `http://localhost:3000`
 
-### 4. Access the Application
+You can access the frontend in your browser at `http://localhost:3000`.
+Default admin credentials after seeding: `admin@example.com` / `adminpassword`
+Default user credentials after seeding: `user@example.com` / `userpassword`
 
-*   **Frontend UI**: Open your browser to `http://localhost:3000`
-*   **Backend API (direct access, not recommended for frontend calls)**: `http://localhost:8080`
+### 4. Local Development (Without Docker Compose)
 
-You can register a new user via the UI (`http://localhost:3000/register`) and then log in.
+#### Backend:
+```bash
+cd backend
 
-### 5. Running Tests
+# Install dependencies
+yarn install # or npm install
 
-#### Backend (C++) Tests:
+# Run TypeORM migrations (ensure PostgreSQL is running locally)
+yarn typeorm migration:run
+
+# Seed initial data
+yarn seed
+
+# Start the development server
+yarn dev
+```
+The backend API will be available at `http://localhost:5000`.
+
+#### Frontend:
+```bash
+cd frontend
+
+# Install dependencies
+yarn install # or npm install
+
+# Start the development server
+yarn dev
+```
+The frontend application will be available at `http://localhost:3000`.
+
+## Testing
+
+### Backend Tests
 
 ```bash
-docker-compose run backend bash -c "cd build && ctest --output-on-failure"
-# Or if you built locally without Docker:
-# cd backend
-# cmake -B build
-# cmake --build build
-# ./build/ml_utilities_tests
+cd backend
+yarn test         # Run all tests
+yarn test:watch   # Run tests in watch mode
 ```
 
-#### Frontend (React) Tests:
+### Frontend Tests
 
 ```bash
-docker-compose run frontend npm test -- --coverage --watchAll=false
-# Or if you have Node.js installed locally:
-# cd frontend
-# npm install
-# npm test -- --coverage --watchAll=false
+cd frontend
+yarn test         # Run all tests
+yarn test:watch   # Run tests in watch mode
 ```
 
-## Deployment Guide
+## Code Quality
 
-Refer to `DEPLOYMENT.md` for detailed deployment instructions.
+*   ESLint is configured for both backend and frontend.
+*   TypeScript for type safety.
+*   Unit and integration tests aim for high coverage.
 
-## API Documentation
+```bash
+cd backend
+yarn lint
 
-Refer to `API_DOCS.md` for detailed API endpoint documentation.
+cd frontend
+yarn lint
+```
 
-## Architecture Documentation
+## Additional Notes
 
-Refer to `ARCHITECTURE.md` for a deeper dive into the system's design.
+*   **File Storage:** Currently, uploaded datasets and models are stored locally in the `backend/uploads` directory. For production, consider integrating with cloud storage solutions like AWS S3, Google Cloud Storage, or Azure Blob Storage.
+*   **Model Inference:** The `runInference` endpoint for models is a placeholder. In a real-world scenario, this would involve loading the actual ML model (e.g., using a framework like TensorFlow.js, or by sending data to a dedicated ML inference service/microservice written in Python).
+*   **Caching:** A caching layer could be added using Redis for frequently accessed data (e.g., project lists) to improve performance.
+
+---
 ```
