@@ -1,0 +1,78 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chatdb
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/20-seed.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d chatdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "9001:9001"
+      - "9002:9002"
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/chatdb # 'db' is the service name
+      REDIS_HOST: redis                                     # 'redis' is the service name
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-super_secret_jwt_key_please_change_in_production_!}
+      WEBSOCKET_HOST: 0.0.0.0                                 # Bind to all interfaces within container
+      WEBSOCKET_PORT: 9002
+      HTTP_PORT: 9001
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs # Mount for persistent logs
+    command: sh -c "mkdir -p /app/logs && ./chat_backend" # Ensure logs dir exists before running
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx)
+    environment:
+      # These variables are consumed by Vite during build, not runtime
+      VITE_REACT_APP_API_BASE_URL: http://localhost:9001 # Frontend uses host machine's access to backend
+      VITE_REACT_APP_WEBSOCKET_URL: ws://localhost:9002  # Frontend uses host machine's access to backend
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  db_data:
+```
