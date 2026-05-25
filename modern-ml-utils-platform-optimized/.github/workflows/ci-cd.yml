@@ -1,0 +1,147 @@
+name: ML Utilities Hub CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run ESLint
+      run: npm run lint
+
+    - name: Build TypeScript
+      run: npm run build
+
+    - name: Setup Test Database (Postgres)
+      run: |
+        docker compose -f ../docker-compose.yml up -d db redis
+        # Wait for PostgreSQL to be ready
+        sleep 10
+      working-directory: . # Execute docker compose from root
+
+    - name: Run Backend Tests
+      run: npm test -- --coverage
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USERNAME: ml_user
+        DB_PASSWORD: ml_password
+        DB_DATABASE: ml_utilities_test_db # Use a dedicated test database
+        JWT_SECRET: testsecret
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+        REDIS_PASSWORD:
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: backend-coverage-report
+        path: backend/coverage
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run ESLint
+      run: npm run lint
+
+    - name: Build React App
+      run: npm run build
+      env:
+        VITE_API_BASE_URL: http://localhost:5000/api/v1 # Placeholder for build-time env
+
+    # Add frontend tests here if using a testing library like Vitest/React Testing Library
+    # - name: Run Frontend Tests
+    #   run: npm test
+
+  # Example CD job (conceptual, requires actual deployment setup)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main branch
+    environment: Production # Link to GitHub Environments
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
+    - name: Login to DockerHub (or other registry)
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build and push Backend image
+      run: |
+        docker build -t your-dockerhub-user/ml-utilities-backend:latest ./backend
+        docker push your-dockerhub-user/ml-utilities-backend:latest
+
+    - name: Build and push Frontend image
+      run: |
+        docker build -t your-dockerhub-user/ml-utilities-frontend:latest ./frontend
+        docker push your-dockerhub-user/ml-utilities-frontend:latest
+
+    # Example: Deploy to a Kubernetes cluster or a server using SSH
+    - name: Deploy to Server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.PROD_SSH_HOST }}
+        username: ${{ secrets.PROD_SSH_USERNAME }}
+        key: ${{ secrets.PROD_SSH_KEY }}
+        script: |
+          cd /path/to/your/app # Navigate to your application directory on the server
+          docker compose pull
+          docker compose up -d --force-recreate backend frontend
+          docker system prune -f # Clean up old images
+
+    - name: Run Production Database Migrations (Important for blue-green deployments)
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.PROD_SSH_HOST }}
+        username: ${{ secrets.PROD_SSH_USERNAME }}
+        key: ${{ secrets.PROD_SSH_KEY }}
+        script: |
+          docker compose exec backend npm run migrate
+          # Optionally run seed for new data in prod (careful with this!)
+          # docker compose exec backend npm run seed

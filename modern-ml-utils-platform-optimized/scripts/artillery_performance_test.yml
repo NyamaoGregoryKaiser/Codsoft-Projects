@@ -1,0 +1,87 @@
+config:
+  target: "http://localhost:5000/api/v1"
+  phases:
+    - duration: 60 # Test duration in seconds
+      arrivalRate: 20 # Number of new virtual users to start per second
+      name: "Warmup"
+    - duration: 120
+      arrivalRate: 50 # Increase to 50 users/second
+      rampTo: 100 # Ramp up to 100 users/second
+      name: "Load test"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Authenticated User Actions"
+    flow:
+      # 1. Login to get a token
+      - post:
+          url: "/auth/login"
+          json:
+            email: "admin@example.com"
+            password: "password123"
+          capture:
+            json: "$.token"
+            as: "authToken"
+      # 2. Access protected dashboard
+      - get:
+          url: "/users/me"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+      # 3. List datasets (cached endpoint)
+      - get:
+          url: "/datasets"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+      # 4. Perform a data utility operation (non-cached, CPU bound)
+      - post:
+          url: "/data-utilities/encode/one-hot"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            data:
+              - { "category": "A", "value": 10 }
+              - { "category": "B", "value": 20 }
+              - { "category": "A", "value": 15 }
+              - { "category": "C", "value": 30 }
+              - { "category": "B", "value": 25 }
+              - { "category": "A", "value": 5 }
+            column: "category"
+
+  - name: "Unauthenticated User Access (expect 401/404)"
+    flow:
+      - get:
+          url: "/users/me"
+          expect:
+            - statusCode: 401
+      - get:
+          url: "/datasets"
+          expect:
+            - statusCode: 401
+      - get:
+          url: "/non-existent-path"
+          expect:
+            - statusCode: 404
+      - post:
+          url: "/auth/register"
+          json:
+            email: "{{ $randomEmail }}"
+            password: "password123"
+          expect:
+            - statusCode: 201
+            - statusCode: 400 # If rate limit hits, or email taken from concurrent tests
+```
+
+To run Artillery:
+1.  Install Artillery: `npm install -g artillery`
+2.  Ensure your Docker Compose setup is running (`docker compose up -d`).
+3.  Execute: `artillery run scripts/artillery_performance_test.yml`
+
+---
+
+## **5. Documentation**
+
+### **Comprehensive README (Root `README.md`)**
+
+```markdown

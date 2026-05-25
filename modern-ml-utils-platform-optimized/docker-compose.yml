@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: ml-utilities-db
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - ml-utilities-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ml-utilities-redis
+    restart: always
+    env_file:
+      - ./backend/.env
+    command: redis-server --requirepass ${REDIS_PASSWORD} # If REDIS_PASSWORD is set
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - ml-utilities-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ml-utilities-backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - redis
+    networks:
+      - ml-utilities-network
+    command: >
+      sh -c "npm run migrate && npm run build && npm run seed && npm start"
+      # The `npm run seed` command will drop schema, run migrations, and then seed data.
+      # In a real production scenario, you'd run migrations as a separate step
+      # or as part of your deploy script, not on every container start.
+      # Seed data is also typically a one-time operation or managed by specific tools.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ml-utilities-frontend
+    restart: always
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ml-utilities-network
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  ml-utilities-network:
+    driver: bridge
+```
+
+**backend/Dockerfile**
+```dockerfile
