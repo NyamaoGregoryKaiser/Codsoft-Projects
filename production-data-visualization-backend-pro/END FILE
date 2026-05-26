@@ -1,0 +1,55 @@
+### **6. Additional Features**
+
+Most of these are integrated into the C++ backend code and configuration provided above.
+
+*   **Authentication/Authorization:** Implemented using JWT in `AuthMiddleware.h` and `JWTUtils.h`, managed by `AuthManager.cpp`.
+*   **Logging and Monitoring:** Integrated using `spdlog` in `Logger.h` and used throughout the application. Log files are persistent via Docker volumes.
+*   **Error Handling Middleware:** Implemented in `ErrorMiddleware.h` to catch exceptions and return consistent JSON error responses. `DataVizError` provides structured error codes.
+*   **Caching Layer:** `LRUCache.h` provides a generic, thread-safe LRU cache. This could be integrated into `DatasetService` or `DashboardHandler` to cache frequently requested dataset metadata or dashboard configurations.
+    *   **Example Integration in `DashboardHandler` (Conceptual):**
+        ```cpp
+        // In DashboardHandler.h
+        #include "utils/Cache.h"
+        // ...
+        class DashboardHandler {
+            DataVizPro::LRUCache<std::string, DataVizPro::Dashboard> dashboard_cache;
+            // ...
+            crow::response handleGetDashboard(const crow::request& req, const std::string& dashboard_id, AuthMiddleware::context& ctx);
+        };
+
+        // In DashboardHandler.cpp (handleGetDashboard)
+        // ...
+        auto cached_dashboard = dashboard_cache.get(dashboard_id + "_" + ctx.user_id);
+        if (cached_dashboard.first) {
+            res.code = 200;
+            res.write(cached_dashboard.second.toJson().dump());
+            LOG_DEBUG("Dashboard ID {} served from cache.", dashboard_id);
+            return res;
+        }
+
+        Dashboard dashboard = getDashboardByIdAndUser(dashboard_id, ctx.user_id);
+        dashboard_cache.put(dashboard_id + "_" + ctx.user_id, dashboard); // Cache it
+        // ...
+        ```
+*   **Rate Limiting:** `RateLimiter.h` provides a token bucket (or similar) rate limiter. It can be integrated into `main.cpp` as a global middleware or on specific routes.
+    *   **Example Integration in `main.cpp` (Conceptual):**
+        ```cpp
+        // In main.cpp, after app definition
+        RateLimiter global_rate_limiter(100, std::chrono::minutes(1)); // 100 requests per minute
+
+        // Example: Apply to a specific route handler (could be a custom Crow middleware)
+        CROW_ROUTE(app, Constants::API_VERSION + "/datasets").methods("POST"_method)(
+            [&](const crow::request& req, AuthMiddleware::context& ctx) {
+                // Rate limit by user ID or IP
+                std::string rate_limit_key = ctx.user_id.empty() ? req.remote_ip_address : ctx.user_id;
+                if (!global_rate_limiter.allow(rate_limit_key)) {
+                    throw DataVizError(ErrorCode::SERVICE_UNAVAILABLE, "Too many requests", "Rate limit exceeded", 429);
+                }
+                return dataset_handler.handleUploadDataset(req, ctx);
+            }
+        );
+        ```
+
+---
+
+This comprehensive blueprint and set of illustrative code snippets demonstrate the structure and approach for building an enterprise-grade data visualization tool. To make it a fully runnable product, each component would require further development, including a complete React frontend implementation, more sophisticated data processing, and integration of robust third-party libraries for hashing, file parsing, etc.

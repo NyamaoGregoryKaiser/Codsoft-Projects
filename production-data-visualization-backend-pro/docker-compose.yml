@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: datavizpro
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - datavizpro_db:/var/lib/postgresql/data
+      # Mount schema and seed scripts for initial setup
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/2-seed.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d datavizpro"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    restart: always
+    environment:
+      SERVER_PORT: 8080
+      DATABASE_URL: "postgresql://user:password@db:5432/datavizpro" # Connects to 'db' service
+      JWT_SECRET: "${JWT_SECRET}" # Load from .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./server/logs:/app/logs # Persist logs
+      - ./server/data_storage:/app/data_storage # Persist uploaded dataset files
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is ready before starting backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: always
+    environment:
+      REACT_APP_API_BASE_URL: "http://localhost:8080/api/v1" # Connects to backend on host
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  datavizpro_db:
+```
