@@ -1,0 +1,148 @@
+```yaml
+name: ECM CMS CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install Backend dependencies
+        run: npm install --prefix server
+
+      - name: Install Frontend dependencies
+        run: npm install --prefix client
+
+      - name: Lint Backend
+        run: npm run lint --workspace=server
+
+      - name: Lint Frontend
+        run: npm run lint --workspace=client
+
+      - name: Start PostgreSQL for Backend Tests
+        run: |
+          docker run --name test-db -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=ecm_cms_db_test -p 5433:5432 -d postgres:14-alpine
+          # Wait for PostgreSQL to be ready
+          sleep 10 # Give DB time to start up
+        # Replace localhost:5432 with actual test-db port if needed in DATABASE_URL
+        env:
+          DATABASE_URL: postgres://user:password@localhost:5433/ecm_cms_db_test
+
+      - name: Run Backend Migrations for Test DB
+        run: npm run migrate --workspace=server
+        env:
+          DATABASE_URL: postgres://user:password@localhost:5433/ecm_cms_db_test
+          NODE_ENV: test
+
+      - name: Run Backend Tests
+        run: npm test --workspace=server
+        env:
+          DATABASE_URL: postgres://user:password@localhost:5433/ecm_cms_db_test
+          JWT_SECRET: test_jwt_secret # Use a test secret
+          NODE_ENV: test
+
+      - name: Build Frontend
+        run: npm run build --workspace=client
+        env:
+          REACT_APP_API_URL: /api/v1 # Placeholder for build, actual API URL is set at runtime/deployment
+
+      - name: Upload Backend Test Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage
+          path: server/coverage
+
+      - name: Upload Frontend Build Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: client/build
+
+  deploy-to-prod:
+    name: Deploy to Production
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' # Only deploy main branch to production
+    runs-on: ubuntu-latest
+    environment: Production # GitHub Environment for secrets protection
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download Frontend Build Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: client/build
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/ecm-cms:latest
+          build-args: |
+            NODE_ENV=production
+
+      - name: Deploy to Server (e.g., using SSH/Ansible/kubectl)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            echo "Deploying new version of ECM CMS"
+            # Pull the latest Docker image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/ecm-cms:latest
+
+            # Stop and remove old container
+            docker stop ecm-cms-app || true
+            docker rm ecm-cms-app || true
+
+            # Run new container
+            docker run -d \
+              --name ecm-cms-app \
+              -p 80:5000 \
+              -e NODE_ENV=production \
+              -e PORT=5000 \
+              -e DATABASE_URL="${{ secrets.PROD_DATABASE_URL }}" \
+              -e JWT_SECRET="${{ secrets.PROD_JWT_SECRET }}" \
+              -e CORS_ORIGIN="${{ secrets.PROD_CORS_ORIGIN }}" \
+              --mount type=bind,source=/path/to/server/uploads,target=/app/server/uploads \
+              ${{ secrets.DOCKER_USERNAME }}/ecm-cms:latest
+
+            echo "Deployment complete!"
+            # Optionally, run database migrations on the production server
+            # docker exec ecm-cms-app npm run migrate --workspace=server
+
+  deploy-to-staging:
+    name: Deploy to Staging
+    needs: build-and-test
+    if: github.ref == 'refs/heads/develop' # Deploy develop branch to staging
+    runs-on: ubuntu-latest
+    environment: Staging
+    # This would be similar to deploy-to-prod but with staging specific credentials and configurations.
+    steps:
+      - name: Placeholder Staging Deploy
+        run: echo "Simulating deployment to staging environment for develop branch."
+```

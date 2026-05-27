@@ -1,0 +1,69 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ecm_cms_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d ecm_cms_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-builder # Use the backend-builder stage for development
+    restart: always
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: postgres://user:password@db:5432/ecm_cms_db # Connect to the 'db' service
+      JWT_SECRET: supersecretjwtkeythatshouldbeverylongandrandomandsecureinproduction # Use your actual secret
+      JWT_ACCESS_EXPIRATION_MINUTES: 60
+      CORS_ORIGIN: "http://localhost:3000" # For local development
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server:/app/server # Mount source code for hot-reloading in dev
+      - /app/server/node_modules # Prevent host node_modules from overwriting container's
+      - ./server/uploads:/app/server/uploads # Persist uploaded files
+    depends_on:
+      db:
+        condition: service_healthy # Wait for DB to be healthy
+    # Use nodemon for live-reloading in development
+    command: npm run dev
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-builder # Use the frontend-builder stage for development
+    restart: always
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      REACT_APP_API_URL: http://localhost:5000/api/v1 # API endpoint for frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app/client # Mount source code for hot-reloading in dev
+      - /app/client/node_modules # Prevent host node_modules from overwriting container's
+    depends_on:
+      backend:
+        condition: service_started
+    command: npm start
+
+volumes:
+  postgres_data:
+```
