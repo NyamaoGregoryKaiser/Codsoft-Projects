@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "ml-utilities-system-backend",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "crow",
+    "libpqxx",
+    "spdlog",
+    "nlohmann-json",
+    "jwt-cpp",
+    "fmt",
+    "gtest",
+    "openssl"
+  ],
+  "builtin-baseline": "8c4146a848c089d4432139b8c0e2410a7b45a05b"
+}
