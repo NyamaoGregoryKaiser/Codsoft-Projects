@@ -1,0 +1,15 @@
+.git
+.gitignore
+.pytest_cache
+*.pyc
+*.log
+__pycache__
+venv/
+env/
+mediafiles/ # Don't copy local media into image, use volume for persistence
+staticfiles/ # Don't copy local static into image, use volume after collectstatic
+--- END FILE ---
+
+**CI/CD Pipeline (GitHub Actions)**
+
+---
