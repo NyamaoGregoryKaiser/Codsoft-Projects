@@ -1,0 +1,17 @@
+```json
+{
+  "users": [
+    {
+      "email": "test@example.com",
+      "password": "password123",
+      "role": "user"
+    },
+    {
+      "email": "admin@example.com",
+      "password": "password123",
+      "role": "admin"
+    }
+    // Add more test users as needed for higher VU counts
+  ]
+}
+```

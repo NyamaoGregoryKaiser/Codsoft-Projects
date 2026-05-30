@@ -1,0 +1,214 @@
+```css
+/* General Styling */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f4f7f6;
+  color: #333;
+}
+
+.App {
+  text-align: center;
+}
+
+/* Header and Navigation */
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.App-header nav {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+}
+
+.App-header nav a,
+.App-header nav button {
+  color: white;
+  text-decoration: none;
+  padding: 8px 15px;
+  border-radius: 5px;
+  transition: background-color 0.3s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.App-header nav a:hover,
+.App-header nav button:hover {
+  background-color: #61dafb;
+  color: #282c34;
+}
+
+/* Main Content */
+.App-main {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 20px auto;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Forms */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 20px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+form div {
+  text-align: left;
+}
+
+form label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form textarea,
+form select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box; /* Include padding in width */
+}
+
+form button {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+
+form button:hover {
+  background-color: #0056b3;
+}
+
+/* Error Message */
+.error-message {
+  color: #dc3545;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  padding: 10px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+/* Dashboard and Project List */
+.dashboard-container,
+.project-detail-container {
+  padding: 20px;
+}
+
+.project-list,
+.task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* Project Card */
+.project-card {
+  background-color: #e9ecef;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.project-card h3 a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.project-card h3 a:hover {
+  text-decoration: underline;
+}
+
+.project-card .project-actions {
+  margin-top: auto; /* Push actions to the bottom */
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.project-card .project-actions button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #6c757d;
+  color: white;
+  transition: background-color 0.3s ease;
+}
+
+.project-card .project-actions button:hover {
+  background-color: #5a6268;
+}
+
+.project-card .project-actions .delete-button {
+  background-color: #dc3545;
+}
+
+.project-card .project-actions .delete-button:hover {
+  background-color: #c82333;
+}
+
+/* Task Item */
+.task-item {
+  background-color: #e9ecef;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.task-item h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #343a40;
+}
+
+.task-item p {
+  margin-bottom: 5px;
+}
+
+.task-item .task-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.task-item .task-actions select {
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+```
