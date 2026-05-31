@@ -1,0 +1,81 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Build Dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake libpq-dev pkg-config libcryptopp-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Application
+        run: cmake --build build -j$(nproc)
+
+      - name: Run Unit and Integration Tests
+        # Ensure test executable is built, then run it.
+        # This assumes your Catch2 setup builds a single 'tests' executable.
+        run: ./build/tests
+
+      - name: Build Docker Image
+        run: docker build -t zenith-payments:latest .
+
+      - name: Verify Docker Image (Optional, run basic health check)
+        run: |
+          docker run --rm -d --name test-zenith -p 8080:8080 zenith-payments:latest
+          sleep 5 # Give container time to start
+          curl http://localhost:8080/health | grep UP
+          docker stop test-zenith
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' # Deploy only from main branch
+    environment: Production # Optional: for environment-specific secrets
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub (or other registry)
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/zenith-payments:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_USERNAME }}/zenith-payments:${{ github.sha }}
+          docker tag ${{ secrets.DOCKER_USERNAME }}/zenith-payments:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/zenith-payments:latest
+          docker push ${{ secrets.DOCKER_USERNAME }}/zenith-payments:latest
+
+      - name: Deploy to Server (e.g., using SSH and Docker Compose)
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/your/deployment/directory
+            # Pull the latest image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/zenith-payments:latest
+            # Stop and remove old containers, then bring up new ones with latest image
+            docker-compose down
+            docker-compose up -d --build # --build is generally not needed if pulled, but can be useful
+            docker system prune -f # Clean up old images
+```
