@@ -1,0 +1,98 @@
+```typescript
+import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AllExceptionsFilter, HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { ConfigService } from '@nestjs/config';
+import * as cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import * as RedisStore from 'rate-limit-redis';
+import { RedisClient } from 'redis'; // Use specific client type for RedisStore
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
+  const port = configService.get<number>('PORT') || 3000;
+
+  // Global prefixes and versioning
+  app.setGlobalPrefix('api');
+  // app.enableVersioning({ type: VersioningType.URI }); // Optional: if you want API versioning
+
+  // CORS
+  app.enableCors({
+    origin: configService.get<string>('FRONTEND_URL') || 'http://localhost:5173', // Adjust in production
+    credentials: true,
+  });
+
+  // Security Middlewares
+  app.use(helmet()); // Basic security headers
+  app.use(cookieParser()); // For parsing cookies if needed (e.g., for refresh tokens)
+
+  // Rate Limiting
+  const redisHost = configService.get<string>('REDIS_HOST');
+  const redisPort = configService.get<number>('REDIS_PORT');
+  const rateLimitTTL = configService.get<number>('RATE_LIMIT_TTL') || 60000; // 1 minute
+  const rateLimitMax = configService.get<number>('RATE_LIMIT_MAX') || 100; // 100 requests
+
+  if (redisHost && redisPort) {
+    const redisClient = new RedisClient({
+      host: redisHost,
+      port: redisPort,
+      // password: 'your_redis_password', // if Redis requires auth
+    });
+
+    app.use(
+      rateLimit({
+        store: new RedisStore({
+          // @ts-ignore - store for the rate limit redis library
+          client: redisClient,
+          expiry: Math.floor(rateLimitTTL / 1000), // expiry is in seconds
+        }),
+        windowMs: rateLimitTTL,
+        max: rateLimitMax,
+        message: 'Too many requests, please try again after some time.',
+        headers: true, // Send X-RateLimit-* headers
+      }),
+    );
+  } else {
+    console.warn('Redis connection details not found for rate limiting. Using in-memory store.');
+    app.use(
+      rateLimit({
+        windowMs: rateLimitTTL,
+        max: rateLimitMax,
+        message: 'Too many requests, please try again after some time (in-memory store).',
+      }),
+    );
+  }
+
+
+  // Global Pipes, Interceptors, Filters
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true })); // DTO validation
+  app.useGlobalInterceptors(new LoggingInterceptor()); // Request/response logging
+
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new AllExceptionsFilter(httpAdapter)); // Catch all exceptions
+  app.useGlobalFilters(new HttpExceptionFilter()); // Catch specific HttpExceptions
+
+  // Swagger Setup
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('MLFlow Pro API')
+    .setDescription('API documentation for the ML Model & Experiment Management System')
+    .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', name: 'JWT', description: 'Enter JWT token', in: 'header' },
+      'access-token',
+    )
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api-docs', app, document);
+
+  await app.listen(port);
+  console.log(`Application is running on: ${await app.getUrl()}`);
+  console.log(`Swagger UI available at: ${await app.getUrl()}/api-docs`);
+}
+bootstrap();
+```

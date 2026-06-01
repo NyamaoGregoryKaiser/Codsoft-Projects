@@ -1,0 +1,68 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mlflowpro
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mlflowpro"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    restart: always
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/mlflowpro
+      REDIS_HOST: redis
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - /app/node_modules # Important to prevent host node_modules from overwriting container's
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    restart: always
+    # Using .env.local for local development, production build should have these baked in
+    # For Docker, it's generally better to pass environment variables directly or use ARG in Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://backend:3000/api # Connects to the backend service within Docker network
+    ports:
+      - "80:80" # Exposed on port 80 for the host
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+```

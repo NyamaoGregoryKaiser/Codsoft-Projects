@@ -1,0 +1,110 @@
+```typescript
+import { CacheModule, Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { ModelsModule } from './models/models.module';
+import { ExperimentsModule } from './experiments/experiments.module';
+import { DatasetsModule } from './datasets/datasets.module';
+import { FeaturesModule } from './features/features.module';
+import { User } from './users/entities/user.entity';
+import { Model } from './models/entities/model.entity';
+import { ModelVersion } from './models/entities/model-version.entity';
+import { Experiment } from './experiments/entities/experiment.entity';
+import { Run } from './experiments/entities/run.entity';
+import { Dataset } from './datasets/entities/dataset.entity';
+import { Feature } from './features/entities/feature.entity';
+import * as redisStore from 'cache-manager-redis-store';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: `.env`, // Load .env for local development
+    }),
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        type: 'postgres',
+        url: configService.get<string>('DATABASE_URL'),
+        entities: [User, Model, ModelVersion, Experiment, Run, Dataset, Feature],
+        synchronize: false, // Set to true only for development, use migrations in production
+        autoLoadEntities: true,
+        logging: false, // Set to true to see SQL queries in console
+      }),
+    }),
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        store: redisStore,
+        host: configService.get<string>('REDIS_HOST'),
+        port: configService.get<number>('REDIS_PORT'),
+        ttl: configService.get<number>('REDIS_TTL') || 3600, // seconds
+      }),
+      isGlobal: true, // Makes CacheModule available globally
+    }),
+    AuthModule,
+    UsersModule,
+    ModelsModule,
+    ExperimentsModule,
+    DatasetsModule,
+    FeaturesModule,
+  ],
+  controllers: [],
+  providers: [],
+})
+export class AppModule {}
+```
+```typescript
+// Example: backend/src/models/models.controller.ts (applying CacheInterceptor)
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, CacheInterceptor, UseInterceptors } from '@nestjs/common';
+import { ModelsService } from './models.service';
+import { CreateModelDto } from './dto/create-model.dto';
+import { UpdateModelDto } from './dto/update-model.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+
+@ApiTags('models')
+@ApiBearerAuth('access-token')
+@Controller('api/models')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class ModelsController {
+  constructor(private readonly modelsService: ModelsService) {}
+
+  @Post()
+  @Roles(Role.Admin, Role.User)
+  @ApiOperation({ summary: 'Create a new ML model' })
+  @ApiResponse({ status: 201, description: 'The model has been successfully created.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  create(@Body() createModelDto: CreateModelDto) {
+    return this.modelsService.create(createModelDto);
+  }
+
+  @Get()
+  @Roles(Role.Admin, Role.User)
+  @UseInterceptors(CacheInterceptor) // Cache this endpoint's response
+  @ApiOperation({ summary: 'Get all ML models' })
+  @ApiResponse({ status: 200, description: 'Return all models.' })
+  findAll() {
+    return this.modelsService.findAll();
+  }
+
+  @Get(':id')
+  @Roles(Role.Admin, Role.User) // A user can view their own models
+  @UseInterceptors(CacheInterceptor) // Cache individual model fetches
+  @ApiOperation({ summary: 'Get an ML model by ID' })
+  @ApiResponse({ status: 200, description: 'Return a single model.' })
+  @ApiResponse({ status: 404, description: 'Model not found.' })
+  findOne(@Param('id') id: string) {
+    return this.modelsService.findOne(id);
+  }
+
+  // ... other CRUD operations
+}
+```
