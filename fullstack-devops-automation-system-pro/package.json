@@ -1,0 +1,39 @@
+etms-frontend/
+├── public/
+│   └── index.html
+├── src/
+│   ├── App.js
+│   ├── index.js
+│   ├── assets/
+│   │   └── logo.svg
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AppHeader.js
+│   │   │   └── AppFooter.js
+│   │   ├── auth/
+│   │   │   ├── LoginForm.js
+│   │   │   └── RegisterForm.js
+│   │   └── common/
+│   │       └── PrivateRoute.js
+│   ├── context/
+│   │   └── AuthContext.js
+│   ├── hooks/
+│   │   └── useAuth.js
+│   ├── pages/
+│   │   ├── DashboardPage.js
+│   │   ├── HomePage.js
+│   │   ├── LoginPage.js
+│   │   ├── NotFoundPage.js
+│   │   ├── ProjectsPage.js
+│   │   ├── RegisterPage.js
+│   │   └── TasksPage.js
+│   ├── services/
+│   │   ├── api.js
+│   │   └── auth.js
+│   ├── setupTests.js
+│   └── styles/
+│       └── index.css
+├── package.json
+├── .env
+├── Dockerfile
+└── .npmrc

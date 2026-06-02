@@ -1,0 +1,131 @@
+name: ETMS CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'etms-frontend/package-lock.json' # Path to lock file for caching
+
+      # Setup PostgreSQL for integration tests
+      - name: Start PostgreSQL
+        run: |
+          docker run --name test-postgres -e POSTGRES_DB=etms_test_db -e POSTGRES_USER=testuser -e POSTGRES_PASSWORD=testpassword -p 5432:5432 -d postgres:15-alpine
+          # Wait for PostgreSQL to be ready
+          sleep 10 # Give it a moment to start
+          docker exec test-postgres pg_isready -U testuser -d etms_test_db
+        # We'll use H2 for backend tests for speed, but this demonstrates setting up a real DB.
+        # For this project, I'm using H2 for test, so this step can be commented out or removed for actual test runs.
+
+      - name: Build Backend with Maven
+        working-directory: ./etms-backend
+        run: mvn clean install -DskipTests # Build without running tests yet
+
+      - name: Run Backend Unit & Integration Tests
+        working-directory: ./etms-backend
+        run: mvn test
+
+      - name: Build Frontend with npm
+        working-directory: ./etms-frontend
+        run: npm install && npm run build
+
+      - name: Run Frontend Tests
+        working-directory: ./etms-frontend
+        run: npm test -- --coverage --watchAll=false # Run tests with coverage and exit
+
+  docker-build-and-push:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only run on push to main
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build and push Backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./etms-backend
+          file: ./etms-backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/etms-backend:${{ github.sha }}, ${{ secrets.DOCKER_USERNAME }}/etms-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./etms-frontend
+          file: ./etms-frontend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/etms-frontend:${{ github.sha }}, ${{ secrets.DOCKER_USERNAME }}/etms-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: docker-build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' # Only deploy on push to main
+    environment: production # Use GitHub Environments for protected deployments
+    steps:
+      - name: Deploy to Server (SSH/K8s/ECS)
+        run: |
+          echo "Simulating deployment to a production server..."
+          echo "This step would typically involve:"
+          echo "1. SSHing into a server or connecting to a Kubernetes cluster."
+          echo "2. Pulling the latest Docker images: ${{ secrets.DOCKER_USERNAME }}/etms-backend:latest and ${{ secrets.DOCKER_USERNAME }}/etms-frontend:latest"
+          echo "3. Updating a docker-compose file or Kubernetes deployment to use the new images."
+          echo "4. Restarting services (e.g., docker-compose up -d or kubectl rollout restart deployment)."
+          echo "For example, using SSH:"
+          # ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'EOF'
+          #   cd /path/to/your/app
+          #   docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_TOKEN }}
+          #   docker-compose pull
+          #   docker-compose up -d --remove-orphans
+          # EOF
+          echo "Deployment successful for ${{ github.sha }}"
+        env:
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+```
+
+---
+
+### **4. Testing & Quality**
+
+#### **Backend Tests (Java - Unit, Integration, API)**
+
+**`UserRepositoryTest.java`**
+```java

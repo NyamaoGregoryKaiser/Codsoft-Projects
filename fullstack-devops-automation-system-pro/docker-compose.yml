@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: etms-postgres
+    environment:
+      POSTGRES_DB: etms_db
+      POSTGRES_USER: etms_user
+      POSTGRES_PASSWORD: etms_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - etms_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etms_user -d etms_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./etms-backend
+      dockerfile: Dockerfile
+    container_name: etms-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/etms_db
+      SPRING_DATASOURCE_USERNAME: etms_user
+      SPRING_DATASOURCE_PASSWORD: etms_password
+      APP_JWT_SECRET: averyveryverysecretkeythatisatleast256bitslongandisbase64encoded # Keep in sync with application.properties
+      APP_JWT_EXPIRATION_MILLISECONDS: 604800000 # 7 days
+    depends_on:
+      postgres:
+        condition: service_healthy # Ensure postgres is ready
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./etms-frontend
+      dockerfile: Dockerfile
+    container_name: etms-frontend
+    ports:
+      - "3000:80" # Map host 3000 to container 80 (Nginx default)
+    environment:
+      # This is usually passed at build time for React (REACT_APP_*)
+      # But for Docker-compose setup, we can also manage it in Nginx config or rewrite JS variables.
+      # For simplicity, we assume the Nginx config rewrites to the backend service name.
+      # Or, ensure REACT_APP_API_BASE_URL points to http://localhost:8080 for local dev
+      # For production, it would be a public backend URL.
+      REACT_APP_API_BASE_URL: http://backend:8080/api # Points to the backend service inside the docker-compose network
+    depends_on:
+      - backend
+    restart: on-failure
+
+volumes:
+  etms_db_data:
+```
+
+#### **CI/CD Pipeline Configuration (GitHub Actions)**
+```yaml
