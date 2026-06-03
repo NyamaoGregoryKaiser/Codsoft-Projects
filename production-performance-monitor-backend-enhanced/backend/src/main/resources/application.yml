@@ -1,0 +1,82 @@
+```yaml
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskflow_db}
+    username: ${DB_USER:taskflow_user}
+    password: ${DB_PASSWORD:taskflow_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # 'update' or 'create' for dev, 'validate' for prod with Flyway
+    show-sql: false # Set to true for debugging SQL queries
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true # Useful for existing databases
+    locations: classpath:db/migration
+  security:
+    user:
+      name: ${ADMIN_USERNAME:admin}
+      password: ${ADMIN_PASSWORD:password}
+  cache:
+    cache-names: projects, tasks # Define cache names
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s # Cache configuration (max 500 items, expire after 60s)
+  application:
+    name: taskflow-backend
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:aVerySecretKeyThatIsAtLeast256BitsLongAndShouldBeChangedInProduction}
+  expiration: 3600000 # 1 hour in milliseconds
+
+# Actuator (Monitoring Endpoints)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, heapdump, caches, loggers, mappings, threaddump
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# Distributed Tracing (Spring Cloud Sleuth/Jaeger)
+spring:
+  sleuth:
+    enabled: true
+    propagation:
+      type: W3C # Use W3C Trace Context headers
+    sampler:
+      probability: 1.0 # Sample all requests
+  zipkin:
+    sender:
+      type: web # Use HTTP sender for Jaeger
+    baseUrl: http://${JAEGER_HOST:localhost}:9411 # Jaeger collector endpoint
+
+# OpenAPI / Swagger UI configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+    display-request-duration: true
+
+# Logging Configuration (see logback-spring.xml for details)
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    com.taskflow: DEBUG # Set to DEBUG for more detailed application logs
+    org.hibernate.SQL: INFO # Log SQL statements
+    org.hibernate.type.descriptor.sql.BasicExtractor: TRACE # Log parameters bound to SQL queries
+```

@@ -1,0 +1,13 @@
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-ds
+    access: proxy
+    url: http://prometheus:9090 # 'prometheus' is the service name in docker-compose
+    isDefault: true
+    version: 1
+    editable: true
+```

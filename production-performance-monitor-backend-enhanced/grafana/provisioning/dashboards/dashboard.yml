@@ -1,0 +1,13 @@
+```yaml
+apiVersion: 1
+
+providers:
+  - name: 'TaskFlow Dashboards'
+    orgId: 1
+    folder: '' # No specific folder, will appear in 'General'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards # Path inside the Grafana container where dashboards are stored
+```

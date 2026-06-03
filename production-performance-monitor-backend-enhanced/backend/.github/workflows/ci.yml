@@ -1,0 +1,85 @@
+```yaml
+name: TaskFlow Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**' # Only trigger if changes are in the backend directory
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'backend/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend # All commands run from the 'backend' directory
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3 # Using recommended Gradle setup action
+
+      - name: Run Spotless Check
+        run: ./gradlew spotlessCheck
+
+      - name: Run Unit and Integration Tests
+        run: ./gradlew test
+
+      - name: Build with Gradle
+        run: ./gradlew build -x test # Skip tests as they were run in previous step
+
+      - name: Upload JaCoCo Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: backend/build/reports/jacoco/test/html
+          retention-days: 5
+
+      - name: Upload executable JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: taskflow-backend-jar
+          path: backend/build/libs/*.jar
+          retention-days: 5
+
+  # This job could be extended for Docker image build and push, and deployment
+  # deploy-to-docker-hub:
+  #   needs: build-and-test
+  #   if: github.ref == 'refs/heads/main' # Only deploy from main branch
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #     - name: Docker Login
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+  #     - name: Build and Push Docker image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: ./backend
+  #         file: ./backend/Dockerfile
+  #         push: true
+  #         tags: yourdockerhubusername/taskflow-backend:latest
+  #         build-args: |
+  #           # Pass any necessary build args
+  #           # REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }} # Example for a fullstack app with a unified build
+
+```

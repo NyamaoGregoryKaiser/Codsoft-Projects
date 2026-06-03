@@ -1,0 +1,148 @@
+```yaml
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------------------------------------------------
+  # 1. Database Service (PostgreSQL)
+  # --------------------------------------------------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: taskflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-taskflow_db}
+      POSTGRES_USER: ${DB_USER:-taskflow_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-taskflow_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist database data
+    healthcheck: # Ensure DB is ready before app starts
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-taskflow_user} -d ${DB_NAME:-taskflow_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - taskflow_network
+
+  # --------------------------------------------------------------------------------------------------------------------
+  # 2. Backend Application Service (Spring Boot)
+  # --------------------------------------------------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskflow-backend
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres # Service name in docker-compose for inter-container communication
+      DB_NAME: ${DB_NAME:-taskflow_db}
+      DB_USER: ${DB_USER:-taskflow_user}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow_password}
+      JWT_SECRET: ${JWT_SECRET:-aVerySecretKeyThatIsAtLeast256BitsLongAndShouldBeChangedInProduction}
+      JAEGER_HOST: jaeger # Service name for Jaeger
+      SPRING_PROFILES_ACTIVE: prod # Use production profile if defined
+      # Configure Spring Boot Actuator endpoint for Prometheus scraping
+      MANAGEMENT_ENDPOINTS_WEB_BASEPATH: /actuator
+      MANAGEMENT_METRICS_TAGS_APPLICATION: taskflow-backend
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait for postgres to be healthy
+      jaeger:
+        condition: service_started # Jaeger can start independently
+    networks:
+      - taskflow_network
+
+  # --------------------------------------------------------------------------------------------------------------------
+  # 3. Frontend Application Service (React + Nginx)
+  # --------------------------------------------------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      args:
+        # Pass backend API URL to React build process
+        REACT_APP_API_BASE_URL: "http://${BACKEND_HOST:-localhost}:8080/api"
+    container_name: taskflow-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx)
+    depends_on:
+      backend:
+        condition: service_started # Frontend needs backend to be available for API calls
+    networks:
+      - taskflow_network
+
+  # --------------------------------------------------------------------------------------------------------------------
+  # 4. Monitoring Services
+  # --------------------------------------------------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: taskflow-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro # Prometheus configuration
+      - prometheus_data:/prometheus # Persist Prometheus data
+    command: --config.file=/etc/prometheus/prometheus.yml --web.enable-remote-write-receiver --web.enable-lifecycle
+    ports:
+      - "9090:9090" # Prometheus UI
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - taskflow_network
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: taskflow-grafana
+    restart: unless-stopped
+    volumes:
+      - grafana_data:/var/lib/grafana # Persist Grafana data
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources # Datasource configuration
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards # Dashboard configuration
+      - ./grafana/dashboards:/var/lib/grafana/dashboards # Dashboard JSON files
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    ports:
+      - "3001:3000" # Grafana UI
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - taskflow_network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.53
+    container_name: taskflow-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: :9411 # Port for Zipkin/Sleuth compatibility
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14268:14268" # Jaeger HTTP collector
+      - "14250:14250" # Jaeger gRPC collector
+      - "9411:9411" # Zipkin compatible port
+    networks:
+      - taskflow_network
+
+# --------------------------------------------------------------------------------------------------------------------
+# Docker Volumes for data persistence
+# --------------------------------------------------------------------------------------------------------------------
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+
+# --------------------------------------------------------------------------------------------------------------------
+# Docker Network for inter-service communication
+# --------------------------------------------------------------------------------------------------------------------
+networks:
+  taskflow_network:
+    driver: bridge
+
+```

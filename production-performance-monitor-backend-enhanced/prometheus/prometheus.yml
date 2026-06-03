@@ -1,0 +1,21 @@
+```yaml
+global:
+  scrape_interval: 15s # By default, scrape targets every 15 seconds.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds.
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Spring Boot Actuator's Prometheus endpoint
+  - job_name: 'taskflow-backend'
+    metrics_path: '/actuator/prometheus' # Default path for Micrometer/Prometheus
+    static_configs:
+      - targets: ['backend:8080'] # 'backend' is the service name in docker-compose
+
+  # (Optional) Add other services if they expose Prometheus metrics
+  # - job_name: 'jaeger-metrics'
+  #   static_configs:
+  #     - targets: ['jaeger:14269'] # Jaeger exposes metrics on this port
+```

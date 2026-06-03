@@ -1,0 +1,94 @@
+```gradle
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'com.diffplug.spotless' version '6.25.0' // For code formatting
+}
+
+group = 'com.taskflow'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    sourceCompatibility = '17'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator' // For monitoring endpoints
+
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core' // Database migrations
+
+    // JWT Authentication
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+
+    // Lombok for boilerplate reduction
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Monitoring & Tracing
+    implementation 'io.micrometer:micrometer-registry-prometheus' // Prometheus metrics
+    implementation 'org.springframework.cloud:spring-cloud-starter-sleuth:3.1.11' // Distributed tracing (compatible with Spring Boot 3)
+    implementation 'org.springframework.cloud:spring-cloud-sleuth-brave:3.1.11' // Brave integration
+    runtimeOnly 'io.zipkin.zipkin2:zipkin:2.27.0' // Zipkin/Jaeger reporter
+
+    // Caching
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+
+    // OpenAPI/Swagger Documentation
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.testcontainers:postgresql:1.19.7' // For integration tests
+    testImplementation 'org.testcontainers:junit-jupiter:1.19.7' // For integration tests
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:2021.0.8" // For Spring Cloud Sleuth compatibility
+    }
+}
+
+// Code formatting with Spotless
+spotless {
+    java {
+        googleJavaFormat().aosp().reflowLongStrings()
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        indentWithSpaces()
+        endWithNewline()
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
+}
+
+// Enable Spotless check on `gradle check`
+check.dependsOn spotlessCheck
+```
