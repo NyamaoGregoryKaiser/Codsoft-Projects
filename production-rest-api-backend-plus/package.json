@@ -1,0 +1,12 @@
+This command runs unit and integration tests configured in `package.json`.
+
+*   **Unit Tests:** Located in `backend/test/unit/`. Focus on individual service logic in isolation.
+    *   Example: `products.service.spec.ts` covers `ProductsService` methods.
+*   **Integration Tests:** Located in `backend/test/integration/`. Test interaction between multiple components (e.g., controller, service, repository).
+    *   Example: `products.integration-spec.ts` tests `ProductsController` with a real database and mock authentication.
+*   **API (E2E) Tests:** Located in `backend/test/e2e/`. Test the entire application flow from HTTP request to database response, simulating real client interactions.
+    *   Example: `auth.e2e-spec.ts`, `product.e2e-spec.ts` cover authentication and product CRUD via HTTP.
+    *   To run only e2e tests: `yarn test:e2e`
+
+**Coverage:**
+To check test coverage:

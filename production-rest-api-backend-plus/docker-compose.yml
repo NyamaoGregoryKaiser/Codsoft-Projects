@@ -1,0 +1,5 @@
+*   `--build`: Rebuilds images if there are changes.
+    *   `-d`: Runs containers in detached mode (in the background).
+
+3.  **Initial Database Setup (if not handled by `docker-compose.yml` command):**
+    The `docker-compose.yml` is configured to run migrations and seeds automatically on `backend` service startup (`command: sh -c "npm run typeorm:migrate && npm run typeorm:seed && npm run start:dev"`). If you change this, you might need to run them manually:

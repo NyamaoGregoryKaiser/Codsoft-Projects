@@ -1,0 +1,54 @@
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { RateLimitMiddleware } from './middleware/rate-limit.middleware';
+import * as process from 'process';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
+
+  // Global validation pipe for DTOs
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true, // Strips away properties not defined in DTOs
+    forbidNonWhitelisted: true, // Throws an error if non-whitelisted properties are sent
+    transform: true, // Automatically transform payloads to DTO instances
+    transformOptions: {
+      enableImplicitConversion: true, // Convert primitive types implicitly
+    },
+  }));
+
+  // Global exception filter
+  app.useGlobalFilters(new HttpExceptionFilter());
+
+  // CORS for frontend
+  app.enableCors({
+    origin: configService.get<string>('FRONTEND_URL') || 'http://localhost:3001', // Allow frontend origin
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
+
+  // Apply rate limiting globally
+  app.use(RateLimitMiddleware);
+
+  // Swagger API Documentation
+  const config = new DocumentBuilder()
+    .setTitle('Enterprise API System')
+    .setDescription('Comprehensive API documentation for the full-scale project')
+    .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', in: 'header' },
+      'access-token'
+    )
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document); // Access at /api
+
+  const port = configService.get<number>('PORT') || 3000;
+  await app.listen(port);
+  console.log(`Application is running on: ${await app.getUrl()}`);
+}
+bootstrap();
