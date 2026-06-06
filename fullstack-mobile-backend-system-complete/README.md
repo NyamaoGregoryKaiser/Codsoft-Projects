@@ -1,379 +1,368 @@
-# Full-Scale Mobile App Backend System
+# Enterprise-Grade Mobile App Backend System
 
-This is a comprehensive, production-ready backend system for a mobile application, built with TypeScript, Node.js, Express.js, and Prisma (PostgreSQL). It includes a robust set of features crucial for enterprise-grade applications, along with a minimal React frontend client to demonstrate API consumption.
-
----
+This repository provides a comprehensive, production-ready backend system for a mobile application, built with Node.js, Express, PostgreSQL, Prisma ORM, and Redis. It's designed with scalability, security, and maintainability in mind, incorporating various enterprise-grade features.
 
 ## Table of Contents
 
-1.  [Features](#features)
-2.  [Technology Stack](#technology-stack)
-3.  [Project Structure](#project-structure)
-4.  [Getting Started](#getting-started)
+1.  [Application Overview](#application-overview)
+2.  [Features](#features)
+3.  [Technology Stack](#technology-stack)
+4.  [Project Structure](#project-structure)
+5.  [Setup and Installation](#setup-and-installation)
     *   [Prerequisites](#prerequisites)
     *   [Local Development Setup](#local-development-setup)
-    *   [Docker Setup](#docker-setup)
-5.  [Backend Documentation](#backend-documentation)
-    *   [API Endpoints](#api-endpoints)
-    *   [Authentication & Authorization](#authentication--authorization)
-    *   [Error Handling](#error-handling)
-    *   [Logging](#logging)
-    *   [Caching](#caching)
-    *   [Rate Limiting](#rate-limiting)
-6.  [Testing](#testing)
+    *   [Environment Variables](#environment-variables)
+    *   [Database Setup](#database-setup)
+6.  [Running the Application](#running-the-application)
+7.  [API Documentation](#api-documentation)
+8.  [Testing](#testing)
     *   [Unit Tests](#unit-tests)
     *   [Integration Tests](#integration-tests)
+    *   [API Tests](#api-tests)
     *   [Performance Tests (K6)](#performance-tests-k6)
-7.  [CI/CD](#cicd)
-8.  [Frontend Client](#frontend-client)
-9.  [Deployment Guide](#deployment-guide)
-10. [Contributing](#contributing)
-11. [License](#license)
+9.  [Architecture Documentation](#architecture-documentation)
+    *   [Core Architecture](#core-architecture)
+    *   [Module Structure](#module-structure)
+    *   [Data Flow](#data-flow)
+    *   [Error Handling](#error-handling)
+    *   [Authentication & Authorization](#authentication--authorization)
+    *   [Caching](#caching)
+    *   [Logging](#logging)
+    *   [Rate Limiting](#rate-limiting)
+10. [Deployment Guide](#deployment-guide)
+    *   [Docker Deployment](#docker-deployment)
+    *   [CI/CD with GitHub Actions](#cicd-with-github-actions)
+11. [Contribution](#contribution)
+12. [License](#license)
 
 ---
 
-## 1. Features
+## 1. Application Overview
 
-*   **User Management:** Register, Login, User Profile (CRUD - restricted by roles).
-*   **Task Management:** CRUD operations for tasks, linked to users.
-*   **Authentication:** JWT (JSON Web Tokens) for secure API access.
-*   **Authorization:** Role-based access control (User, Admin).
-*   **Database:** PostgreSQL with Prisma ORM for type-safe database interactions, migrations, and seeding.
-*   **API:** RESTful API endpoints with comprehensive CRUD support.
-*   **Error Handling:** Centralized error handling middleware with custom `ApiError` class.
-*   **Logging:** Winston-based logging for requests and application events.
-*   **Caching:** In-memory caching (`node-cache`) to optimize read operations (can be extended to Redis).
-*   **Rate Limiting:** Protects API from abusive requests.
-*   **Configuration:** Environment-based configuration using `dotenv`.
-*   **Dockerization:** `Dockerfile` and `docker-compose.yml` for easy setup and deployment.
-*   **Testing:** Unit, Integration, and API tests with Jest and Supertest, plus performance tests with K6.
-*   **Documentation:** Comprehensive READMEs, OpenAPI (Swagger) API documentation.
-*   **CI/CD:** Basic GitHub Actions workflow for automated testing and building.
+This backend system powers a "Project Management" mobile application. It allows users to:
+*   Register and log in securely.
+*   Manage their user profiles.
+*   Create, view, update, and delete projects.
+*   Create, view, update, and delete tasks within projects.
+*   Assign tasks to users.
+*   Track task status and due dates.
 
-## 2. Technology Stack
+The system emphasizes a robust, scalable architecture suitable for production environments.
 
-### Backend
-*   **Language:** TypeScript
-*   **Runtime:** Node.js
-*   **Framework:** Express.js
-*   **ORM:** Prisma
-*   **Database:** PostgreSQL
-*   **Authentication:** JSON Web Tokens (JWT)
-*   **Validation:** Zod
-*   **Logging:** Winston
-*   **Caching:** Node-cache
-*   **Rate Limiting:** Express-rate-limit
-*   **API Docs:** Swagger-UI-Express, YAML.js
-*   **Testing:** Jest, Supertest, K6
+## 2. Features
 
-### Frontend (Demonstration Client)
-*   **Framework:** React
-*   **Language:** TypeScript
-*   **Styling:** Tailwind CSS (or similar, for a complete UI/UX)
-*   **HTTP Client:** Axios
+*   **API Endpoints**: Full CRUD operations for Users, Projects, and Tasks.
+*   **Authentication**: JWT-based authentication for secure API access, with refresh token mechanism.
+*   **Authorization**: Role-based access control (User, Admin).
+*   **Database Layer**: PostgreSQL with Prisma ORM for type-safe database interactions, migrations, and seeding.
+*   **Data Validation**: Joi for robust request payload validation.
+*   **Error Handling**: Centralized, custom error handling middleware.
+*   **Logging**: Winston for structured logging (console & file).
+*   **Caching Layer**: Redis for speeding up frequently accessed data.
+*   **Rate Limiting**: Protects against brute-force attacks and abuse.
+*   **Security**: Helmet for common security headers, CORS for frontend integration.
+*   **Configuration**: Environment-based configuration using `dotenv`.
+*   **Testing**: Comprehensive suite including Unit, Integration, API, and Performance tests.
+*   **Documentation**: OpenAPI (Swagger) for API docs, detailed README.
+*   **Containerization**: Docker and Docker Compose for easy setup and deployment.
+*   **CI/CD**: GitHub Actions workflow for automated testing and build.
 
-### DevOps
-*   **Containerization:** Docker, Docker Compose
-*   **CI/CD:** GitHub Actions
+## 3. Technology Stack
 
-## 3. Project Structure
+*   **Runtime**: Node.js
+*   **Web Framework**: Express.js
+*   **Database**: PostgreSQL
+*   **ORM**: Prisma
+*   **Caching**: Redis
+*   **Authentication**: JSON Web Tokens (JWT), `bcrypt` for password hashing
+*   **Validation**: Joi
+*   **Logging**: Winston
+*   **Testing**: Jest, Supertest, K6
+*   **Containerization**: Docker, Docker Compose
+*   **CI/CD**: GitHub Actions
 
-```
-.
-├── .github/                      # CI/CD workflows
-│   └── workflows/
-│       └── main.yml
-├── backend/
-│   ├── src/
-│   │   ├── config/               # Environment, database, server configurations
-│   │   ├── middleware/           # Auth, error handling, logging, rate limiting
-│   │   ├── modules/              # Core application modules (Auth, Users, Tasks)
-│   │   ├── utils/                # Helper functions (e.g., password hashing, JWT)
-│   │   ├── types/                # Custom TypeScript types/interfaces
-│   │   ├── app.ts                # Express application setup
-│   │   └── server.ts             # Server entry point
-│   ├── prisma/                   # Prisma schema, migrations, and seed data
-│   ├── tests/                    # Unit, integration, API, and performance tests
-│   ├── swagger.yaml              # OpenAPI (Swagger) API definition
-│   ├── .env.example              # Example environment variables
-│   ├── Dockerfile                # Dockerfile for backend service
-│   ├── docker-compose.yml        # Docker Compose for services (backend, db)
-│   ├── package.json              # Backend dependencies and scripts
-│   ├── tsconfig.json
-│   └── README.md                 # Backend specific documentation
-├── frontend/                     # React frontend client
-│   ├── public/
-│   ├── src/
-│   │   ├── api/                  # API client setup
-│   │   ├── components/           # Reusable UI components
-│   │   ├── contexts/             # React Context for authentication
-│   │   ├── pages/                # Application pages (Login, Register, Dashboard)
-│   │   ├── utils/                # Frontend utilities
-│   │   └── ...
-│   ├── Dockerfile                # Dockerfile for frontend service
-│   ├── package.json              # Frontend dependencies and scripts
-│   ├── tsconfig.json
-│   └── README.md                 # Frontend specific documentation
-└── README.md                     # Overall project documentation (this file)
-```
+## 4. Project Structure
 
-## 4. Getting Started
+The project follows a modular, feature-based architecture. See the project-root diagram above for a detailed breakdown.
+
+## 5. Setup and Installation
 
 ### Prerequisites
 
-*   Node.js (v18+) & npm (or yarn)
-*   Docker & Docker Compose (for containerized setup)
-*   PostgreSQL client (optional, for direct DB access)
+Before you begin, ensure you have the following installed:
+
+*   **Node.js**: v18.x or higher (LTS recommended)
+*   **npm** (comes with Node.js) or **yarn**
+*   **Docker** & **Docker Compose**: For running the database, Redis, and optionally the application in containers.
+*   **Git**: For cloning the repository.
 
 ### Local Development Setup
-
-Follow these steps to run the backend and frontend locally:
-
-#### 4.1. Backend Setup
 
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/your-username/mobile-app-backend.git
     cd mobile-app-backend
     ```
-2.  **Navigate to the backend directory:**
-    ```bash
-    cd backend
-    ```
-3.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-4.  **Configure environment variables:**
-    *   Create a `.env` file by copying `.env.example`:
-        ```bash
-        cp .env.example .env
-        ```
-    *   Edit the `.env` file and set your `DATABASE_URL` (e.g., `postgresql://user:password@localhost:5432/mydb`) and `JWT_SECRET`.
-        *   If running PostgreSQL locally without Docker, ensure it's accessible.
-        *   For quick local PostgreSQL setup without Docker Compose, you can use `docker run --name my-postgres -e POSTGRES_USER=user -e POSTGRES_PASSWORD=password -e POSTGRES_DB=mydb -p 5432:5432 -d postgres:15-alpine`.
-5.  **Run Prisma migrations:**
-    ```bash
-    npx prisma migrate dev --name init
-    ```
-6.  **Seed the database with initial data:**
-    ```bash
-    npm run prisma:seed
-    ```
-    *   Default users:
-        *   Admin: `admin@example.com` / `admin123`
-        *   User: `user@example.com` / `user123`
-7.  **Start the backend in development mode:**
-    ```bash
-    npm run dev
-    ```
-    The backend server will start on `http://localhost:3000`. API documentation will be available at `http://localhost:3000/api-docs`.
 
-#### 4.2. Frontend Setup (for demonstration)
-
-1.  **Open a new terminal and navigate to the frontend directory:**
-    ```bash
-    cd ../frontend
-    ```
 2.  **Install dependencies:**
     ```bash
     npm install
+    # or yarn install
     ```
-3.  **Configure environment variables:**
-    *   Create a `.env` file by copying `.env.example`:
+
+3.  **Set up environment variables:**
+    *   Copy the `.env.example` file to `.env`:
         ```bash
         cp .env.example .env
         ```
-    *   Ensure `REACT_APP_API_BASE_URL` points to your backend (e.g., `http://localhost:3000/api/v1`).
-4.  **Start the frontend development server:**
+    *   Edit the `.env` file and fill in the required values. See the "Environment Variables" section below.
+
+4.  **Start Docker containers (PostgreSQL and Redis):**
     ```bash
-    npm start
+    docker-compose up -d postgres redis
     ```
-    The frontend application will open in your browser, typically at `http://localhost:3001`.
+    This will start PostgreSQL on `5432` and Redis on `6379`.
 
-### Docker Setup
+### Environment Variables
 
-The easiest way to get the backend and database running is using Docker Compose.
+Create a `.env` file in the project root based on `.env.example` and fill in the following:
 
-1.  **Navigate to the backend directory:**
+```env
+# Application
+PORT=3000
+NODE_ENV=development # development, test, production
+
+# Database (PostgreSQL)
+DATABASE_URL="postgresql://user:password@localhost:5432/mydb?schema=public"
+# Example: postgresql://admin:password@localhost:5432/project_manager_db?schema=public
+
+# JWT Authentication
+JWT_SECRET="supersecretjwtkey"
+JWT_ACCESS_EXPIRATION_MINUTES=30
+JWT_REFRESH_EXPIRATION_DAYS=30
+
+# Redis Cache
+REDIS_URL="redis://localhost:6379"
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MINUTES=15
+RATE_LIMIT_MAX_REQUESTS=100
+```
+**Important:** For `DATABASE_URL`, ensure the `user`, `password`, `localhost:5432`, and `project_manager_db` match the settings in `docker-compose.yml` if you're using Docker for your database.
+
+### Database Setup
+
+1.  **Run Prisma Migrations:**
+    This applies the database schema defined in `prisma/schema.prisma` to your PostgreSQL database.
     ```bash
-    cd backend
+    npx prisma migrate dev --name init
     ```
-2.  **Build the Docker images:**
+    (You can replace `init` with a more descriptive name for your first migration.)
+
+2.  **Seed the Database (Optional but Recommended):**
+    This populates your database with initial data (e.g., an admin user, sample projects/tasks).
     ```bash
-    docker-compose build
+    npx prisma db seed
     ```
-3.  **Start the services (backend and database):**
+
+## 6. Running the Application
+
+1.  **Start the application:**
     ```bash
-    docker-compose up -d
+    npm run dev
+    # or yarn dev
     ```
-    *   The `docker-compose.yml` includes commands to run Prisma migrations and seed the database automatically on startup for convenience.
-    *   The backend will be accessible at `http://localhost:3000`.
-    *   The PostgreSQL database will be accessible at `localhost:5432`.
-4.  **Verify services are running:**
-    ```bash
-    docker-compose ps
-    ```
-5.  **Stop services:**
-    ```bash
-    docker-compose down
-    ```
+    The application will start on the port defined in your `.env` file (default: `3000`).
 
-## 5. Backend Documentation
+2.  **Access API Documentation:**
+    Once the server is running, open your browser and navigate to:
+    `http://localhost:3000/api-docs`
 
-### API Endpoints
+## 7. API Documentation
 
-The backend exposes a RESTful API for user and task management. Full API documentation is available via Swagger UI.
+The API is documented using OpenAPI (Swagger).
+*   The API specification is located in `swagger.yaml`.
+*   When the server is running, you can access the interactive Swagger UI at `http://localhost:3000/api-docs`.
 
-*   **Swagger UI:** `http://localhost:3000/api-docs` (when server is running)
+This documentation provides details on all available endpoints, request/response schemas, authentication methods, and example usage.
 
-**Key Endpoints:**
+## 8. Testing
 
-*   **Authentication:**
-    *   `POST /api/v1/auth/register`: Register a new user.
-    *   `POST /api/v1/auth/login`: Log in and get a JWT token.
-*   **Users:**
-    *   `GET /api/v1/users`: Get all users (Admin only).
-    *   `GET /api/v1/users/:id`: Get user profile by ID (Admin or self).
-    *   `PATCH /api/v1/users/:id`: Update user profile by ID (Admin or self).
-    *   `DELETE /api/v1/users/:id`: Delete a user (Admin only).
-*   **Tasks:**
-    *   `POST /api/v1/tasks`: Create a new task.
-    *   `GET /api/v1/tasks`: Get tasks (user's own tasks or all for Admin).
-    *   `GET /api/v1/tasks/:id`: Get a specific task by ID (user's own task or any for Admin).
-    *   `PATCH /api/v1/tasks/:id`: Update a specific task by ID (user's own task or any for Admin).
-    *   `DELETE /api/v1/tasks/:id`: Delete a specific task by ID (user's own task or any for Admin).
+The project includes a comprehensive suite of tests using Jest and Supertest, along with performance tests using K6.
 
-### Authentication & Authorization
+### Running All Tests
 
-*   **Authentication:** Uses JWT (JSON Web Tokens). Upon successful login, the API returns a token. This token must be included in the `Authorization` header of subsequent requests as `Bearer <token>`.
-*   **Authorization:** Role-based access control is implemented using middleware.
-    *   `UserRole.USER`: Can manage their own tasks and view their own profile.
-    *   `UserRole.ADMIN`: Can manage all users and tasks.
-
-### Error Handling
-
-A centralized error handling middleware (`src/middleware/errorHandler.ts`) catches all errors.
-*   Custom `ApiError` class for controlled, expected errors (e.g., 400 Bad Request, 404 Not Found).
-*   Unhandled errors default to 500 Internal Server Error, with detailed logs.
-*   Stack traces are only returned in development environments.
-
-### Logging
-
-Winston logger (`src/utils/logger.ts`) is used for structured logging.
-*   Logs request details, errors, and key application events.
-*   Configurable `LOG_LEVEL` (`debug`, `info`, `warn`, `error`) via `.env`.
-
-### Caching
-
-An in-memory cache (`node-cache`) is implemented in `src/utils/cache.ts` and integrated into services like `userService` and `taskService`.
-*   Reduces database load for frequently accessed read operations (e.g., `getAllUsers`, `getTasks`, `getUserById`, `getTaskById`).
-*   Configurable TTL (`CACHE_TTL`) via `.env`.
-*   Cache invalidation occurs automatically on data modification (create, update, delete).
-*   For production at scale, consider a distributed cache like Redis.
-
-### Rate Limiting
-
-`express-rate-limit` middleware (`src/middleware/rateLimitMiddleware.ts`) is applied globally to prevent abuse and brute-force attacks.
-*   Limits requests per IP address within a specified time window.
-*   Configurable `RATE_LIMIT_WINDOW_MS` and `RATE_LIMIT_MAX_REQUESTS` via `.env`.
-
-## 6. Testing
-
-The project uses Jest for unit and integration testing, and K6 for performance testing.
+```bash
+npm test
+# or yarn test
+```
 
 ### Unit Tests
 
-Focus on individual functions, services, and utility logic in isolation.
-*   **Run unit tests:**
-    ```bash
-    cd backend
-    npm run test:unit
-    ```
-*   **Coverage:** Aim for 80%+ coverage for core logic.
+Focus on individual functions, classes, and middleware in isolation, mocking external dependencies.
+*   **Location**: `tests/unit/`
+*   **Command**: `npm test -- tests/unit`
 
 ### Integration Tests
 
-Test the interaction between different components, especially API endpoints and the database. `Supertest` is used to make HTTP requests to the Express app.
-*   **Run integration tests:**
-    ```bash
-    cd backend
-    npm run test:integration
-    ```
-*   **Setup:** `tests/integration/setupIntegrationTests.ts` seeds a clean test database before running.
+Verify interactions between different modules and the database (using a test database or carefully mocked database client).
+*   **Location**: `tests/integration/`
+*   **Command**: `npm test -- tests/integration`
+
+### API Tests
+
+Perform end-to-end tests against the actual API endpoints, simulating HTTP requests.
+*   **Location**: `tests/api/`
+*   **Command**: `npm test -- tests/api`
 
 ### Performance Tests (K6)
 
-Simulate user load to evaluate API performance.
-*   **Install K6:** `brew install k6` (macOS) or refer to [k6.io installation guide](https://k6.io/docs/getting-started/installation/).
-*   **Ensure backend is running.**
-*   **Run performance tests:**
+A basic performance test script is provided using k6.
+1.  **Install k6**: Follow instructions at [k6.io](https://k6.io/docs/getting-started/installation/).
+2.  **Run the script**:
     ```bash
-    cd backend
-    k6 run tests/perf/login_test.js
+    k6 run benchmark/k6_script.js
     ```
-*   The `login_test.js` script simulates user logins and task retrieval under load.
+    This script will simulate a basic load on the `/v1/projects` endpoint. Modify `k6_script.js` to suit your specific load testing needs.
 
-## 7. CI/CD
+## 9. Architecture Documentation
 
-A basic GitHub Actions workflow (`.github/workflows/main.yml`) is configured for the backend.
-*   **Triggers:** Runs on `push` to `main` and `pull_request` events.
-*   **Steps:**
-    1.  Install Node.js dependencies.
-    2.  Run Linter (`npm run lint`).
-    3.  Run Tests (`npm test`).
-    4.  Build the application (`npm run build`).
+### Core Architecture
 
-## 8. Frontend Client
+The backend follows a layered, modular architecture:
 
-The `frontend/` directory contains a minimal React application that serves as a demonstration client for the backend API. It includes:
-*   User authentication (Login, Register).
-*   A dashboard to display and manage tasks for the authenticated user.
-*   Utilizes `Axios` for API calls.
+1.  **Presentation Layer (Routes & Controllers)**:
+    *   `src/routes/`: Central entry point for API routes.
+    *   `src/modules/*/route.js`: Defines API endpoints and links them to controllers.
+    *   `src/modules/*/controller.js`: Handles incoming HTTP requests, performs input validation (using Joi), calls service methods, and sends HTTP responses.
 
-Refer to `frontend/README.md` for specific instructions on the frontend client.
+2.  **Business Logic Layer (Services)**:
+    *   `src/modules/*/service.js`: Contains the core business logic. Interacts with the database (via Prisma) and other services. This layer is decoupled from HTTP concerns.
 
-## 9. Deployment Guide
+3.  **Data Access Layer (Prisma ORM)**:
+    *   `src/database/prisma.js`: Singleton instance of the Prisma client.
+    *   `prisma/schema.prisma`: Defines the database schema, models, and relationships. Prisma generates the client based on this schema. Services interact with Prisma client to perform CRUD operations.
 
-This section outlines a general deployment strategy for a production environment.
+4.  **Middleware Layer**:
+    *   `src/middleware/`: Global Express middleware for tasks like authentication, error handling, caching, rate limiting, and security headers.
 
-1.  **Containerization (Docker):**
-    *   The `Dockerfile` for the backend builds an optimized image for production.
-    *   The `docker-compose.yml` can be adapted for production use by externalizing environment variables and using a more robust database setup (e.g., AWS RDS, Google Cloud SQL).
+5.  **Utilities Layer**:
+    *   `src/utils/`: Common helper functions like logging, custom error classes, and async wrappers.
 
-2.  **Environment Variables:**
-    *   In a production environment, never hardcode sensitive information. Use environment variables managed by your cloud provider (e.g., Kubernetes Secrets, AWS Secrets Manager, Vault).
-    *   Ensure `JWT_SECRET` is a long, random, and securely stored string.
-    *   `NODE_ENV=production` should be set to enable production optimizations and suppress development-only features (like detailed error stacks).
+### Module Structure
 
-3.  **Database:**
-    *   Use a managed database service (e.g., AWS RDS PostgreSQL, Azure Database for PostgreSQL, Google Cloud SQL for PostgreSQL) for high availability, backups, and scaling.
-    *   Apply Prisma migrations in a controlled manner, typically as part of a deployment pipeline before the application service starts. For `docker-compose.yml`, the `command` entry shows a basic way (`npx prisma migrate deploy && npm start`), but for serious production, a dedicated migration job is often preferred.
+Each feature (e.g., `auth`, `users`, `projects`, `tasks`) resides in its own module under `src/modules/`. This promotes separation of concerns and maintainability.
 
-4.  **Scaling:**
-    *   The stateless nature of the Express.js backend makes it easy to scale horizontally. Deploy multiple instances of the backend container behind a load balancer.
-    *   Consider using a container orchestration platform like Kubernetes, AWS ECS, or Google Cloud Run.
+```
+src/modules/{feature}/
+├── {feature}.controller.js   # Request handling, validation, response
+├── {feature}.route.js        # API endpoint definitions
+├── {feature}.service.js      # Business logic, database interactions
+└── {feature}.validation.js   # Joi schemas for input validation
+```
 
-5.  **Monitoring & Logging:**
-    *   Integrate with external logging services (e.g., ELK Stack, Datadog, Splunk) for centralized log management and analysis.
-    *   Set up application performance monitoring (APM) tools (e.g., New Relic, Datadog, Prometheus/Grafana) to track metrics, identify bottlenecks, and set up alerts.
+### Data Flow
 
-6.  **Security:**
-    *   Regularly update dependencies to patch known vulnerabilities.
-    *   Implement HTTPS for all communication.
-    *   Configure firewalls and security groups to restrict access to your database and internal services.
-    *   Perform security audits and penetration testing.
+1.  **Request Initiation**: A client (mobile app) sends an HTTP request to an API endpoint.
+2.  **Middleware Processing**: The request passes through global middleware (e.g., rate limiting, authentication, CORS, security headers).
+3.  **Routing**: The request is matched to a specific route handler defined in `src/modules/*/route.js`.
+4.  **Controller Action**: The corresponding controller function (`src/modules/*/controller.js`) receives the request.
+    *   It validates the request payload using Joi.
+    *   It calls the appropriate service method (`src/modules/*/service.js`) to perform business logic.
+5.  **Service Logic**: The service method executes business rules, interacts with the Prisma client (`src/database/prisma.js`) for database operations, and potentially interacts with Redis (`src/utils/redis.js`) for caching.
+6.  **Database Interaction**: Prisma translates service calls into SQL queries, executes them against PostgreSQL, and returns results.
+7.  **Response Generation**: The service returns data to the controller. The controller formats the data and sends an HTTP response back to the client.
+8.  **Error Handling**: If any error occurs at any stage, the `error.middleware.js` intercepts it, logs it, and sends a standardized error response to the client.
 
-## 10. Contributing
+### Error Handling
 
-Contributions are welcome! Please follow these steps:
-1.  Fork the repository.
-2.  Create a new branch (`git checkout -b feature/your-feature`).
-3.  Make your changes and ensure tests pass.
-4.  Commit your changes (`git commit -am 'feat: Add new feature'`).
-5.  Push to the branch (`git push origin feature/your-feature`).
-6.  Create a new Pull Request.
+*   **Custom Error Class**: `src/utils/ApiError.js` extends `Error` to include `statusCode` and `isOperational` flags.
+*   **`catchAsync` Wrapper**: `src/utils/catchAsync.js` wraps async controller/middleware functions to catch promises rejections and pass them to the Express error handler.
+*   **Centralized Middleware**: `src/middleware/error.middleware.js` is the final error handler. It catches all errors (including `ApiError` instances and unexpected errors), logs them, and sends a consistent JSON error response to the client based on the `NODE_ENV`.
 
-## 11. License
+### Authentication & Authorization
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+*   **Authentication**: JWT (JSON Web Tokens) is used for stateless authentication.
+    *   Users register/log in via `/v1/auth` endpoints.
+    *   Upon successful login, an access token (short-lived) and a refresh token (long-lived) are issued.
+    *   Access tokens are sent in the `Authorization` header (`Bearer <token>`) for protected routes.
+    *   The `auth.middleware.js` verifies the JWT and populates `req.user` with user information.
+*   **Authorization**: Role-based access control (RBAC).
+    *   Users have roles (e.g., `user`, `admin`).
+    *   Specific routes or controller actions are protected by checking `req.user.role` against required roles using the `authorize` function in `auth.middleware.js`.
+
+### Caching
+
+*   **Redis**: Used as an in-memory data store for caching frequently accessed data.
+*   **`cache.middleware.js`**:
+    *   Intercepts requests to specified GET endpoints.
+    *   Checks if data exists in Redis cache; if so, returns cached data immediately.
+    *   If not in cache, the request proceeds to the controller.
+    *   After the controller sends a successful response, the middleware caches the response body in Redis for future requests.
+    *   Cache invalidation is handled by modifying or deleting resources (e.g., when a project is updated, related project lists in cache should be cleared).
+
+### Logging
+
+*   **Winston**: `src/utils/logger.js` is configured to log messages.
+*   **Console Logging**: For development environments.
+*   **File Logging**: For production, logs are written to files (e.g., `error.log`, `combined.log`).
+*   **Log Levels**: Supports `info`, `warn`, `error`, `debug`, etc.
+
+### Rate Limiting
+
+*   **`express-rate-limit`**: `src/middleware/rateLimit.middleware.js` is configured to limit the number of requests a single IP can make within a specified time window. This prevents abuse and brute-force attacks.
+
+## 10. Deployment Guide
+
+### Docker Deployment
+
+The application is fully containerized using Docker.
+
+1.  **Build the Docker Image:**
+    ```bash
+    docker build -t mobile-app-backend .
+    ```
+
+2.  **Run with Docker Compose (Production-like setup):**
+    For a more production-oriented setup, you would typically run PostgreSQL and Redis as separate services (e.g., using managed cloud services or separate Docker containers).
+    The provided `docker-compose.yml` is primarily for local development. To run all services including the app via `docker-compose`:
+
+    ```bash
+    docker-compose up -d
+    ```
+    This will bring up the `postgres`, `redis`, and `app` containers. Ensure your `.env` file has the correct `DATABASE_URL` and `REDIS_URL` pointing to the Docker service names (e.g., `postgresql://admin:password@postgres:5432/project_manager_db?schema=public` and `redis://redis:6379`).
+
+3.  **Manual Docker Run (App only):**
+    If your database and Redis are external, you can run just the application container:
+
+    ```bash
+    docker run -p 3000:3000 --env-file ./.env mobile-app-backend
+    ```
+    Make sure your `.env` file contains the correct `DATABASE_URL` and `REDIS_URL` for your external services.
+
+### CI/CD with GitHub Actions
+
+The `.github/workflows/ci.yml` file configures a basic CI/CD pipeline using GitHub Actions.
+
+*   **Triggers**: The workflow runs on pushes to the `main` branch and on pull requests.
+*   **Steps**:
+    1.  **Checkout Code**: Clones the repository.
+    2.  **Setup Node.js**: Installs the specified Node.js version.
+    3.  **Install Dependencies**: Installs project dependencies.
+    4.  **Lint Code**: Runs ESLint for code quality checks (if configured - not in this basic example).
+    5.  **Run Tests**: Executes all Jest tests (`npm test`).
+    6.  **(Optional) Docker Build**: Builds the Docker image (commented out by default, uncomment to enable).
+    7.  **(Optional) Docker Push**: Pushes the Docker image to a registry (e.g., Docker Hub, AWS ECR - requires credentials).
+
+To enable Docker build and push, you would need to:
+*   Uncomment the relevant sections in `ci.yml`.
+*   Configure Docker registry credentials as GitHub Secrets (e.g., `DOCKER_USERNAME`, `DOCKER_PASSWORD`).
+
+## 11. Contribution
+
+Feel free to fork this repository, submit pull requests, or open issues for suggestions and bug reports.
+
+## 12. License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details (not included in this response, but implied).
+---

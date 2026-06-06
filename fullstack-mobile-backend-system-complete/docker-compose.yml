@@ -1,0 +1,68 @@
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: project_manager_db
+    environment:
+      POSTGRES_DB: project_manager_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d project_manager_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: project_manager_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mobile_app_backend
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-3000}
+      DATABASE_URL: postgresql://admin:password@postgres:5432/project_manager_db?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_EXPIRATION_MINUTES: ${JWT_ACCESS_EXPIRATION_MINUTES}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS}
+      REDIS_URL: redis://redis:6379
+      RATE_LIMIT_WINDOW_MINUTES: ${RATE_LIMIT_WINDOW_MINUTES}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app # Mount current directory to /app in container for live code changes in dev
+      - /app/node_modules # Exclude node_modules from host bind mount
+    command: npm run dev # Use npm run dev for nodemon in dev env
+    # For production: command: npm start
+    # Note: For production, consider not mounting host volumes for better isolation/performance
+    # and ensuring `npm install` is part of your Dockerfile build.
+
+volumes:
+  postgres_data:
+  redis_data:
+```
