@@ -1,0 +1,24 @@
+```toml
+[tool.pytest.ini_options]
+min_version = "6.0"
+addopts = "-ra -q --cov=app --cov-report=term-missing --cov-fail-under=80"
+testpaths = [
+    "app/tests"
+]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+omit = [
+    "app/tests/*",
+    "app/seed_data.py",
+    "app/main.py", # Only for setup/run, not core logic
+    "app/models/base.py", # Base for models, no logic
+    "app/api/v1/endpoints/*.py" # API endpoints mostly orchestrate services, focus coverage on services/crud
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "if __name__ == '__main__':"
+]
+```
