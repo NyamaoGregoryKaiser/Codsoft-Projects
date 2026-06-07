@@ -1,0 +1,59 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: auth_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-authdb}
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-authdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: auth_backend
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-authdb}
+      DB_USER: ${DB_USER:-user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970} # Must be at least 256-bit base64 encoded
+    depends_on:
+      db:
+        condition: service_healthy # Ensure DB is ready before starting backend
+    # Optional: Mount logs for persistence and easy access
+    volumes:
+      - ./backend_logs:/app/logs
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Pass backend API URL to the frontend build process
+        REACT_APP_API_BASE_URL: http://localhost:8080/api # Use backend service name if within docker network, or exposed port if accessing from host
+    container_name: auth_frontend
+    ports:
+      - "3000:80" # Map host port 3000 to container port 80 (Nginx default)
+    depends_on:
+      backend:
+        condition: service_started # Frontend only needs backend to be started to make requests, not fully healthy
+
+volumes:
+  db_data: # Named volume for PostgreSQL data persistence
+```

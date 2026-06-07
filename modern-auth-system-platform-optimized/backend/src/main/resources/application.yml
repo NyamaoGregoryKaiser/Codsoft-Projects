@@ -1,0 +1,87 @@
+```yaml
+server:
+  port: 8080
+
+spring:
+  application:
+    name: authentication-system
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:authdb}
+    username: ${DB_USER:user}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Should be validate or none in production, update in dev
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true # For PostgreSQL compatibility
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true # Important for existing databases or initial deployments
+    url: ${spring.datasource.url}
+    user: ${spring.datasource.username}
+    password: ${spring.datasource.password}
+  cache:
+    type: caffeine # Enable Caffeine cache
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970} # Base64 encoded, 256-bit key (e.g., from `openssl rand -base64 32`)
+      expiration: 3600000 # 1 hour in milliseconds
+      refresh-token:
+        expiration: 604800000 # 7 days in milliseconds
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus # Expose actuator endpoints
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    com.example.authsystem: INFO # Set base package logging to INFO
+    org.springframework.web: INFO
+    org.hibernate: WARN
+    org.springframework.security: INFO
+    # DEBUG for JWT filter
+    com.example.authsystem.util.JwtAuthFilter: DEBUG
+    com.example.authsystem.logging.RequestLoggingFilter: INFO # Use DEBUG for full request/response content
+
+# CORS Configuration - allow frontend to connect
+spring:
+  web:
+    cors:
+      filter:
+        allow-credentials: true
+        allow-origin:
+          - http://localhost:3000 # Allow frontend origin
+          - http://localhost:80
+          - http://your-production-frontend.com
+        allow-methods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        allow-headers:
+          - Authorization
+          - Content-Type
+          - Accept
+          - X-Requested-With
+        max-age: 3600
+```
