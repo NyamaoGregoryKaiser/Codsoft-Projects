@@ -1,0 +1,23 @@
+{
+  "name": "cms-monorepo",
+  "version": "1.0.0",
+  "description": "Monorepo for CMS project",
+  "private": true,
+  "scripts": {
+    "install-deps": "npm install --prefix backend && npm install --prefix frontend",
+    "backend:dev": "npm run dev --prefix backend",
+    "frontend:dev": "npm start --prefix frontend",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:test": "npm test --prefix backend",
+    "frontend:test": "npm test --prefix frontend",
+    "backend:build": "npm run build --prefix backend",
+    "frontend:build": "npm run build --prefix frontend",
+    "build": "npm run backend:build && npm run frontend:build",
+    "db:migrate": "npm run db:migrate --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend",
+    "db:reset": "npm run db:reset --prefix backend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

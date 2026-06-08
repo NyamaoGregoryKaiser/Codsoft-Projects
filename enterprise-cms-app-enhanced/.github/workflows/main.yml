@@ -1,0 +1,185 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install backend dependencies
+        run: npm install --prefix backend
+
+      - name: Lint backend code
+        run: npm run lint --prefix backend
+
+      - name: Run backend tests
+        run: npm test --prefix backend
+
+  build-and-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install frontend dependencies
+        run: npm install --prefix frontend
+
+      - name: Lint frontend code
+        run: npm run lint --prefix frontend
+
+      - name: Run frontend tests
+        run: npm test --prefix frontend -- --watchAll=false --ci
+
+      - name: Build frontend app
+        run: npm run build --prefix frontend
+
+  deploy-to-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-and-test-backend, build-and-test-frontend] # Ensure tests pass
+    if: github.ref == 'refs/heads/develop' # Deploy develop branch to staging
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: yourdockerhub/cms-backend:staging-${{ github.sha }}
+          build-args: |
+            NODE_ENV=production
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: yourdockerhub/cms-frontend:staging-${{ github.sha }}
+          build-args: |
+            REACT_APP_API_BASE_URL=${{ secrets.STAGING_API_BASE_URL }}
+
+      - name: Deploy to Staging Server (using SSH)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /path/to/your/cms-staging-app
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker-compose pull
+            docker-compose up -d --remove-orphans
+            docker image prune -f
+
+  deploy-to-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-to-staging] # Optionally, require manual approval or successful staging deploy
+    if: github.ref == 'refs/heads/main' # Deploy main branch to production
+    environment: production
+    # environment:
+    #   name: production
+    #   url: https://your.production.domain
+    #   # Optionally require manual approval for production deployments
+    #   # on:
+    #   #   workflow_dispatch:
+    #   #     inputs:
+    #   #       reason:
+    #   #         description: 'Reason for deployment'
+    #   #         required: true
+    #         # you can use secrets to gate approval, e.g. requires: ${{ secrets.APPROVE_PRODUCTION_DEPLOY }} == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: yourdockerhub/cms-backend:latest # Use 'latest' for production main branch
+          build-args: |
+            NODE_ENV=production
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: yourdockerhub/cms-frontend:latest
+          build-args: |
+            REACT_APP_API_BASE_URL=${{ secrets.PRODUCTION_API_BASE_URL }}
+
+      - name: Deploy to Production Server (using SSH)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PRODUCTION_SSH_HOST }}
+          username: ${{ secrets.PRODUCTION_SSH_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          script: |
+            cd /path/to/your/cms-production-app
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker-compose pull
+            docker-compose up -d --remove-orphans
+            docker image prune -f
+            # Optionally run database migrations for production here
+            # docker-compose exec backend npm run db:migrate # Careful with this in production, might need specific strategy
+            # Add monitoring/health checks after deployment
+```
+
+**Note on CI/CD:** You'll need to configure GitHub Secrets in your repository for `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `STAGING_API_BASE_URL`, `STAGING_SSH_HOST`, `STAGING_SSH_USER`, `STAGING_SSH_KEY`, `PRODUCTION_API_BASE_URL`, `PRODUCTION_SSH_HOST`, `PRODUCTION_SSH_USER`, `PRODUCTION_SSH_KEY`. The SSH deployment assumes you have a `docker-compose.yml` file on your staging/production servers similar to the local one, pointing to the built Docker images.
+
+---
+
+## 4. Testing & Quality
+
+### Backend Tests (Jest, Supertest)
+
+#### `backend/tests/unit/controllers/user.controller.test.js` (Unit Test Example)
+
+```javascript

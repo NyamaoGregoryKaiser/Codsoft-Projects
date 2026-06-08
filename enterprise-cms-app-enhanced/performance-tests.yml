@@ -1,0 +1,68 @@
+config:
+  target: "http://localhost:5000/api" # Replace with your backend URL
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: Warmup
+    - duration: 120
+      arrivalRate: 20
+      rampTo: 50
+      name: Increased Load
+    - duration: 60
+      arrivalRate: 50
+      name: Sustained Load
+  defaults:
+    headers:
+      Content-Type: "application/json"
+  payload:
+    - path: "./users.csv" # Path to CSV with test user credentials (email, password)
+      fields:
+        - "email"
+        - "password"
+      order: sequence
+      skipHeader: true
+  variables:
+    # This will store access tokens for subsequent requests
+    accessToken: ""
+
+scenarios:
+  - name: "User Login and Get Posts (Authenticated)"
+    flow:
+      - post:
+          url: "/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.tokens.access.token"
+              as: "accessToken"
+          afterResponse: "logResponse" # Custom function to log response (optional)
+      - get:
+          url: "/posts"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          afterResponse: "logResponse"
+      - get:
+          url: "/categories"
+          headers:
+            Authorization: "Bearer {{ accessToken }}"
+          afterResponse: "logResponse"
+
+  - name: "Guest Browse Posts (Unauthenticated, Cached)"
+    flow:
+      - get:
+          url: "/posts"
+          afterResponse: "logResponse"
+
+  - name: "Guest Browse Specific Post (Unauthenticated, Cached)"
+    flow:
+      - get:
+          url: "/posts/a_valid_post_id" # Replace with an actual post ID from your database
+          afterResponse: "logResponse"
+
+# Optional: custom functions for Artillery (e.g., to log response bodies)
+# You would save this in a separate JS file, e.g., `artillery-plugin.js`
+# function logResponse(requestParams, response, context, ee, next) {
+#   console.log(`Response status: ${response.statusCode}, Body: ${response.body}`);
+#   return next();
+# }

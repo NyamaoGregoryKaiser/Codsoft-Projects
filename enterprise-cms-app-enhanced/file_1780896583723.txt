@@ -1,0 +1,15 @@
++-------------------+      +-----------------+      +---------------------+
+|    Frontend App   | <--> |   API Gateway   | <--> |  Backend Service    |
+|   (React.js)      |      | (Nginx/Reverse  |      |  (Node.js/Express)  |
++-------------------+      |     Proxy)      |      +----------+----------+
+                           +-----------------+                 |
+                                                               | (ORM: Sequelize)
+                                                               |
+                                                       +-------+-------+
+                                                       |               |
+                                              +--------v-------+  +----+----+
+                                              |  PostgreSQL    |  |  Redis  |
+                                              |    Database    |  | (Cache,  |
+                                              +----------------+  |  Rate   |
+                                                                  | Limiting)|
+                                                                  +---------+
