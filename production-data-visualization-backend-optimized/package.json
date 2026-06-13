@@ -1,0 +1,35 @@
+```json
+{
+  "name": "data-viz-system",
+  "version": "1.0.0",
+  "description": "A comprehensive data visualization tools system",
+  "main": "backend/dist/server.js",
+  "scripts": {
+    "start": "concurrently \"npm run start --workspace backend\" \"npm run start --workspace frontend\"",
+    "start:backend": "npm start --workspace backend",
+    "start:frontend": "npm start --workspace frontend",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "test": "npm test --workspace backend && npm test --workspace frontend",
+    "postinstall": "npm install --workspace backend && npm install --workspace frontend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "keywords": [
+    "data-visualization",
+    "typescript",
+    "node",
+    "express",
+    "react",
+    "postgresql",
+    "fullstack",
+    "enterprise"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+```

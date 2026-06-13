@@ -1,0 +1,39 @@
+```yaml
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/data:/app/data # Persist uploaded data and SQLite DB
+    env_file:
+      - ./.env
+    depends_on:
+      - frontend # Ensure frontend is built before backend starts (for dev)
+    environment:
+      # Override DB_FILE for consistency, using the volume mount
+      DB_FILE: database.sqlite 
+    command: sh -c "npm install && npm run build && npm start" # Install, build, then run
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./.env
+    # For development, mount source code to enable live reloading
+    # For production, remove this and serve static files or use a multi-stage build
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Exclude node_modules from host mount
+    command: npm start # Start the React development server
+
+volumes:
+  db_data:
+```
