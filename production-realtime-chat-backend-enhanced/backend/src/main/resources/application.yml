@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chat-app
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${
