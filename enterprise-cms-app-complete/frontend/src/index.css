@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f3f4f6; /* Light gray background */
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+/* Basic styling for prose content, usually from a rich text editor */
+.prose {
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold mt-6 mb-3;
+  }
+  h1 {@apply text-3xl;}
+  h2 {@apply text-2xl;}
+  h3 {@apply text-xl;}
+  p {
+    @apply mb-4 leading-relaxed;
+  }
+  ul, ol {
+    @apply mb-4 pl-5;
+    li { @apply mb-1; }
+  }
+  ul { @apply list-disc; }
+  ol { @apply list-decimal; }
+  a {
+    @apply text-blue-600 hover:underline;
+  }
+  blockquote {
+    @apply border-l-4 border-gray-300 pl-4 italic my-4;
+  }
+  img {
+    @apply max-w-full h-auto rounded-md my-4;
+  }
+  pre {
+    @apply bg-gray-100 p-4 rounded-md overflow-x-auto text-sm;
+  }
+  code {
+    @apply bg-gray-100 px-1 rounded;
+  }
+}

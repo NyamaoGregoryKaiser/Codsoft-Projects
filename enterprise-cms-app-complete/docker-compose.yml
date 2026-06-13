@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:13-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432" # Expose for local development/tools
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:6-alpine
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD} # Require password for security
+    ports:
+      - "6379:6379" # Expose for local development/tools
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend Node.js Application
+  backend:
+    build:
+      context: ./backend # Path to your backend Dockerfile
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development # or production
+      PORT: 5000
+      DB_HOST: db # Service name for database
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      REDIS_HOST: redis # Service name for Redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      UPLOAD_PATH: uploads/ # Must match volume mount
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+    volumes:
+      - ./backend:/app # Mount the backend code for live reloading in development
+      - /app/node_modules # Anonymous volume to prevent host's node_modules from overwriting container's
+      - ./backend/uploads:/app/uploads # Mount uploads directory
+      - ./backend/logs:/app/logs # Mount logs directory
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run dev # Use nodemon for development auto-restarts
+
+  # Frontend React Application (Development Only)
+  frontend:
+    build:
+      context: ./frontend # Path to your frontend Dockerfile
+      dockerfile: Dockerfile.dev # A dedicated Dockerfile for frontend development
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api # Points to the exposed backend port
+    volumes:
+      - ./frontend:/app # Mount frontend code for live reloading
+      - /app/node_modules # Anonymous volume to prevent host's node_modules from overwriting container's
+    depends_on:
+      - backend # Frontend depends on backend being up
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+**frontend/Dockerfile.dev** (for `docker-compose.yml` development frontend)
+```dockerfile
