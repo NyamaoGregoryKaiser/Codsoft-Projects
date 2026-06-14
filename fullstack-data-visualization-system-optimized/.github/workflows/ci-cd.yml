@@ -1,0 +1,215 @@
+```yaml
+# .github/workflows/ci-cd.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-test-backend:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Run Backend Lint
+        working-directory: ./backend
+        run: npm run lint
+
+      - name: Set up Database (PostgreSQL for tests)
+        uses: Harmonize-Cloud/action-setup-postgres@v1
+        with:
+          database-name: test_db
+          username: testuser
+          password: testpassword
+          port: 5433 # Use a different port to avoid conflicts
+
+      - name: Setup Backend Environment for Tests
+        working-directory: ./backend
+        run: |
+          echo "DATABASE_URL=postgresql://testuser:testpassword@localhost:5433/test_db?schema=public" >> .env.test
+          echo "JWT_SECRET=supersecretfortest" >> .env.test
+          echo "REDIS_HOST=localhost" >> .env.test
+          echo "REDIS_PORT=6379" >> .env.test
+      
+      - name: Install Prisma Client (with test DB URL)
+        working-directory: ./backend
+        run: npx prisma generate --schema=prisma/schema.prisma --data-source-url="postgresql://testuser:testpassword@localhost:5433/test_db?schema=public"
+
+      - name: Run Backend Migrations
+        working-directory: ./backend
+        run: npx prisma migrate deploy --schema=prisma/schema.prisma --data-source-url="postgresql://testuser:testpassword@localhost:5433/test_db?schema=public"
+
+      - name: Run Backend Unit and Integration Tests
+        working-directory: ./backend
+        run: npm test -- --coverage --testPathPattern="^(?!.*e2e-spec\.ts$).*$" # Exclude E2E tests here
+
+      - name: Build Backend Application
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Upload Backend Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./backend/coverage
+          flags: backend
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional
+
+  build-test-frontend:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Run Frontend Lint
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Run Frontend Unit Tests
+        working-directory: ./frontend
+        run: npm test -- --coverage
+
+      - name: Build Frontend Application
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Upload Frontend Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./frontend/coverage
+          flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }} # Optional
+
+  e2e-tests:
+    name: Run E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build-test-backend, build-test-frontend] # Ensure backend and frontend are buildable
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Build & Run Docker Compose
+        run: docker-compose -f docker-compose.ci.yml up --build -d # Use a specific CI compose file if needed
+        env:
+          DATABASE_URL: "postgresql://testuser:testpassword@db:5432/data_viz_db?schema=public"
+          JWT_SECRET: "supersecretfortest"
+          REDIS_HOST: redis
+          REDIS_PORT: 6379
+          NEXT_PUBLIC_BACKEND_URL: "http://localhost:3000/api"
+
+      - name: Wait for services to be ready
+        run: |
+          sleep 10 # Give services time to start
+          docker-compose ps
+          # You might want more sophisticated health checks here
+
+      - name: Install Cypress
+        working-directory: ./frontend
+        run: npm install cypress # Install Cypress only if not already installed with dev deps
+
+      - name: Run Cypress E2E tests
+        working-directory: ./frontend
+        run: npm run e2e:headless
+
+      - name: Upload Cypress Screenshots/Videos
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: cypress-results
+          path: |
+            frontend/cypress/screenshots
+            frontend/cypress/videos
+
+      - name: Stop Docker Compose
+        if: always()
+        run: docker-compose down
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-test-backend, build-test-frontend, e2e-tests]
+    if: github.ref == 'refs/heads/main' # Only deploy from main branch
+    environment: production # Use GitHub Environments for approvals, etc.
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Images for Production
+        run: |
+          docker-compose build backend frontend # Build images for specific services
+          # Tag images with commit SHA or version for traceability
+          # docker tag data-viz-backend:latest your-docker-registry/data-viz-backend:${{ github.sha }}
+
+      - name: Log in to Docker Registry
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Push Docker Images
+        run: |
+          docker push your-docker-registry/data-viz-backend:${{ github.sha }}
+          docker push your-docker-registry/data-viz-frontend:${{ github.sha }}
+
+      - name: Deploy to Kubernetes/Cloud Provider (Example using SSH)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_SERVER_IP }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /path/to/your/deployment/repo
+            git pull origin main # Pull latest deployment config
+            # Update Kubernetes manifests with new image tags
+            # kubectl set image deployment/backend backend=your-docker-registry/data-viz-backend:${{ github.sha }}
+            # kubectl set image deployment/frontend frontend=your-docker-registry/data-viz-frontend:${{ github.sha }}
+            # Or use Helm/ArgoCD for more sophisticated deployments
+            echo "Deployment to production initiated successfully with commit ${{ github.sha }}"
+
+      - name: Run Database Migrations on Production (if not handled by entrypoint)
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.PROD_SERVER_IP }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            # Example: Run migrations within a running backend container
+            # docker exec -it <backend-container-id> npx prisma migrate deploy
+            echo "Database migrations applied."
+```

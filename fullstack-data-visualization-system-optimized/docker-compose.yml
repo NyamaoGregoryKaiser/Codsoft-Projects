@@ -1,0 +1,70 @@
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: data_viz_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose for local development access
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379" # Expose for local development access
+    volumes:
+      - redisdata:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./backend/.env.development # Use appropriate .env for local
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+      - redis
+    # Run Prisma migrations and seed on startup in development
+    command: sh -c "npx prisma migrate deploy && npx prisma db seed && npm run start:prod"
+    # For production, you might only run `npx prisma migrate deploy` and seed manually or via separate job.
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./frontend/.env.development.local # Or .env.production
+    ports:
+      - "3001:3001"
+    depends_on:
+      - backend
+
+  nginx: # Optional: For production-like environment with reverse proxy
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443" # For HTTPS
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./certbot/conf:/etc/letsencrypt # For HTTPS certificates
+      # - ./certbot/www:/var/www/certbot
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+```

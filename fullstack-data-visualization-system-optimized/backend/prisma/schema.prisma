@@ -1,0 +1,105 @@
+```prisma
+// schema.prisma
+// Database schema for the Data Visualization Tool System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String
+  username  String    @unique
+  role      UserRole  @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  dashboards Dashboard[]
+  dataSources DataSource[]
+  charts    Chart[]
+}
+
+enum DataSourceType {
+  POSTGRES
+  MYSQL
+  MONGODB
+  REST_API
+  CSV_UPLOAD
+  BIGQUERY // Example for future expansion
+}
+
+model DataSource {
+  id          String         @id @default(uuid())
+  name        String
+  type        DataSourceType
+  config      Json           // Stores connection details (e.g., host, port, user, db, API key, file path)
+  userId      String
+  user        User           @relation(fields: [userId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  charts      Chart[]
+  isPublic    Boolean        @default(false)
+  description String?
+}
+
+enum ChartType {
+  BAR
+  LINE
+  PIE
+  SCATTER
+  AREA
+  TABLE
+  GAUGE
+}
+
+model Chart {
+  id             String      @id @default(uuid())
+  name           String
+  description    String?
+  chartType      ChartType
+  config         Json        // ECharts/D3 specific configuration options
+  dataQuery      String      // SQL query, API endpoint path, etc.
+  dataSourceId   String
+  dataSource     DataSource  @relation(fields: [dataSourceId], references: [id])
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  dashboardPanels DashboardPanel[]
+  isPublic       Boolean     @default(false)
+}
+
+model Dashboard {
+  id        String    @id @default(uuid())
+  name      String
+  description String?
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  panels    DashboardPanel[]
+  isPublic  Boolean   @default(false)
+}
+
+model DashboardPanel {
+  id          String    @id @default(uuid())
+  dashboardId String
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id])
+  chartId     String
+  chart       Chart     @relation(fields: [chartId], references: [id])
+  layout      Json      // Stores position, size (e.g., { x: 0, y: 0, w: 6, h: 4 })
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+```
