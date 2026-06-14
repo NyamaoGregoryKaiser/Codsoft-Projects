@@ -1,0 +1,29 @@
+```dockerfile
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim-buster
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Install system dependencies for psycopg2
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    libpq-dev \
+    build-essential \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the backend code into the container
+COPY ./backend /app
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port 5000 for the Flask app
+EXPOSE 5000
+
+# Command to run the application (using Gunicorn for production)
+# This command is overridden by docker-compose.yml
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "wsgi:app"]
+```

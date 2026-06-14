@@ -1,0 +1,60 @@
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dboptiflow_db
+    ports:
+      - "5433:5432" # Map to a different port to avoid conflict with local postgres
+    volumes:
+      - dboptiflow_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: always
+    environment:
+      FLASK_APP: app/app.py
+      FLASK_ENV: production # Use 'development' for local development with autoreload
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ACCESS_TOKEN_EXPIRES_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRES_MINUTES}
+      JWT_REFRESH_TOKEN_EXPIRES_DAYS: ${JWT_REFRESH_TOKEN_EXPIRES_DAYS}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app # Mount for development, for production use COPY
+    depends_on:
+      - db
+      - redis
+    command: gunicorn --bind 0.0.0.0:5000 wsgi:app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+    restart: always
+    ports:
+      - "3000:80" # Serve React app on port 80 inside container, map to 3000 externally
+    depends_on:
+      - backend
+
+volumes:
+  dboptiflow_data:
+```
