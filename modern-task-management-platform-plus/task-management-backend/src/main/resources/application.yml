@@ -1,0 +1,77 @@
+```yaml
+# Spring Boot Application Configuration
+spring:
+  application:
+    name: task-management-backend
+  profiles:
+    active: dev # Default profile
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskdb}
+    username: ${DB_USERNAME:user}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate # Do not auto-create schema, rely on Flyway
+    show-sql: false # Set to true to see SQL queries in logs
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true # Fix for specific LOB types with Hibernate 5+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration # Directory for migration scripts
+    baseline-on-migrate: true # Allow Flyway to take control of an existing database
+  security:
+    user:
+      name: admin
+      password: admin
+  cache:
+    caffeine:
+      specs: "tasks:maximumSize=100,expireAfterWrite=60s;users:maximumSize=50,expireAfterWrite=300s" # Cache configurations
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api # All API endpoints will be prefixed with /api
+
+# JWT Configuration
+jwt:
+  secret: ${JWT_SECRET:supersecretjwtkeythatisatleast256bitlongformoresecureapplications} # MUST be a strong, randomly generated secret
+  expiration: 86400000 # 24 hours in milliseconds (24 * 60 * 60 * 1000)
+
+# Rate Limiting Configuration
+rate-limit:
+  enabled: true
+  limit: 100 # Max requests per minute
+  duration: 60000 # In milliseconds (60 seconds)
+
+# CORS Configuration
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://127.0.0.1:3000} # Frontend URL
+  allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+  allowed-headers: Authorization,Content-Type,Accept,Origin
+  exposed-headers: Authorization,Content-Type,Accept,Origin
+  allow-credentials: true
+  max-age: 3600
+
+# Logging Configuration (see logback-spring.xml for detailed setup)
+logging:
+  level:
+    com.tasks.taskmanagement: INFO # Set base package logging level
+    org.springframework: INFO
+    org.hibernate: INFO
+    org.flywaydb: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator Endpoints (for monitoring)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,cache
+
+```
