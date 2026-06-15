@@ -1,0 +1,42 @@
+```
+# CMake
+/build/
+/install/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.cbp
+*.depend
+*.files
+*.layout
+*.mk
+*.pro
+*.user
+
+# Binaries
+*.o
+*.so
+*.a
+*.out
+*.exe
+
+# Logs
+*.log
+log/
+
+# Environment variables
+.env
+
+# Dependencies
+# For drogon, usually installed system-wide or within build directory
+# For vcpkg or Conan, dependencies are managed externally
+
+# OS generated files
+.DS_Store
+.vscode/
+
+# Python artifacts
+__pycache__/
+*.pyc
+```

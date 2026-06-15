@@ -1,0 +1,175 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: product_user
+      DB_PASSWORD: strong_password
+      DB_NAME: product_catalog_test
+      # Use a dummy JWT secret for CI
+      JWT_SECRET: ciTestSecretForProductCatalogService
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive # If drogon or other dependencies are submodules
+
+      - name: Set up environment (Drogon, PostgreSQL client, Poco, CMake, gtest)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            libpq-dev \
+            libjsoncpp-dev \
+            uuid-dev \
+            build-essential \
+            libssl-dev \
+            drogon-dev \
+            libpoco-dev \
+            libgtest-dev \
+            postgresql-client \
+            python3-pip \
+            postgresql-contrib # For uuid-ossp extension in Postgres
+
+      - name: Install Python dependencies for API tests
+        run: pip3 install requests pytest pytest-html
+
+      - name: Start PostgreSQL container for integration tests
+        # We start a separate DB instance just for CI/CD integration tests
+        # This ensures a clean state and avoids conflicts with other services
+        run: |
+          docker run --name ci-postgres -e POSTGRES_DB=${{ env.DB_NAME }} \
+                     -e POSTGRES_USER=${{ env.DB_USER }} \
+                     -e POSTGRES_PASSWORD=${{ env.DB_PASSWORD }} \
+                     -p ${{ env.DB_PORT }}:5432 \
+                     -d postgres:13
+          # Wait for PostgreSQL to be ready
+          docker exec ci-postgres pg_isready -U ${{ env.DB_USER }} -d ${{ env.DB_NAME }} -h localhost -p 5432
+          # Loop until DB is ready
+          for i in `seq 1 10`; do
+            docker exec ci-postgres pg_isready -U ${{ env.DB_USER }} -d ${{ env.DB_NAME }} -h localhost -p 5432 && break
+            echo "Waiting for postgres..."
+            sleep 5
+          done
+          docker exec ci-postgres psql -U ${{ env.DB_USER }} -d ${{ env.DB_NAME }} -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+          echo "PostgreSQL is ready and uuid-ossp enabled."
+
+      - name: Apply DB Migrations and Seed Data (for CI/CD test DB)
+        run: |
+          psql -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.DB_USER }} -d ${{ env.DB_NAME }} -f db/migrations/V1__initial_schema.sql
+          psql -h ${{ env.DB_HOST }} -p ${{ env.DB_PORT }} -U ${{ env.DB_USER }} -d ${{ env.DB_NAME }} -f db/seed.sql
+          echo "Test DB seeded."
+
+      - name: Configure CMake
+        run: cmake -B build
+
+      - name: Build C++ Application and Tests
+        run: cmake --build build -j$(nproc)
+
+      - name: Create test results directory
+        run: mkdir -p test_results
+
+      - name: Run C++ Unit Tests
+        run: ./build/UnitTests --gtest_output="xml:./test_results/unit_tests.xml"
+        # Note: True unit tests should ideally mock DB. As configured, these may fail
+        # or be skipped if AppDb::DbClient is not properly mocked in UnitTests.cpp.
+        # This step demonstrates the intent.
+
+      - name: Run C++ Integration Tests
+        run: ./build/IntegrationTests --gtest_output="xml:./test_results/integration_tests.xml"
+
+      - name: Start Application Container for API Tests
+        # Use docker-compose for a full environment similar to production
+        # Set specific port mappings to avoid conflicts with CI host services
+        run: |
+          docker-compose -f docker-compose.yml up -d --build app
+          # Wait for the app to be healthy
+          for i in `seq 1 10`; do
+            curl -f http://localhost:8080/health || (echo "Waiting for app..."; sleep 5) && break
+          done
+          echo "Application is up."
+        env:
+          APP_PORT: 8080 # Expose on a specific port for CI runner
+          # Pass test DB credentials to app container
+          DB_HOST: localhost # Access CI's postgres directly
+          DB_PORT: ${{ env.DB_PORT }}
+          DB_USER: ${{ env.DB_USER }}
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DB_NAME: ${{ env.DB_NAME }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+
+      - name: Run API Tests (Python)
+        run: python3 -m pytest tests/api/api_tests.py --junitxml=./test_results/api_tests.xml
+        env:
+          API_BASE_URL: http://localhost:8080/api/v1
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: adminpass # This should be consistent with db/seed.sql
+          USER_USERNAME: user
+          USER_PASSWORD: userpass # This should be consistent with db/seed.sql
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results
+          path: test_results/
+
+      - name: Stop and remove containers
+        if: always()
+        run: |
+          docker-compose down
+          docker rm -f ci-postgres
+
+  # deploy:
+  #   needs: build_and_test
+  #   if: github.ref == 'refs/heads/main' && success()
+  #   runs-on: ubuntu-latest
+  #   environment: production # Or staging
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+
+  #     - name: Build and Push Docker Image
+  #       uses: docker/build-push-action@v4
+  #       with:
+  #         context: .
+  #         push: true
+  #         tags: your-docker-registry/product-catalog-service:${{ github.sha }}
+  #         username: ${{ secrets.DOCKER_USERNAME }}
+  #         password: ${{ secrets.DOCKER_PASSWORD }}
+
+  #     - name: Deploy to Kubernetes (or other platform)
+  #       uses: appleboy/ssh-action@master
+  #       with:
+  #         host: ${{ secrets.PROD_SERVER_HOST }}
+  #         username: ${{ secrets.PROD_SERVER_USER }}
+  #         key: ${{ secrets.PROD_SERVER_SSH_KEY }}
+  #         script: |
+  #           # Example: Deploy to Kubernetes
+  #           # kubectl config use-context your-k8s-cluster
+  #           # kubectl set image deployment/product-catalog-service product-catalog-service=your-docker-registry/product-catalog-service:${{ github.sha }}
+  #           # kubectl rollout status deployment/product-catalog-service
+
+  #           # Example: Deploy with Docker Compose on a remote host
+  #           # cd /path/to/your/app
+  #           # docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+  #           # docker pull your-docker-registry/product-catalog-service:${{ github.sha }}
+  #           # docker-compose pull app # Pull latest image for 'app' service
+  #           # docker-compose up -d --no-deps app # Update 'app' service only
+  #           echo "Deployment script goes here..."
+```

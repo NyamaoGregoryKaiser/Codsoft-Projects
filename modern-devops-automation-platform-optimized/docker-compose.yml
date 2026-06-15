@@ -1,0 +1,45 @@
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: product-catalog-service
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    env_file:
+      - .env
+    environment:
+      # Override default environment variables from .env for specific Docker values
+      DB_HOST: db # Service name for database
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  db:
+    image: postgres:13
+    container_name: product-catalog-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-product_catalog}
+      POSTGRES_USER: ${DB_USER:-product_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-strong_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Persist database data
+      - ./db/migrations:/docker-entrypoint-initdb.d/migrations # Initial migrations
+      - ./db/seed.sql:/docker-entrypoint-initdb.d/seed.sql # Seed data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    networks:
+      - app-network
+
+volumes:
+  pgdata: # Named volume for PostgreSQL data persistence
+
+networks:
+  app-network:
+    driver: bridge
+```

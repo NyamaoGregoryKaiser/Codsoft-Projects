@@ -1,0 +1,31 @@
+```json
+{
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "product_user",
+    "password": "strong_password",
+    "dbname": "product_catalog",
+    "connection_pool_size": 10
+  },
+  "server": {
+    "port": 8080,
+    "threads": 4,
+    "log_level": "DEBUG",
+    "static_files_path": "./web"
+  },
+  "jwt": {
+    "secret": "superSecretKeyForProductCatalogService",
+    "expiry_minutes": 60
+  },
+  "cache": {
+    "product_ttl_seconds": 300,
+    "max_size": 1000
+  },
+  "rate_limiting": {
+    "enabled": true,
+    "max_requests": 60,
+    "window_seconds": 60
+  }
+}
+```
