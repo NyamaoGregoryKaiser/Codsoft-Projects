@@ -1,0 +1,79 @@
+```yaml
+version: '3.8'
+
+services:
+  # PostgreSQL database for the Optimizer Dashboard itself
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: optimizer_db
+      POSTGRES_USER: optimizer_user
+      POSTGRES_PASSWORD: optimizer_password
+    volumes:
+      - optimizer_db_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Map to a different port to avoid conflict with potential local postgres
+
+  # Another PostgreSQL database as an example TARGET database to monitor
+  db-target:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: target_app_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword # This password will be used by the backend to connect
+    volumes:
+      - target_app_db_data:/var/lib/postgresql/data
+    ports:
+      - "5434:5432" # Map to a different port
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      FRONTEND_URL: http://localhost:3000
+      DB_DIALECT: postgres
+      DB_HOST: db # Service name within docker-compose network
+      DB_PORT: 5432
+      DB_NAME: optimizer_db
+      DB_USER: optimizer_user
+      DB_PASSWORD: optimizer_password
+      JWT_SECRET: supersecretjwtkey
+      JWT_EXPIRES_IN: 1h
+      REDIS_URL: redis://redis:6379 # Service name within docker-compose network
+    depends_on:
+      - db
+      - redis
+      - db-target # Ensure target DB is also up
+    # Command to run migrations and seeds on startup (development only)
+    command: sh -c "npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all && npm run dev"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_BASE_URL: http://localhost:5000/api
+    depends_on:
+      - backend
+
+volumes:
+  optimizer_db_data:
+  target_app_db_data:
+```

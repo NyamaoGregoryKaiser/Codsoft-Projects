@@ -1,0 +1,122 @@
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './backend/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Set up PostgreSQL for tests
+        uses: Harmonize-Inc/setup-postgres@v1
+        with:
+          postgres-version: '15'
+          database-name: 'test_optimizer_db'
+          username: 'testuser'
+          password: 'testpassword'
+
+      - name: Run Migrations
+        env:
+          DB_DIALECT: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_optimizer_db
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+        run: npx sequelize-cli db:migrate
+
+      - name: Run Backend Tests
+        env:
+          DB_DIALECT: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_optimizer_db
+          DB_USER: testuser
+          DB_PASSWORD: testpassword
+          JWT_SECRET: test_jwt_secret
+          REDIS_URL: redis://localhost:6379
+        run: npm test -- --coverage
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-coverage-report
+          path: backend/coverage
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Frontend Tests
+        run: npm test -- --coverage --watchAll=false
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-coverage-report
+          path: frontend/coverage
+
+  # Dummy CD step (replace with actual deployment to AWS/GCP/Azure)
+  deploy:
+    name: Deploy to Production
+    needs: [backend-ci, frontend-ci]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Simulate Deployment
+        run: |
+          echo "Deploying application to production environment..."
+          echo "This would typically involve building Docker images, pushing to a registry, and deploying to a cloud service (e.g., Kubernetes, EC2, App Service)."
+          echo "Deployment successful for commit ${{ github.sha }}!"
+```
